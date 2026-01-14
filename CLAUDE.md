@@ -82,7 +82,7 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - `mail setup` - Configure IMAP credentials (interactive)
 - `mail status` - Show connection and cache status
 - `mail list` - List mailboxes/folders
-- `mail sync` - Fetch new emails into local cache
+- `mail sync` - Fetch new emails into local cache (supports `--workers` for parallel sync)
 - `mail search` - Search cached emails (fast, local)
 - `mail show --uid <uid>` - Show email content
 - `mail fetch --uid <uid>` - Download as .eml file
@@ -93,3 +93,5 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - Credentials stored in `$LARK_CONFIG_DIR/mail.json`
 - Cache stored in `$LARK_CONFIG_DIR/mail_cache.db`
 - Search results include `freshness` field for cache staleness
+- Sync supports parallel connections (`--workers`) for faster initial sync
+- Sync is resumable - only fetches messages not already cached

@@ -2,9 +2,19 @@ package mail
 
 import (
 	"fmt"
+	"io"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/emersion/go-imap/v2"
 )
+
+// SyncOptions configures the sync operation
+type SyncOptions struct {
+	Workers  int
+	Progress io.Writer // If set, progress is written here
+}
 
 // SyncResult contains the result of a sync operation
 type SyncResult struct {
@@ -15,7 +25,14 @@ type SyncResult struct {
 }
 
 // Sync fetches new messages from the server and updates the cache
-func Sync(mailbox string) (*SyncResult, error) {
+func Sync(mailbox string, opts *SyncOptions) (*SyncResult, error) {
+	if opts == nil {
+		opts = &SyncOptions{}
+	}
+	if opts.Workers <= 0 {
+		opts.Workers = 1
+	}
+
 	// Open cache
 	cache, err := OpenCache()
 	if err != nil {
@@ -23,7 +40,7 @@ func Sync(mailbox string) (*SyncResult, error) {
 	}
 	defer cache.Close()
 
-	// Connect to IMAP
+	// Connect to IMAP to get mailbox info
 	client, err := Connect()
 	if err != nil {
 		return nil, err
@@ -47,12 +64,7 @@ func Sync(mailbox string) (*SyncResult, error) {
 		if err := cache.ClearMailbox(mailbox); err != nil {
 			return nil, fmt.Errorf("clearing stale cache: %w", err)
 		}
-		state = nil // Force full sync
-	}
-
-	var lastUID imap.UID
-	if state != nil {
-		lastUID = imap.UID(state.LastUID)
+		state = nil
 	}
 
 	result := &SyncResult{
@@ -60,7 +72,6 @@ func Sync(mailbox string) (*SyncResult, error) {
 	}
 
 	if mbox.NumMessages == 0 {
-		// Empty mailbox
 		if err := cache.UpdateMailboxState(mailbox, mbox.UIDValidity, 0); err != nil {
 			return nil, err
 		}
@@ -68,50 +79,60 @@ func Sync(mailbox string) (*SyncResult, error) {
 		return result, nil
 	}
 
-	var envelopes []Envelope
-
-	if lastUID == 0 {
-		// Full sync - fetch all envelopes in batches
-		envelopes, err = fetchAllEnvelopes(client, mbox.NumMessages)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		// Incremental sync - only fetch new messages
-		envelopes, err = client.FetchNewEnvelopes(lastUID)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Insert into cache
-	if len(envelopes) > 0 {
-		if err := cache.InsertEnvelopes(mailbox, envelopes); err != nil {
-			return nil, err
-		}
-
-		// Find max UID
-		var maxUID imap.UID
-		for _, env := range envelopes {
-			if env.UID > maxUID {
-				maxUID = env.UID
-			}
-		}
-		lastUID = maxUID
-	}
-
-	// Update mailbox state
-	if err := cache.UpdateMailboxState(mailbox, mbox.UIDValidity, uint32(lastUID)); err != nil {
+	// Get cached UIDs
+	cachedUIDs, err := cache.GetCachedUIDs(mailbox)
+	if err != nil {
 		return nil, err
 	}
 
-	result.NewMessages = len(envelopes)
-
-	// Get total cached count
-	searchResult, err := cache.Search(mailbox, &SearchOptions{Limit: 1})
-	if err == nil {
-		result.TotalCached = searchResult.TotalCached
+	// Get all server UIDs
+	if opts.Progress != nil {
+		fmt.Fprintf(opts.Progress, "Checking for new messages...\n")
 	}
+	serverUIDs, err := client.GetAllUIDs()
+	if err != nil {
+		return nil, fmt.Errorf("getting server UIDs: %w", err)
+	}
+
+	// Find missing UIDs
+	var missingUIDs []imap.UID
+	for _, uid := range serverUIDs {
+		if !cachedUIDs[uint32(uid)] {
+			missingUIDs = append(missingUIDs, uid)
+		}
+	}
+
+	if len(missingUIDs) == 0 {
+		// Update state to track current max UID
+		if len(serverUIDs) > 0 {
+			maxUID := serverUIDs[len(serverUIDs)-1]
+			if err := cache.UpdateMailboxState(mailbox, mbox.UIDValidity, uint32(maxUID)); err != nil {
+				return nil, err
+			}
+		}
+
+		result.TotalCached = len(cachedUIDs)
+		result.Message = "already up to date"
+		return result, nil
+	}
+
+	if opts.Progress != nil {
+		fmt.Fprintf(opts.Progress, "Found %d messages to sync\n", len(missingUIDs))
+	}
+
+	// Fetch missing UIDs in parallel
+	var newCount int
+	if opts.Workers > 1 && len(missingUIDs) > 100 {
+		newCount, err = fetchMissingUIDsParallel(cache, mailbox, mbox.UIDValidity, missingUIDs, opts)
+	} else {
+		newCount, err = fetchMissingUIDs(cache, mailbox, mbox.UIDValidity, missingUIDs, opts)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	result.NewMessages = newCount
+	result.TotalCached = len(cachedUIDs) + newCount
 
 	if result.NewMessages == 0 {
 		result.Message = "already up to date"
@@ -122,26 +143,215 @@ func Sync(mailbox string) (*SyncResult, error) {
 	return result, nil
 }
 
-// fetchAllEnvelopes fetches all envelopes in batches
-func fetchAllEnvelopes(client *Client, numMessages uint32) ([]Envelope, error) {
-	const batchSize = 100
+// fetchMissingUIDs fetches specific UIDs sequentially
+func fetchMissingUIDs(cache *Cache, mailbox string, uidValidity uint32, uids []imap.UID, opts *SyncOptions) (int, error) {
+	const batchSize = 500
 
-	var allEnvelopes []Envelope
+	client, err := Connect()
+	if err != nil {
+		return 0, err
+	}
+	defer client.Close()
 
-	for end := numMessages; end >= 1; {
-		start := end - batchSize + 1
-		if start < 1 {
-			start = 1
-		}
-
-		envelopes, err := client.FetchEnvelopes(start, end)
-		if err != nil {
-			return nil, err
-		}
-
-		allEnvelopes = append(allEnvelopes, envelopes...)
-		end = start - 1
+	if _, err := client.SelectMailbox(mailbox); err != nil {
+		return 0, err
 	}
 
-	return allEnvelopes, nil
+	var totalFetched int
+	var maxUID imap.UID
+
+	for i := 0; i < len(uids); i += batchSize {
+		end := i + batchSize
+		if end > len(uids) {
+			end = len(uids)
+		}
+
+		batch := uids[i:end]
+		envelopes, err := client.FetchEnvelopesByUID(batch)
+		if err != nil {
+			return totalFetched, err
+		}
+
+		if len(envelopes) > 0 {
+			if err := cache.InsertEnvelopes(mailbox, envelopes); err != nil {
+				return totalFetched, err
+			}
+
+			for _, env := range envelopes {
+				if env.UID > maxUID {
+					maxUID = env.UID
+				}
+			}
+
+			if err := cache.UpdateMailboxState(mailbox, uidValidity, uint32(maxUID)); err != nil {
+				return totalFetched, err
+			}
+		}
+
+		totalFetched += len(envelopes)
+
+		if opts.Progress != nil {
+			fmt.Fprintf(opts.Progress, "\rSyncing: %d / %d messages (%.1f%%)", totalFetched, len(uids), float64(totalFetched)/float64(len(uids))*100)
+		}
+	}
+
+	if opts.Progress != nil {
+		fmt.Fprintln(opts.Progress)
+	}
+
+	return totalFetched, nil
+}
+
+// fetchMissingUIDsParallel fetches specific UIDs using multiple parallel connections
+func fetchMissingUIDsParallel(cache *Cache, mailbox string, uidValidity uint32, uids []imap.UID, opts *SyncOptions) (int, error) {
+	const batchSize = 500
+
+	numWorkers := opts.Workers
+	if numWorkers > len(uids)/batchSize+1 {
+		numWorkers = len(uids)/batchSize + 1
+	}
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	type batch struct {
+		envelopes []Envelope
+		err       error
+	}
+	batchChan := make(chan batch, numWorkers*2)
+
+	var wg sync.WaitGroup
+	var fetched atomic.Uint64
+
+	// Progress reporter
+	var progressDone chan struct{}
+	if opts.Progress != nil {
+		progressDone = make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-progressDone:
+					return
+				case <-ticker.C:
+					f := fetched.Load()
+					fmt.Fprintf(opts.Progress, "\rSyncing: %d / %d messages (%.1f%%)", f, len(uids), float64(f)/float64(len(uids))*100)
+				}
+			}
+		}()
+	}
+
+	// Divide UIDs among workers
+	uidsPerWorker := len(uids) / numWorkers
+	remainder := len(uids) % numWorkers
+
+	start := 0
+	for i := 0; i < numWorkers; i++ {
+		count := uidsPerWorker
+		if i < remainder {
+			count++
+		}
+		if count == 0 {
+			continue
+		}
+
+		workerUIDs := uids[start : start+count]
+		start += count
+
+		wg.Add(1)
+		go func(myUIDs []imap.UID) {
+			defer wg.Done()
+
+			client, err := Connect()
+			if err != nil {
+				batchChan <- batch{nil, fmt.Errorf("connect: %w", err)}
+				return
+			}
+			defer client.Close()
+
+			if _, err := client.SelectMailbox(mailbox); err != nil {
+				batchChan <- batch{nil, fmt.Errorf("select: %w", err)}
+				return
+			}
+
+			// Fetch in batches
+			for i := 0; i < len(myUIDs); i += batchSize {
+				end := i + batchSize
+				if end > len(myUIDs) {
+					end = len(myUIDs)
+				}
+
+				envs, err := client.FetchEnvelopesByUID(myUIDs[i:end])
+				if err != nil {
+					batchChan <- batch{nil, fmt.Errorf("fetch: %w", err)}
+					return
+				}
+
+				batchChan <- batch{envs, nil}
+				fetched.Add(uint64(len(envs)))
+			}
+		}(workerUIDs)
+	}
+
+	// Close batch channel when all workers are done
+	go func() {
+		wg.Wait()
+		close(batchChan)
+	}()
+
+	// Write batches to cache as they arrive
+	var totalFetched int
+	var maxUID imap.UID
+	var writeErr error
+	var batchesSinceStateUpdate int
+
+	for b := range batchChan {
+		if b.err != nil {
+			writeErr = b.err
+			continue
+		}
+		if writeErr != nil {
+			continue
+		}
+
+		if len(b.envelopes) > 0 {
+			if err := cache.InsertEnvelopes(mailbox, b.envelopes); err != nil {
+				writeErr = err
+				continue
+			}
+
+			for _, env := range b.envelopes {
+				if env.UID > maxUID {
+					maxUID = env.UID
+				}
+			}
+
+			totalFetched += len(b.envelopes)
+			batchesSinceStateUpdate++
+
+			if batchesSinceStateUpdate >= 10 && maxUID > 0 {
+				cache.UpdateMailboxState(mailbox, uidValidity, uint32(maxUID))
+				batchesSinceStateUpdate = 0
+			}
+		}
+	}
+
+	if opts.Progress != nil {
+		close(progressDone)
+		fmt.Fprintf(opts.Progress, "\rSyncing: %d / %d messages (100.0%%)\n", len(uids), len(uids))
+	}
+
+	if writeErr != nil {
+		return totalFetched, writeErr
+	}
+
+	// Update final state
+	if maxUID > 0 {
+		if err := cache.UpdateMailboxState(mailbox, uidValidity, uint32(maxUID)); err != nil {
+			return totalFetched, err
+		}
+	}
+
+	return totalFetched, nil
 }

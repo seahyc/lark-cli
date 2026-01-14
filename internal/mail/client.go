@@ -196,6 +196,24 @@ func (c *Client) FetchEnvelopesByUID(uids []imap.UID) ([]Envelope, error) {
 	return envelopes, nil
 }
 
+// GetAllUIDs returns all message UIDs in the selected mailbox
+func (c *Client) GetAllUIDs() ([]imap.UID, error) {
+	// Search for all messages (UID 1:*)
+	var uidSet imap.UIDSet
+	uidSet.AddRange(1, 0) // 1 to * (all messages)
+
+	criteria := &imap.SearchCriteria{
+		UID: []imap.UIDSet{uidSet},
+	}
+
+	searchData, err := c.imap.UIDSearch(criteria, nil).Wait()
+	if err != nil {
+		return nil, fmt.Errorf("searching for all UIDs: %w", err)
+	}
+
+	return searchData.AllUIDs(), nil
+}
+
 // FetchNewEnvelopes fetches envelopes for messages with UID > lastUID
 func (c *Client) FetchNewEnvelopes(lastUID imap.UID) ([]Envelope, error) {
 	// Create a UID range from lastUID+1 to * (all newer messages)

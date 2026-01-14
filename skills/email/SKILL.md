@@ -48,11 +48,20 @@ Fetch new emails from the server into the local cache:
 # Sync INBOX (default)
 lark mail sync
 
+# Sync with more parallel connections (faster for large mailboxes)
+lark mail sync --workers 20
+
 # Sync specific mailbox
 lark mail sync --mailbox Sent
 ```
 
-**Important**: Run sync before searching if you need fresh data.
+Flags:
+- `--mailbox`, `-m`: Mailbox to sync (default: INBOX)
+- `--workers`, `-w`: Number of parallel connections (default: 10)
+
+**Important**:
+- Run sync before searching if you need fresh data
+- Sync is resumable - if interrupted, running it again only fetches messages not already cached
 
 ### Search Emails
 Search the local cache (fast, no network calls):

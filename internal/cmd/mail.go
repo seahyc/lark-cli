@@ -214,6 +214,7 @@ var mailListCmd = &cobra.Command{
 
 var (
 	mailSyncMailbox string
+	mailSyncWorkers int
 )
 
 var mailSyncCmd = &cobra.Command{
@@ -221,10 +222,20 @@ var mailSyncCmd = &cobra.Command{
 	Short: "Sync emails from server to local cache",
 	Long: `Fetch new emails from the IMAP server and store metadata in the local cache.
 
-On first sync, fetches all email headers. On subsequent syncs, only fetches new messages.
-The cache is used for fast local searching with 'lark mail search'.`,
+On first sync, fetches all email headers using parallel connections for speed.
+On subsequent syncs, only fetches new messages.
+The cache is used for fast local searching with 'lark mail search'.
+
+Examples:
+  lark mail sync
+  lark mail sync --workers 20`,
 	Run: func(cmd *cobra.Command, args []string) {
-		result, err := mail.Sync(mailSyncMailbox)
+		opts := &mail.SyncOptions{
+			Workers:  mailSyncWorkers,
+			Progress: os.Stderr,
+		}
+
+		result, err := mail.Sync(mailSyncMailbox, opts)
 		if err != nil {
 			output.Fatal("SYNC_ERROR", err)
 		}
@@ -457,6 +468,7 @@ func formatFreshness(t time.Time) string {
 func init() {
 	// mail sync flags
 	mailSyncCmd.Flags().StringVarP(&mailSyncMailbox, "mailbox", "m", "INBOX", "Mailbox to sync")
+	mailSyncCmd.Flags().IntVarP(&mailSyncWorkers, "workers", "w", 10, "Number of parallel connections for initial sync")
 
 	// mail search flags
 	mailSearchCmd.Flags().StringVarP(&mailSearchMailbox, "mailbox", "m", "INBOX", "Mailbox to search")

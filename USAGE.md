@@ -629,9 +629,18 @@ Fetch new emails from the server into the local cache.
 # Sync INBOX (default)
 ./lark mail sync
 
+# Sync with more parallel connections (faster for large mailboxes)
+./lark mail sync --workers 20
+
 # Sync specific mailbox
 ./lark mail sync --mailbox Sent
 ```
+
+Flags:
+- `--mailbox`, `-m`: Mailbox to sync (default: INBOX)
+- `--workers`, `-w`: Number of parallel connections (default: 10)
+
+The sync is resumable - if interrupted, running sync again will only fetch messages not already cached. Progress is displayed during sync.
 
 Output:
 ```json

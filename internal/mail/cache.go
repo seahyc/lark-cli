@@ -118,6 +118,35 @@ func (c *Cache) UpdateMailboxState(mailbox string, uidValidity, lastUID uint32) 
 	return nil
 }
 
+// CountEnvelopes returns the number of cached envelopes for a mailbox
+func (c *Cache) CountEnvelopes(mailbox string) (int, error) {
+	var count int
+	err := c.db.QueryRow(`SELECT COUNT(*) FROM envelopes WHERE mailbox = ?`, mailbox).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("counting envelopes: %w", err)
+	}
+	return count, nil
+}
+
+// GetCachedUIDs returns all cached UIDs for a mailbox as a set
+func (c *Cache) GetCachedUIDs(mailbox string) (map[uint32]bool, error) {
+	rows, err := c.db.Query(`SELECT uid FROM envelopes WHERE mailbox = ?`, mailbox)
+	if err != nil {
+		return nil, fmt.Errorf("querying cached UIDs: %w", err)
+	}
+	defer rows.Close()
+
+	uids := make(map[uint32]bool)
+	for rows.Next() {
+		var uid uint32
+		if err := rows.Scan(&uid); err != nil {
+			return nil, fmt.Errorf("scanning UID: %w", err)
+		}
+		uids[uid] = true
+	}
+	return uids, nil
+}
+
 // ClearMailbox removes all cached data for a mailbox (used when UIDVALIDITY changes)
 func (c *Cache) ClearMailbox(mailbox string) error {
 	tx, err := c.db.Begin()
