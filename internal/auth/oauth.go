@@ -265,7 +265,7 @@ func buildAuthorizationURL(appID, redirectURI, state string) string {
 	params := url.Values{}
 	params.Set("client_id", appID)
 	params.Set("redirect_uri", redirectURI)
-	params.Set("scope", "calendar:calendar calendar:calendar:readonly contact:contact.base:readonly contact:department.base:readonly contact:department.organize:readonly contact:user:search docx:document:readonly docs:doc:readonly docs:document.content:read docs:document.comment:read drive:drive:readonly wiki:wiki:readonly space:document:retrieve offline_access")
+	params.Set("scope", "calendar:calendar calendar:calendar:readonly contact:contact.base:readonly contact:department.base:readonly contact:department.organize:readonly contact:user:search docx:document:readonly docs:doc:readonly docs:document.content:read docs:document.comment:read drive:drive:readonly wiki:wiki:readonly space:document:retrieve minutes:minutes:readonly minutes:minute:download offline_access")
 	params.Set("state", state)
 
 	return authorizationURL + "?" + params.Encode()

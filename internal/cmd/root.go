@@ -68,6 +68,7 @@ func init() {
 	rootCmd.AddCommand(contactCmd)
 	rootCmd.AddCommand(docCmd)
 	rootCmd.AddCommand(mailCmd)
+	rootCmd.AddCommand(minutesCmd)
 	rootCmd.AddCommand(msgCmd)
 	rootCmd.AddCommand(versionCmd)
 }

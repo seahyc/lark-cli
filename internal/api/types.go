@@ -1061,3 +1061,59 @@ type OutputChatList struct {
 	Query string       `json:"query,omitempty"`
 }
 
+// --- Minutes Types ---
+
+// Minute represents a Lark Minutes recording
+type Minute struct {
+	Token      string `json:"token"`
+	OwnerID    string `json:"owner_id"`
+	CreateTime string `json:"create_time"` // Unix ms timestamp
+	Title      string `json:"title"`
+	Cover      string `json:"cover"`    // Cover image URL
+	Duration   string `json:"duration"` // Duration in ms
+	URL        string `json:"url"`      // Minutes link
+}
+
+// MinuteResponse is the response from GET /minutes/v1/minutes/:minute_token
+type MinuteResponse struct {
+	BaseResponse
+	Data struct {
+		Minute *Minute `json:"minute,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// MinuteMediaResponse is the response from GET /minutes/v1/minutes/:minute_token/media
+type MinuteMediaResponse struct {
+	BaseResponse
+	Data struct {
+		DownloadURL string `json:"download_url"`
+	} `json:"data,omitempty"`
+}
+
+// --- Minutes CLI Output Types ---
+
+// OutputMinute is the simplified minute format for CLI output
+type OutputMinute struct {
+	Token           string `json:"token"`
+	Title           string `json:"title"`
+	OwnerID         string `json:"owner_id"`
+	CreateTime      string `json:"create_time"`       // ISO 8601 format
+	DurationSeconds int    `json:"duration_seconds"`  // Duration in seconds
+	DurationDisplay string `json:"duration_display"`  // Human-readable duration
+	URL             string `json:"url"`
+}
+
+// OutputMinuteMedia is the media download URL response for CLI
+type OutputMinuteMedia struct {
+	Token       string `json:"token"`
+	DownloadURL string `json:"download_url"`
+}
+
+// OutputMinuteTranscript is the transcript export response for CLI
+type OutputMinuteTranscript struct {
+	Token   string `json:"token"`
+	Format  string `json:"format"`
+	Content string `json:"content,omitempty"`
+	File    string `json:"file,omitempty"` // Output file path if written to file
+}
+
