@@ -77,3 +77,29 @@ func (c *Client) GetMessageResource(messageID, fileKey, resourceType string) (io
 	path := fmt.Sprintf("/im/v1/messages/%s/resources/%s?type=%s", messageID, fileKey, resourceType)
 	return c.DownloadWithTenantToken(path)
 }
+
+// SendMessage sends a message to a user or chat
+// receiveIDType: "open_id", "user_id", "email", "chat_id"
+// receiveID: the recipient identifier
+// msgType: "text" or "post"
+// content: JSON string of message content (format depends on msgType)
+func (c *Client) SendMessage(receiveIDType, receiveID, msgType, content string) (*SendMessageResponse, error) {
+	path := fmt.Sprintf("/im/v1/messages?receive_id_type=%s", receiveIDType)
+
+	req := SendMessageRequest{
+		ReceiveID: receiveID,
+		MsgType:   msgType,
+		Content:   content,
+	}
+
+	var resp SendMessageResponse
+	if err := c.PostWithTenantToken(path, req, &resp); err != nil {
+		return nil, err
+	}
+
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return &resp, nil
+}

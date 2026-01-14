@@ -359,8 +359,8 @@ type OutputUserInfo struct {
 // CommonFreeTimeRequest is the request body for common free time API
 type CommonFreeTimeRequest struct {
 	UserIDs                 []string `json:"user_ids"`
-	StartTime               string   `json:"start_time"`  // "YYYY-MM-DD HH:MM:SS"
-	EndTime                 string   `json:"end_time"`    // "YYYY-MM-DD HH:MM:SS"
+	StartTime               string   `json:"start_time"` // "YYYY-MM-DD HH:MM:SS"
+	EndTime                 string   `json:"end_time"`   // "YYYY-MM-DD HH:MM:SS"
 	Timezone                string   `json:"timezone"`
 	OnlyBusy                bool     `json:"only_busy,omitempty"`
 	IncludeExternalCalendar bool     `json:"include_external_calendar,omitempty"`
@@ -418,26 +418,26 @@ type ContactUserStatus struct {
 
 // ContactUser represents a user from the Contacts API
 type ContactUser struct {
-	UnionID        string             `json:"union_id,omitempty"`
-	UserID         string             `json:"user_id,omitempty"`
-	OpenID         string             `json:"open_id,omitempty"`
-	Name           string             `json:"name,omitempty"`
-	EnName         string             `json:"en_name,omitempty"`
-	Nickname       string             `json:"nickname,omitempty"`
-	Email          string             `json:"email,omitempty"`
-	Mobile         string             `json:"mobile,omitempty"`
-	Gender         int                `json:"gender,omitempty"`
-	Status         *ContactUserStatus `json:"status,omitempty"`
-	DepartmentIDs  []string           `json:"department_ids,omitempty"`
-	LeaderUserID   string             `json:"leader_user_id,omitempty"`
-	City           string             `json:"city,omitempty"`
-	Country        string             `json:"country,omitempty"`
-	WorkStation    string             `json:"work_station,omitempty"`
-	JoinTime       int64              `json:"join_time,omitempty"`
-	EmployeeNo     string             `json:"employee_no,omitempty"`
-	EmployeeType   int                `json:"employee_type,omitempty"`
-	JobTitle       string             `json:"job_title,omitempty"`
-	EnterpriseEmail string            `json:"enterprise_email,omitempty"`
+	UnionID         string             `json:"union_id,omitempty"`
+	UserID          string             `json:"user_id,omitempty"`
+	OpenID          string             `json:"open_id,omitempty"`
+	Name            string             `json:"name,omitempty"`
+	EnName          string             `json:"en_name,omitempty"`
+	Nickname        string             `json:"nickname,omitempty"`
+	Email           string             `json:"email,omitempty"`
+	Mobile          string             `json:"mobile,omitempty"`
+	Gender          int                `json:"gender,omitempty"`
+	Status          *ContactUserStatus `json:"status,omitempty"`
+	DepartmentIDs   []string           `json:"department_ids,omitempty"`
+	LeaderUserID    string             `json:"leader_user_id,omitempty"`
+	City            string             `json:"city,omitempty"`
+	Country         string             `json:"country,omitempty"`
+	WorkStation     string             `json:"work_station,omitempty"`
+	JoinTime        int64              `json:"join_time,omitempty"`
+	EmployeeNo      string             `json:"employee_no,omitempty"`
+	EmployeeType    int                `json:"employee_type,omitempty"`
+	JobTitle        string             `json:"job_title,omitempty"`
+	EnterpriseEmail string             `json:"enterprise_email,omitempty"`
 }
 
 // DepartmentI18nName represents internationalized department names
@@ -480,9 +480,9 @@ type GetUserResponse struct {
 type FindByDepartmentResponse struct {
 	BaseResponse
 	Data struct {
-		HasMore   bool           `json:"has_more"`
-		PageToken string         `json:"page_token,omitempty"`
-		Items     []ContactUser  `json:"items,omitempty"`
+		HasMore   bool          `json:"has_more"`
+		PageToken string        `json:"page_token,omitempty"`
+		Items     []ContactUser `json:"items,omitempty"`
 	} `json:"data,omitempty"`
 }
 
@@ -815,8 +815,8 @@ type OutputFolderItemsList struct {
 
 // CommentReplyElement represents an element in a comment reply
 type CommentReplyElement struct {
-	Type     string `json:"type,omitempty"`
-	TextRun  *struct {
+	Type    string `json:"type,omitempty"`
+	TextRun *struct {
 		Text string `json:"text,omitempty"`
 	} `json:"text_run,omitempty"`
 	DocsLink *struct {
@@ -909,25 +909,25 @@ type MessageBody struct {
 
 // MessageMention represents a mentioned user or bot in a message
 type MessageMention struct {
-	Key       string `json:"key,omitempty"`        // e.g., "@_user_1"
-	ID        string `json:"id,omitempty"`         // open_id of mentioned user/bot
-	IDType    string `json:"id_type,omitempty"`    // currently only "open_id"
-	Name      string `json:"name,omitempty"`       // Name of mentioned user/bot
+	Key       string `json:"key,omitempty"`     // e.g., "@_user_1"
+	ID        string `json:"id,omitempty"`      // open_id of mentioned user/bot
+	IDType    string `json:"id_type,omitempty"` // currently only "open_id"
+	Name      string `json:"name,omitempty"`    // Name of mentioned user/bot
 	TenantKey string `json:"tenant_key,omitempty"`
 }
 
 // Message represents a message from the IM API
 type Message struct {
 	MessageID      string           `json:"message_id,omitempty"`
-	RootID         string           `json:"root_id,omitempty"`         // Root message ID for replies
-	ParentID       string           `json:"parent_id,omitempty"`       // Parent message ID for replies
-	ThreadID       string           `json:"thread_id,omitempty"`       // Thread ID if in a thread
-	MsgType        string           `json:"msg_type,omitempty"`        // text, post, image, file, audio, media, sticker, interactive, share_chat, share_user
-	CreateTime     string           `json:"create_time,omitempty"`     // Unix ms timestamp
-	UpdateTime     string           `json:"update_time,omitempty"`     // Unix ms timestamp
-	Deleted        bool             `json:"deleted,omitempty"`         // Whether message is deleted/recalled
-	Updated        bool             `json:"updated,omitempty"`         // Whether message is updated
-	ChatID         string           `json:"chat_id,omitempty"`         // Group ID
+	RootID         string           `json:"root_id,omitempty"`     // Root message ID for replies
+	ParentID       string           `json:"parent_id,omitempty"`   // Parent message ID for replies
+	ThreadID       string           `json:"thread_id,omitempty"`   // Thread ID if in a thread
+	MsgType        string           `json:"msg_type,omitempty"`    // text, post, image, file, audio, media, sticker, interactive, share_chat, share_user
+	CreateTime     string           `json:"create_time,omitempty"` // Unix ms timestamp
+	UpdateTime     string           `json:"update_time,omitempty"` // Unix ms timestamp
+	Deleted        bool             `json:"deleted,omitempty"`     // Whether message is deleted/recalled
+	Updated        bool             `json:"updated,omitempty"`     // Whether message is updated
+	ChatID         string           `json:"chat_id,omitempty"`     // Group ID
 	Sender         *MessageSender   `json:"sender,omitempty"`
 	Body           *MessageBody     `json:"body,omitempty"`
 	Mentions       []MessageMention `json:"mentions,omitempty"`
@@ -979,6 +979,42 @@ type OutputMessageList struct {
 	Messages []OutputMessage `json:"messages"`
 	Count    int             `json:"count"`
 	ChatID   string          `json:"chat_id"`
+}
+
+// --- Send Message Types ---
+
+// SendMessageRequest is the request body for POST /im/v1/messages
+type SendMessageRequest struct {
+	ReceiveID string `json:"receive_id"`
+	MsgType   string `json:"msg_type"` // text, post
+	Content   string `json:"content"`  // JSON string
+}
+
+// SendMessageResponse is the response from POST /im/v1/messages
+type SendMessageResponse struct {
+	BaseResponse
+	Data struct {
+		MessageID  string           `json:"message_id"`
+		RootID     string           `json:"root_id,omitempty"`
+		ParentID   string           `json:"parent_id,omitempty"`
+		MsgType    string           `json:"msg_type"`
+		CreateTime string           `json:"create_time"`
+		UpdateTime string           `json:"update_time"`
+		Deleted    bool             `json:"deleted"`
+		Updated    bool             `json:"updated"`
+		ChatID     string           `json:"chat_id"`
+		Sender     *MessageSender   `json:"sender,omitempty"`
+		Body       *MessageBody     `json:"body,omitempty"`
+		Mentions   []MessageMention `json:"mentions,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// OutputSendMessage is the simplified send message response for CLI
+type OutputSendMessage struct {
+	Success    bool   `json:"success"`
+	MessageID  string `json:"message_id"`
+	ChatID     string `json:"chat_id,omitempty"`
+	CreateTime string `json:"create_time"`
 }
 
 // --- Chat Types ---

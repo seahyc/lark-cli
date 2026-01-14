@@ -16,6 +16,7 @@ A CLI tool for interacting with Lark APIs (calendar, contacts, documents). Desig
    - `wiki:wiki:readonly` (read wiki nodes)
    - `space:document:retrieve` (list Drive folder contents)
    - `im:message:readonly` (read messages in chats)
+   - `im:message` or `im:message:send_as_bot` (send messages)
    - `offline_access` (for refresh tokens)
 3. Add redirect URI: `http://localhost:9999/callback`
 4. Enable "Refresh user_access_token" in Security Settings
@@ -320,6 +321,56 @@ Output:
 ```
 
 **Note:** The file_key can be found in the `content` field of messages returned by `lark msg history`. The maximum downloadable file size is 100MB. Emoji resources cannot be downloaded.
+
+#### Send Message
+
+Send messages to users or group chats as the bot.
+
+```bash
+# Send simple text to user
+./lark msg send --to ou_xxxx --text "Hello!"
+
+# Send to group chat
+./lark msg send --to oc_xxxx --text "Meeting starting soon"
+
+# Text with line breaks (\n creates actual newlines)
+./lark msg send --to ou_xxxx --text "Line 1\nLine 2\nLine 3"
+
+# For literal backslash-n, use double backslash
+./lark msg send --to ou_xxxx --text "Show literal \\n text"
+
+# Mention users (automatically uses rich text format)
+./lark msg send --to oc_xxxx --text "Please review" --mention ou_user1 --mention ou_user2
+
+# With link
+./lark msg send --to ou_xxxx --text "Check this out" --link "Our Docs" --url "https://docs.example.com"
+
+# Combined features
+./lark msg send --to oc_xxxx \
+  --text "Project milestone reached!" \
+  --mention ou_user1 --mention ou_user2 \
+  --link "View Details" --url "https://project.example.com"
+```
+
+Flags:
+- `--to` (required): Recipient identifier (user ID, open_id, email, or chat_id)
+- `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) - auto-detected if omitted
+- `--text` (required): Message text content
+- `--mention`: User open_id to mention (repeatable for multiple mentions)
+- `--link`: Link display text (must be used with `--url`)
+- `--url`: Link URL (must be used with `--link`)
+
+Output:
+```json
+{
+  "success": true,
+  "message_id": "om_dc13264520392913993dd051dba21dcf",
+  "chat_id": "oc_xxxxx",
+  "create_time": "2026-01-14T10:30:00+08:00"
+}
+```
+
+**Note:** Messages are sent as the bot/app. The bot must be added to group chats before it can send messages to them.
 
 ### Documents
 
