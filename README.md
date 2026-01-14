@@ -20,6 +20,7 @@ The result: AI assistants can interact with Lark using fewer tokens, leaving mor
 - **Contacts** - Look up users by ID, search by name, list department members
 - **Documents** - Read documents as markdown, list folders, resolve wiki nodes, get comments
 - **Messages** - Retrieve chat history, download attachments, send messages to users and chats
+- **Mail** - Read and search emails via IMAP with local caching
 
 ## Quick Start
 
@@ -60,6 +61,7 @@ Available skills:
 - `contacts` - Look up users and departments
 - `documents` - Read documents, list folders, browse wikis
 - `messages` - Retrieve chat history, download attachments, send messages to users and chats
+- `email` - Read and search emails via IMAP with local caching
 
 ### Configuration
 
