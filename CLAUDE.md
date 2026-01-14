@@ -57,6 +57,20 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - `contact list-dept [dept_id]` - List users in department
 - `contact search-dept <query>` - Search departments by name
 
+### Messages (`msg`)
+- `msg history` - Get chat message history
+- `msg resource` - Download message attachments
+- `msg send` - Send messages to users or chats
+- `chat search` - Find chats and groups
+
+**Message Sending Features:**
+- Send text messages with line breaks (`\n` creates newlines)
+- Mention users with `--mention` flag
+- Include links with `--link` and `--url` flags
+- Send to emails, user IDs, or chat IDs
+- Auto-detect recipient types
+- Support escape sequences (\n, \t, \", \\)
+
 ### Documents (`doc`)
 - `doc list [folder_token]` - List items in a Drive folder
 - `doc get <document_id>` - Get document content as markdown

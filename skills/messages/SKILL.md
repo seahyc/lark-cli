@@ -1,11 +1,61 @@
 ---
 name: messages
-description: Retrieve chat message history from Lark - get messages from group chats, private chats, and threads. Use when user asks about chat messages, conversation history, or what was discussed in a group.
+description: Retrieve chat message history and send messages in Lark - get messages from group chats, private chats, threads, and send messages to users or chats. Use when user asks about chat messages, conversation history, what was discussed in a group, or wants to send a message.
 ---
 
 # Messages Skill
 
-Retrieve chat message history and search for chats/groups via the `lark` CLI.
+Retrieve chat message history, send messages, and search for chats/groups via the `lark` CLI.
+
+## 🤖 Agent Capabilities
+
+**Message Sending Features:**
+- Send text messages with line breaks and formatting
+- Mention users in group chats
+- Include clickable links
+- Send to individual users or group chats
+- Auto-detect recipient types (email, user ID, chat ID)
+- Support for escape sequences (\n, \t, \", \\)
+
+**Use Cases:**
+- Send notifications and updates
+- Share links and resources
+- Mention team members in group discussions
+- Communicate with users via email or direct message
+- Format messages with proper line breaks and structure
+
+**Agent-Friendly Features:**
+- Explicit flag-based interface (no ambiguous parsing)
+- Clear error messages and validation
+- Comprehensive help text with examples
+- Consistent JSON output for easy parsing
+
+## 🚀 Quick Reference
+
+**Send a simple message:**
+```bash
+lark msg send --to user@example.com --text "Hello!"
+```
+
+**Send with formatting:**
+```bash
+lark msg send --to oc_12345 --text "Update:\n• Task completed\n• Next: Review" --mention ou_user1
+```
+
+**Send with links:**
+```bash
+lark msg send --to ou_12345 --text "Check this out" --link "Dashboard" --url "https://example.com"
+```
+
+**Find chats:**
+```bash
+lark chat search "project team"
+```
+
+**Read messages:**
+```bash
+lark msg history --chat-id oc_12345 --limit 10
+```
 
 ## Running Commands
 
@@ -61,6 +111,96 @@ The search supports:
 - Group member name matching
 - Multiple languages
 - Fuzzy search (pinyin, prefix, etc.)
+
+### Send Messages
+
+Send messages to users or group chats as the bot.
+
+```bash
+# Send simple text to user
+lark msg send --to ou_xxxx --text "Hello!"
+
+# Send to group chat
+lark msg send --to oc_xxxx --text "Meeting starting soon"
+
+# Text with line breaks (\n is interpreted as newline)
+lark msg send --to ou_xxxx --text "Update:\nPhase 1 complete\nPhase 2 starting"
+
+# Supported escape sequences: \n (newline), \t (tab), \\ (backslash), \" (quote)
+lark msg send --to ou_xxxx --text "Tab:\tindented\nNew line"
+
+# Mention users in group chat
+lark msg send --to oc_xxxx --text "Please review" --mention ou_user1 --mention ou_user2
+
+# With link
+lark msg send --to ou_xxxx --text "Check this out" --link "Our Docs" --url "https://docs.example.com"
+
+# Combined features
+lark msg send --to oc_xxxx \
+  --text "Project milestone reached!" \
+  --mention ou_user1 --mention ou_user2 \
+  --link "View Details" --url "https://project.example.com"
+
+# Using explicit ID type
+lark msg send --to user@example.com --to-type email --text "Hello"
+```
+
+Available flags:
+- `--to` (required): Recipient identifier (user ID, open_id, email, or chat_id)
+- `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) - auto-detected if omitted
+- `--text` (required): Message text content
+- `--mention`: User open_id to mention (repeatable for multiple mentions)
+- `--link`: Link display text (must be used with `--url`)
+- `--url`: Link URL (must be used with `--link`)
+
+Output:
+```json
+{
+  "success": true,
+  "message_id": "om_dc13264520392913993dd051dba21dcf",
+  "chat_id": "oc_xxxxx",
+  "create_time": "2026-01-14T10:30:00+08:00"
+}
+```
+
+## 🔍 Agent Use Cases
+
+**When to use message sending:**
+- Notify users about task completion or status updates
+- Share links to documents, dashboards, or resources
+- Mention team members in group discussions
+- Send automated alerts or reminders
+- Communicate with users via email or direct message
+- Format messages with proper structure and line breaks
+
+**Message formatting tips for agents:**
+- Use `\n` for line breaks: `--text "Line 1\nLine 2"`
+- Use `\t` for indentation: `--text "•\tItem 1\n•\tItem 2"`
+- Use `\"` for quotes: `--text "\"Important:\" message"`
+- Use `\\` for literal backslash: `--text "Path: C:\\\\folder\\\\file"`
+
+**Recipient discovery:**
+- Use `lark chat search "team"` to find group chats
+- Use `lark contact get <user_id>` to verify user information
+- Use email addresses directly (auto-detected)
+- Use open_id format for reliable user targeting
+
+**Recipient ID Types:**
+- `open_id`: User open ID (starts with `ou_`)
+- `user_id`: User ID (numeric)
+- `email`: User email address
+- `chat_id`: Group chat ID (starts with `oc_`)
+
+The CLI auto-detects the ID type based on format, but you can override with `--to-type`.
+
+**Message Types:**
+- **Simple text**: Use only `--text` flag (supports `\n` for line breaks)
+- **Rich text**: Automatically activated when using `--mention` or `--link`/`--url`
+
+**Notes:**
+- Messages are sent as the bot/app
+- The bot must be added to group chats before it can send messages
+- Requires `im:message` or `im:message:send_as_bot` permission scope
 
 ### Get Chat History
 ```bash
@@ -271,9 +411,15 @@ Common error codes:
 
 ## Permissions Required
 
+**For reading messages:**
 - The bot must be in the group chat
 - For group chat messages, the app needs the "Read all messages in associated group chat" permission scope
 - Private chat messages only require `im:message:readonly` scope
+
+**For sending messages:**
+- Requires `im:message` or `im:message:send_as_bot` permission scope
+- The bot must be added to group chats before it can send messages to them
+- Can send to users directly without being in a private chat first
 
 ## Notes
 

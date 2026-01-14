@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -269,6 +272,204 @@ Examples:
 	},
 }
 
+// --- msg send ---
+
+var (
+	msgSendTo       string
+	msgSendToType   string
+	msgSendText     string
+	msgSendMentions []string
+	msgSendLink     string
+	msgSendURL      string
+)
+
+var msgSendCmd = &cobra.Command{
+	Use:   "send",
+	Short: "Send a message to a user or chat",
+	Long: `Send a message to a user or chat as the bot.
+
+Message types:
+- Simple text: Use --text only
+- Rich text with mentions/links: Use --text with --mention and/or --link/--url
+
+Examples:
+  # Send text to user
+  lark msg send --to ou_xxx --text "Hello!"
+
+  # Send to group chat with line breaks
+  lark msg send --to oc_xxx --text "Line 1\nLine 2\nLine 3"
+
+  # Mention users (auto-upgrades to post type)
+  lark msg send --to oc_xxx --text "Team update" --mention ou_user1 --mention ou_user2
+
+  # With link
+  lark msg send --to ou_xxx --text "Check this" --link "Google" --url "https://google.com"
+
+  # Combined
+  lark msg send --to oc_xxx --text "Update" --mention ou_xxx --link "Details" --url "https://..."`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if msgSendTo == "" {
+			output.Fatalf("VALIDATION_ERROR", "--to is required")
+		}
+		if msgSendText == "" {
+			output.Fatalf("VALIDATION_ERROR", "--text is required")
+		}
+
+		// Auto-detect receive_id_type if not specified
+		receiveIDType := msgSendToType
+		if receiveIDType == "" {
+			receiveIDType = detectIDType(msgSendTo)
+		}
+
+		// Build message content
+		hasMentions := len(msgSendMentions) > 0
+		hasLink := msgSendLink != "" && msgSendURL != ""
+
+		var msgType string
+		var content string
+		var err error
+
+		if hasMentions || hasLink {
+			// Use post (rich text) type
+			msgType = "post"
+			content, err = buildPostContent(msgSendText, msgSendMentions, msgSendLink, msgSendURL)
+		} else {
+			// Use simple text type
+			msgType = "text"
+			content, err = buildTextContent(msgSendText)
+		}
+
+		if err != nil {
+			output.Fatal("VALIDATION_ERROR", err)
+		}
+
+		// Send message
+		client := api.NewClient()
+		resp, err := client.SendMessage(receiveIDType, msgSendTo, msgType, content)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		// Format output
+		result := api.OutputSendMessage{
+			Success:    true,
+			MessageID:  resp.Data.MessageID,
+			ChatID:     resp.Data.ChatID,
+			CreateTime: formatMessageTime(resp.Data.CreateTime),
+		}
+
+		output.JSON(result)
+	},
+}
+
+// detectIDType infers the receive_id_type from the ID format
+func detectIDType(id string) string {
+	if strings.HasPrefix(id, "ou_") {
+		return "open_id"
+	}
+	if strings.HasPrefix(id, "oc_") {
+		return "chat_id"
+	}
+	if strings.Contains(id, "@") {
+		return "email"
+	}
+	// Assume user_id if all numeric
+	if _, err := strconv.Atoi(id); err == nil {
+		return "user_id"
+	}
+	// Default to open_id
+	return "open_id"
+}
+
+// unescapeString processes escape sequences like \n, \t, \r, etc.
+// Users can send literal backslash-n by escaping as \\n
+func unescapeString(s string) string {
+	// Wrap string in quotes and use strconv.Unquote to process escape sequences
+	// This handles \n -> newline, \t -> tab, \r -> carriage return, \\ -> backslash, etc.
+	quoted := `"` + s + `"`
+	unquoted, err := strconv.Unquote(quoted)
+	if err != nil {
+		// If unquoting fails (e.g., malformed escape), return original string
+		return s
+	}
+	return unquoted
+}
+
+// buildTextContent creates JSON content for text message type
+func buildTextContent(text string) (string, error) {
+	// Unescape the text to handle \n, \t, etc.
+	unescapedText := unescapeString(text)
+
+	content := map[string]interface{}{
+		"text": unescapedText,
+	}
+	jsonBytes, err := json.Marshal(content)
+	if err != nil {
+		return "", fmt.Errorf("failed to build text content: %w", err)
+	}
+	return string(jsonBytes), nil
+}
+
+// buildPostContent creates JSON content for post (rich text) message type
+func buildPostContent(text string, mentions []string, linkText, linkURL string) (string, error) {
+	// Build content array
+	var elements []map[string]interface{}
+
+	// Add main text
+	if text != "" {
+		// Unescape the text to handle \n, \t, etc.
+		unescapedText := unescapeString(text)
+		elements = append(elements, map[string]interface{}{
+			"tag":  "text",
+			"text": unescapedText,
+		})
+	}
+
+	// Add mentions
+	for _, userID := range mentions {
+		// Add space before mention
+		elements = append(elements, map[string]interface{}{
+			"tag":  "text",
+			"text": " ",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag":     "at",
+			"user_id": userID,
+		})
+	}
+
+	// Add link
+	if linkText != "" && linkURL != "" {
+		// Add space before link
+		elements = append(elements, map[string]interface{}{
+			"tag":  "text",
+			"text": " ",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag":  "a",
+			"text": linkText,
+			"href": linkURL,
+		})
+	}
+
+	content := map[string]interface{}{
+		"zh_cn": map[string]interface{}{
+			"title":   "",
+			"content": [][]map[string]interface{}{elements},
+		},
+		"en_us": map[string]interface{}{
+			"title":   "",
+			"content": [][]map[string]interface{}{elements},
+		},
+	}
+
+	jsonBytes, err := json.Marshal(content)
+	if err != nil {
+		return "", fmt.Errorf("failed to build post content: %w", err)
+	}
+	return string(jsonBytes), nil
+}
+
 func init() {
 	// msg history flags
 	msgHistoryCmd.Flags().StringVar(&msgHistoryChatID, "chat-id", "", "Chat ID or thread ID (required)")
@@ -284,7 +485,16 @@ func init() {
 	msgResourceCmd.Flags().StringVar(&msgResourceType, "type", "", "Resource type: 'image' or 'file' (required)")
 	msgResourceCmd.Flags().StringVar(&msgResourceOutput, "output", "", "Output file path (required)")
 
+	// msg send flags
+	msgSendCmd.Flags().StringVar(&msgSendTo, "to", "", "Recipient ID (user ID, open_id, email, or chat_id) (required)")
+	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient ID type: open_id, user_id, email, chat_id (auto-detected if not specified)")
+	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (required)")
+	msgSendCmd.Flags().StringArrayVar(&msgSendMentions, "mention", []string{}, "User ID to mention (can be repeated)")
+	msgSendCmd.Flags().StringVar(&msgSendLink, "link", "", "Link text (requires --url)")
+	msgSendCmd.Flags().StringVar(&msgSendURL, "url", "", "Link URL (requires --link)")
+
 	// Register subcommands
 	msgCmd.AddCommand(msgHistoryCmd)
 	msgCmd.AddCommand(msgResourceCmd)
+	msgCmd.AddCommand(msgSendCmd)
 }
