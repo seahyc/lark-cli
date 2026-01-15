@@ -63,6 +63,7 @@ Available skills:
 - `documents` - Read documents, list folders, browse wikis
 - `messages` - Retrieve chat history, download attachments, send messages to users and chats
 - `email` - Read and search emails via IMAP with local caching
+- `minutes` - Get meeting recordings, export transcripts, download media
 
 ### Configuration
 
