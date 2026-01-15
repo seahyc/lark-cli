@@ -234,11 +234,23 @@ Errors return JSON:
 
 Common error codes:
 - `AUTH_ERROR` - Need to run `lark auth login`
+- `SCOPE_ERROR` - Missing documents permissions. Run `lark auth login --add --scopes documents`
 - `API_ERROR` - Lark API issue (often permissions)
 
-If you get a permissions error, the user may need to:
-1. Re-login: `lark auth login`
-2. Ensure they have access to the document in Lark
+## Required Permissions
+
+This skill requires the `documents` scope group. If you see a `SCOPE_ERROR`, the user needs to add documents permissions:
+
+```bash
+lark auth login --add --scopes documents
+```
+
+To check current permissions:
+```bash
+lark auth status
+```
+
+If you get an `API_ERROR` after confirming scopes are granted, the user may need to ensure they have access to the specific document in Lark.
 
 ## Efficient Extraction with jq and grep
 

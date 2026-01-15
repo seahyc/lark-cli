@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yjwong/lark-cli/internal/config"
+	"github.com/yjwong/lark-cli/internal/scopes"
 )
 
 // TokenStore holds the OAuth tokens
@@ -180,6 +181,42 @@ func (t *TokenStore) GetExpiresAt() time.Time {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.ExpiresAt
+}
+
+// GetScope returns the granted scope string
+func (t *TokenStore) GetScope() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.Scope
+}
+
+// GetGrantedGroups returns a map of scope group names to whether they're fully granted
+func (t *TokenStore) GetGrantedGroups() map[string]bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return scopes.GetGrantedGroups(t.Scope)
+}
+
+// GetGrantedGroupsList returns a list of fully granted scope group names
+func (t *TokenStore) GetGrantedGroupsList() []string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return scopes.GetGrantedGroupsList(t.Scope)
+}
+
+// HasScope checks if a specific scope is granted
+func (t *TokenStore) HasScope(scope string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return scopes.CheckScope(scope, t.Scope)
+}
+
+// HasScopeGroup checks if all scopes for a group are granted
+func (t *TokenStore) HasScopeGroup(groupName string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	ok, _ := scopes.CheckScopeGroup(groupName, t.Scope)
+	return ok
 }
 
 // --- Tenant Token Store ---

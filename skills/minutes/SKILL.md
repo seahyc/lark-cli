@@ -124,8 +124,22 @@ Errors return JSON:
 
 Common error codes:
 - `AUTH_ERROR` - Need to run `lark auth login`
+- `SCOPE_ERROR` - Missing minutes permissions. Run `lark auth login --add --scopes minutes`
 - `NOT_FOUND` - Invalid minute token or minutes not found
 - `API_ERROR` - Lark API issue (check if minute is ready/transcribed)
+
+## Required Permissions
+
+This skill requires the `minutes` scope group. If you see a `SCOPE_ERROR`, the user needs to add minutes permissions:
+
+```bash
+lark auth login --add --scopes minutes
+```
+
+To check current permissions:
+```bash
+lark auth status
+```
 
 ## Common Use Cases
 

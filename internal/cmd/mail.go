@@ -18,6 +18,9 @@ var mailCmd = &cobra.Command{
 	Use:   "mail",
 	Short: "Email commands (IMAP)",
 	Long:  "Read and search emails via IMAP with local caching",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		validateScopeGroup("mail")
+	},
 }
 
 // --- mail setup ---

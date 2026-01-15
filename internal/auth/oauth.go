@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yjwong/lark-cli/internal/config"
+	"github.com/yjwong/lark-cli/internal/scopes"
 )
 
 const (
@@ -44,8 +45,20 @@ type TenantTokenResponse struct {
 	Expire            int    `json:"expire"`
 }
 
-// Login performs the OAuth login flow
+// LoginOptions configures the OAuth login flow
+type LoginOptions struct {
+	// ScopeGroups specifies which scope groups to request (e.g., "calendar", "contacts")
+	// If empty, all scopes are requested (default behavior)
+	ScopeGroups []string
+}
+
+// Login performs the OAuth login flow with default options (all scopes)
 func Login() error {
+	return LoginWithOptions(LoginOptions{})
+}
+
+// LoginWithOptions performs the OAuth login flow with the specified options
+func LoginWithOptions(opts LoginOptions) error {
 	appID := config.GetAppID()
 	appSecret := config.GetAppSecret()
 
@@ -54,6 +67,15 @@ func Login() error {
 	}
 	if appSecret == "" {
 		return fmt.Errorf("app_secret not configured. Set LARK_APP_SECRET env var")
+	}
+
+	// Determine which scopes to request
+	var scopeString string
+	if len(opts.ScopeGroups) == 0 {
+		// Default: request all scopes
+		scopeString = scopes.GetAllScopeString()
+	} else {
+		scopeString = scopes.GetScopeString(opts.ScopeGroups)
 	}
 
 	// Generate state for CSRF protection
@@ -72,7 +94,7 @@ func Login() error {
 
 	// Build authorization URL
 	redirectURI := server.GetRedirectURI()
-	authURL := buildAuthorizationURL(appID, redirectURI, state)
+	authURL := buildAuthorizationURL(appID, redirectURI, state, scopeString)
 
 	// Open browser
 	fmt.Printf("Opening browser for authentication...\n")
@@ -261,11 +283,11 @@ func generateState() (string, error) {
 }
 
 // buildAuthorizationURL constructs the OAuth authorization URL
-func buildAuthorizationURL(appID, redirectURI, state string) string {
+func buildAuthorizationURL(appID, redirectURI, state, scopeString string) string {
 	params := url.Values{}
 	params.Set("client_id", appID)
 	params.Set("redirect_uri", redirectURI)
-	params.Set("scope", "calendar:calendar calendar:calendar:readonly contact:contact.base:readonly contact:department.base:readonly contact:department.organize:readonly contact:user:search docx:document:readonly docs:doc:readonly docs:document.content:read docs:document.comment:read drive:drive:readonly wiki:wiki:readonly space:document:retrieve minutes:minutes:readonly minutes:minute:download offline_access")
+	params.Set("scope", scopeString)
 	params.Set("state", state)
 
 	return authorizationURL + "?" + params.Encode()

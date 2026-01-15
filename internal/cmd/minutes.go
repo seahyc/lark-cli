@@ -15,6 +15,9 @@ var minutesCmd = &cobra.Command{
 	Use:   "minutes",
 	Short: "Minutes commands",
 	Long:  "Access Lark Minutes recordings - get metadata, export transcripts, and download media",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		validateScopeGroup("minutes")
+	},
 }
 
 // --- minutes get ---

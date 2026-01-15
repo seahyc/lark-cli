@@ -54,16 +54,39 @@ All commands output JSON by default.
 ### Authentication
 
 ```bash
-# Login (opens browser)
+# Login with all permissions (default)
 ./lark auth login
 
-# Check authentication status
+# Login with specific scope groups only
+./lark auth login --scopes calendar           # Only calendar permissions
+./lark auth login --scopes calendar,contacts  # Calendar and contacts
+
+# Add permissions incrementally (without losing existing ones)
+./lark auth login --add --scopes messages
+
+# Check authentication status (shows granted scopes)
 ./lark auth status
-# Output: {"authenticated": true, "expires_at": "2026-01-02T12:00:00+08:00", ...}
+# Output: {"authenticated": true, "expires_at": "...", "granted_groups": ["calendar", "contacts"], ...}
+
+# List available scope groups
+./lark auth scopes
 
 # Logout (clear stored tokens)
 ./lark auth logout
 ```
+
+#### Scope Groups
+
+| Group | Commands | Description |
+|-------|----------|-------------|
+| `calendar` | `cal *` | Calendar events and scheduling |
+| `contacts` | `contact *` | Company directory lookup |
+| `documents` | `doc *` | Lark Docs and Drive access |
+| `messages` | `msg *`, `chat *` | Chat and messaging |
+| `mail` | `mail *` | Email via IMAP |
+| `minutes` | `minutes *` | Meeting recordings |
+
+By default, `lark auth login` requests all scopes. Use `--scopes` for minimal permissions.
 
 ### Calendar
 

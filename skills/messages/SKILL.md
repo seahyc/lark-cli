@@ -406,10 +406,24 @@ Errors return JSON:
 
 Common error codes:
 - `AUTH_ERROR` - Need to run `lark auth login`
+- `SCOPE_ERROR` - Missing messages permissions. Run `lark auth login --add --scopes messages`
 - `VALIDATION_ERROR` - Missing required fields (e.g., chat-id)
 - `API_ERROR` - Lark API issue (e.g., bot not in group, missing permissions)
 
-## Permissions Required
+## Required Permissions
+
+This skill requires the `messages` scope group. If you see a `SCOPE_ERROR`, the user needs to add messages permissions:
+
+```bash
+lark auth login --add --scopes messages
+```
+
+To check current permissions:
+```bash
+lark auth status
+```
+
+Additional requirements:
 
 **For reading messages:**
 - The bot must be in the group chat

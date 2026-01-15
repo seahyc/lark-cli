@@ -10,6 +10,9 @@ var contactCmd = &cobra.Command{
 	Use:   "contact",
 	Short: "Contact commands",
 	Long:  "Look up users and departments in the company directory",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		validateScopeGroup("contacts")
+	},
 }
 
 // --- contact get ---

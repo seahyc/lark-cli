@@ -261,10 +261,12 @@ type OutputError struct {
 
 // OutputAuthStatus is the auth status response for CLI
 type OutputAuthStatus struct {
-	Authenticated bool      `json:"authenticated"`
-	User          string    `json:"user,omitempty"`
-	ExpiresAt     time.Time `json:"expires_at,omitempty"`
-	RefreshAt     time.Time `json:"refresh_token_expires_at,omitempty"`
+	Authenticated bool              `json:"authenticated"`
+	User          string            `json:"user,omitempty"`
+	ExpiresAt     time.Time         `json:"expires_at,omitempty"`
+	RefreshAt     time.Time         `json:"refresh_token_expires_at,omitempty"`
+	GrantedGroups []string          `json:"granted_groups,omitempty"`
+	ScopeGroups   map[string]bool   `json:"scope_groups,omitempty"`
 }
 
 // OutputSuccess is a generic success response

@@ -10,6 +10,9 @@ var chatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Chat/group commands",
 	Long:  "Search and manage Lark chats and groups",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		validateScopeGroup("messages")
+	},
 }
 
 // --- chat search ---

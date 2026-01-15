@@ -15,6 +15,9 @@ var docCmd = &cobra.Command{
 	Use:   "doc",
 	Short: "Document commands",
 	Long:  "Query and retrieve Lark document content",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		validateScopeGroup("documents")
+	},
 }
 
 // --- doc get ---
