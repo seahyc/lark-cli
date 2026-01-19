@@ -62,6 +62,7 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - `msg history` - Get chat message history
 - `msg resource` - Download message attachments
 - `msg send` - Send messages to users or chats
+- `msg recall` - Recall/delete a message
 - `chat search` - Find chats and groups
 
 **Message Sending Features:**

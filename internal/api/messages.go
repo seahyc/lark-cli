@@ -103,3 +103,20 @@ func (c *Client) SendMessage(receiveIDType, receiveID, msgType, content string) 
 
 	return &resp, nil
 }
+
+// RecallMessage recalls/deletes a message
+// messageID: the ID of the message to recall
+func (c *Client) RecallMessage(messageID string) error {
+	path := fmt.Sprintf("/im/v1/messages/%s", messageID)
+
+	var resp BaseResponse
+	if err := c.DeleteWithTenantToken(path, &resp); err != nil {
+		return err
+	}
+
+	if resp.Code != 0 {
+		return fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return nil
+}
