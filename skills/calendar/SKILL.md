@@ -252,6 +252,10 @@ When managing the user's calendar, follow these guidelines:
 - Prefer morning slots for focus work, afternoon for meetings (unless user has different preference in profile)
 - Account for timezone differences when scheduling with external attendees
 
+### Rescheduling Meetings
+- **Always check all attendees first** - Use `cal show <event-id>` to get the full attendee list before checking availability. Don't assume you know who's invited.
+- **Watch for bogus busy blocks** - Freebusy data can contain erroneous all-day or multi-day blocks that aren't real OOO. If `common-freetime` returns no slots unexpectedly, check individual freebusy data to spot anomalies.
+
 ### Communication
 - When showing the day's schedule, summarize key meetings and highlight any concerns
 - After creating/updating events, confirm the details back to the user
