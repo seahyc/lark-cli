@@ -395,6 +395,25 @@ Output:
 
 **Note:** Messages are sent as the bot/app. The bot must be added to group chats before it can send messages to them.
 
+#### Recall Message
+
+Recall/delete a previously sent message.
+
+```bash
+# Recall a message by ID
+./lark msg recall om_dc13264520392913993dd051dba21dcf
+```
+
+Output:
+```json
+{
+  "success": true,
+  "message_id": "om_dc13264520392913993dd051dba21dcf"
+}
+```
+
+**Note:** Messages can be recalled within 24 hours of sending. Group owners and administrators can recall member messages within 1 year. The bot must have permission to recall the target message.
+
 ### Documents
 
 #### List Folder Items

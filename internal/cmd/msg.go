@@ -473,6 +473,34 @@ func buildPostContent(text string, mentions []string, linkText, linkURL string) 
 	return string(jsonBytes), nil
 }
 
+// --- msg recall ---
+
+var msgRecallCmd = &cobra.Command{
+	Use:   "recall <message-id>",
+	Short: "Recall a message",
+	Long: `Recall a previously sent message.
+
+Messages can be recalled within 24 hours of sending.
+Group owners/admins can recall member messages within 1 year.
+
+Examples:
+  lark msg recall om_dc13264520392913993dd051dba21dcf`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		messageID := args[0]
+		client := api.NewClient()
+
+		if err := client.RecallMessage(messageID); err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		output.JSON(map[string]interface{}{
+			"success":    true,
+			"message_id": messageID,
+		})
+	},
+}
+
 func init() {
 	// msg history flags
 	msgHistoryCmd.Flags().StringVar(&msgHistoryChatID, "chat-id", "", "Chat ID or thread ID (required)")
@@ -500,4 +528,5 @@ func init() {
 	msgCmd.AddCommand(msgHistoryCmd)
 	msgCmd.AddCommand(msgResourceCmd)
 	msgCmd.AddCommand(msgSendCmd)
+	msgCmd.AddCommand(msgRecallCmd)
 }

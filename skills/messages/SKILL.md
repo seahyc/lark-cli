@@ -16,6 +16,7 @@ Retrieve chat message history, send messages, and search for chats/groups via th
 - Send to individual users or group chats
 - Auto-detect recipient types (email, user ID, chat ID)
 - Support for escape sequences (\n, \t, \", \\)
+- Recall/delete previously sent messages
 
 **Use Cases:**
 - Send notifications and updates
@@ -23,6 +24,10 @@ Retrieve chat message history, send messages, and search for chats/groups via th
 - Mention team members in group discussions
 - Communicate with users via email or direct message
 - Format messages with proper line breaks and structure
+- Retract incorrect or outdated information
+- Remove accidental messages sent to wrong chat
+- Clean up temporary notifications or alerts
+- Delete automated messages after they're no longer relevant
 
 **Agent-Friendly Features:**
 - Explicit flag-based interface (no ambiguous parsing)
@@ -55,6 +60,16 @@ lark chat search "project team"
 **Read messages:**
 ```bash
 lark msg history --chat-id oc_12345 --limit 10
+```
+
+**Recall messages:**
+```bash
+# Send and immediately recall a temporary message
+MESSAGE_ID=$(lark msg send --to user@example.com --text "Temp message" | jq -r '.message_id')
+lark msg recall $MESSAGE_ID
+
+# Recall a specific message by ID
+lark msg recall om_123456789abcdef
 ```
 
 ## Running Commands
@@ -196,6 +211,7 @@ The CLI auto-detects the ID type based on format, but you can override with `--t
 **Message Types:**
 - **Simple text**: Use only `--text` flag (supports `\n` for line breaks)
 - **Rich text**: Automatically activated when using `--mention` or `--link`/`--url`
+- **Recall**: Delete previously sent messages using message ID
 
 **Notes:**
 - Messages are sent as the bot/app
@@ -441,3 +457,58 @@ Additional requirements:
 - Time filters don't work for thread container type
 - Messages are sorted by creation time ascending by default
 - The `deleted` field indicates if a message was recalled
+
+### Recall Messages
+
+Recall/delete previously sent messages from chats.
+
+```bash
+# Recall a message by ID
+lark msg recall om_dc13264520392913993dd051dba21dcf
+
+# Send and immediately recall workflow
+MESSAGE_ID=$(lark msg send --to user@example.com --text "Temporary message" | jq -r '.message_id')
+lark msg recall $MESSAGE_ID
+```
+
+Output:
+```json
+{
+  "success": true,
+  "message_id": "om_dc13264520392913993dd051dba21dcf"
+}
+```
+
+#### Recall Time Limits
+
+- **Regular users**: Can recall their own messages within 24 hours
+- **Group owners/admins**: Can recall any member's messages within 1 year
+- **Bots**: Can recall their own messages within 24 hours
+
+#### Error Handling
+
+Recall-specific error codes:
+- `API_ERROR` with message like "message not found or recall time limit exceeded"
+- `AUTH_ERROR` - Need to run `lark auth login` with proper permissions
+- `VALIDATION_ERROR` - Invalid message ID format
+
+#### Use Cases
+
+**When to use message recall:**
+- Retract incorrect or outdated information
+- Remove accidental messages sent to wrong chat
+- Delete automated messages after they're no longer relevant
+- Clean up temporary notifications or alerts
+- Remove sensitive information that was shared accidentally
+
+**Recall workflow tips:**
+- Use chat search to find the message ID if needed
+- Combine with send command for temporary notifications: `lark msg send ... && sleep 5 && lark msg recall $MESSAGE_ID`
+- Test recall timing - messages older than 24 hours (or 1 year for admins) will fail
+- Verify success by checking chat history after recall
+
+**Notes:**
+- Message IDs typically start with `om_`
+- Recall is permanent - the message will show as "recalled" to all chat members
+- Group owners have extended recall privileges (1 year vs 24 hours)
+- Requires `im:message` or `im:message:send_as_bot` permission scope

@@ -160,6 +160,11 @@ func (c *Client) GetWithTenantToken(path string, result interface{}) error {
 	return c.doRequestWithTenantToken("GET", path, nil, result)
 }
 
+// DeleteWithTenantToken performs a DELETE request using tenant access token
+func (c *Client) DeleteWithTenantToken(path string, result interface{}) error {
+	return c.doRequestWithTenantToken("DELETE", path, nil, result)
+}
+
 // DownloadWithTenantToken performs a GET request that returns binary data
 // The caller is responsible for closing the returned ReadCloser
 func (c *Client) DownloadWithTenantToken(path string) (io.ReadCloser, string, error) {
