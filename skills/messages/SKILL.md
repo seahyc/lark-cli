@@ -10,9 +10,9 @@ Retrieve chat message history, send messages, and search for chats/groups via th
 ## 🤖 Agent Capabilities
 
 **Message Sending Features:**
-- Send text messages with line breaks and formatting
-- Mention users in group chats
-- Include clickable links
+- Send markdown-lite text with bold/italic, links, and mentions
+- Mention users in group chats with @{open_id}
+- Include clickable links via markdown
 - Send to individual users or group chats
 - Auto-detect recipient types (email, user ID, chat ID)
 - Support for escape sequences (\n, \t, \", \\)
@@ -44,12 +44,12 @@ lark msg send --to user@example.com --text "Hello!"
 
 **Send with formatting:**
 ```bash
-lark msg send --to oc_12345 --text "Update:\n• Task completed\n• Next: Review" --mention ou_user1
+lark msg send --to oc_12345 --text "**Update:**\n• Task completed\n• Next: *Review* @{ou_user1}"
 ```
 
 **Send with links:**
 ```bash
-lark msg send --to ou_12345 --text "Check this out" --link "Dashboard" --url "https://example.com"
+lark msg send --to ou_12345 --text "Check this out [Dashboard](https://example.com)"
 ```
 
 **Find chats:**
@@ -145,16 +145,14 @@ lark msg send --to ou_xxxx --text "Update:\nPhase 1 complete\nPhase 2 starting"
 lark msg send --to ou_xxxx --text "Tab:\tindented\nNew line"
 
 # Mention users in group chat
-lark msg send --to oc_xxxx --text "Please review" --mention ou_user1 --mention ou_user2
+lark msg send --to oc_xxxx --text "Please review @{ou_user1} and @{ou_user2}"
 
 # With link
-lark msg send --to ou_xxxx --text "Check this out" --link "Our Docs" --url "https://docs.example.com"
+lark msg send --to ou_xxxx --text "Check this out [Our Docs](https://docs.example.com)"
 
 # Combined features
 lark msg send --to oc_xxxx \
-  --text "Project milestone reached!" \
-  --mention ou_user1 --mention ou_user2 \
-  --link "View Details" --url "https://project.example.com"
+  --text "**Project milestone reached!** See [details](https://project.example.com) @{ou_user1} @{ou_user2}"
 
 # Using explicit ID type
 lark msg send --to user@example.com --to-type email --text "Hello"
@@ -164,9 +162,6 @@ Available flags:
 - `--to` (required): Recipient identifier (user ID, open_id, email, or chat_id)
 - `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) - auto-detected if omitted
 - `--text` (required): Message text content
-- `--mention`: User open_id to mention (repeatable for multiple mentions)
-- `--link`: Link display text (must be used with `--url`)
-- `--url`: Link URL (must be used with `--link`)
 
 Output:
 ```json
@@ -193,6 +188,9 @@ Output:
 - Use `\t` for indentation: `--text "•\tItem 1\n•\tItem 2"`
 - Use `\"` for quotes: `--text "\"Important:\" message"`
 - Use `\\` for literal backslash: `--text "Path: C:\\\\folder\\\\file"`
+- Use `**bold**` and `*italic*` for emphasis
+- Use `[text](url)` for links
+- Use `@{ou_xxx}` to mention users
 
 **Recipient discovery:**
 - Use `lark chat search "team"` to find group chats
@@ -209,8 +207,7 @@ Output:
 The CLI auto-detects the ID type based on format, but you can override with `--to-type`.
 
 **Message Types:**
-- **Simple text**: Use only `--text` flag (supports `\n` for line breaks)
-- **Rich text**: Automatically activated when using `--mention` or `--link`/`--url`
+- **Markdown-lite post**: Default for `msg send` (supports bold/italic/links/mentions)
 - **Recall**: Delete previously sent messages using message ID
 
 **Notes:**
