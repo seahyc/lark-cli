@@ -362,26 +362,26 @@ Send messages to users or group chats as the bot.
 # For literal backslash-n, use double backslash
 ./lark msg send --to ou_xxxx --text "Show literal \\n text"
 
-# Mention users (automatically uses rich text format)
-./lark msg send --to oc_xxxx --text "Please review" --mention ou_user1 --mention ou_user2
+# Bold and italic
+./lark msg send --to oc_xxxx --text "**Status:** *Green*"
+
+# Mention users with @{open_id}
+./lark msg send --to oc_xxxx --text "Please review @{ou_user1}"
 
 # With link
-./lark msg send --to ou_xxxx --text "Check this out" --link "Our Docs" --url "https://docs.example.com"
-
-# Combined features
-./lark msg send --to oc_xxxx \
-  --text "Project milestone reached!" \
-  --mention ou_user1 --mention ou_user2 \
-  --link "View Details" --url "https://project.example.com"
+./lark msg send --to ou_xxxx --text "Check this out [Our Docs](https://docs.example.com)"
 ```
+
+Markdown-lite syntax supported:
+- `**bold**`
+- `*italic*`
+- `[text](url)`
+- `@{ou_xxx}` mention placeholders
 
 Flags:
 - `--to` (required): Recipient identifier (user ID, open_id, email, or chat_id)
 - `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) - auto-detected if omitted
 - `--text` (required): Message text content
-- `--mention`: User open_id to mention (repeatable for multiple mentions)
-- `--link`: Link display text (must be used with `--url`)
-- `--url`: Link URL (must be used with `--link`)
 
 Output:
 ```json

@@ -67,8 +67,8 @@ See `USAGE.md` for full CLI documentation. Main commands:
 
 **Message Sending Features:**
 - Send text messages with line breaks (`\n` creates newlines)
-- Mention users with `--mention` flag
-- Include links with `--link` and `--url` flags
+- Mention users with `@{ou_xxx}` placeholders
+- Include links with markdown `[text](url)`
 - Send to emails, user IDs, or chat IDs
 - Auto-detect recipient types
 - Support escape sequences (\n, \t, \", \\)

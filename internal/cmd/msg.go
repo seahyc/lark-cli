@@ -281,9 +281,6 @@ var (
 	msgSendTo       string
 	msgSendToType   string
 	msgSendText     string
-	msgSendMentions []string
-	msgSendLink     string
-	msgSendURL      string
 )
 
 var msgSendCmd = &cobra.Command{
@@ -291,25 +288,24 @@ var msgSendCmd = &cobra.Command{
 	Short: "Send a message to a user or chat",
 	Long: `Send a message to a user or chat as the bot.
 
-Message types:
-- Simple text: Use --text only
-- Rich text with mentions/links: Use --text with --mention and/or --link/--url
+Message format:
+- Markdown-lite (default): Use --text with **bold**, *italic*, [text](url), and @{ou_xxx} mentions
 
 Examples:
-  # Send text to user
-  lark msg send --to ou_xxx --text "Hello!"
+	# Send text to user
+	lark msg send --to ou_xxx --text "Hello!"
 
-  # Send to group chat with line breaks
-  lark msg send --to oc_xxx --text "Line 1\nLine 2\nLine 3"
+	# Send to group chat with line breaks
+	lark msg send --to oc_xxx --text "Line 1\nLine 2\nLine 3"
 
-  # Mention users (auto-upgrades to post type)
-  lark msg send --to oc_xxx --text "Team update" --mention ou_user1 --mention ou_user2
+	# Bold and italic
+	lark msg send --to oc_xxx --text "**Status:** *Green*"
 
-  # With link
-  lark msg send --to ou_xxx --text "Check this" --link "Google" --url "https://google.com"
+	# Mention users with @{open_id}
+	lark msg send --to oc_xxx --text "Please review @{ou_user1}"
 
-  # Combined
-  lark msg send --to oc_xxx --text "Update" --mention ou_xxx --link "Details" --url "https://..."`,
+	# With link
+	lark msg send --to ou_xxx --text "Check this [Google](https://google.com)"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if msgSendTo == "" {
 			output.Fatalf("VALIDATION_ERROR", "--to is required")
@@ -324,24 +320,9 @@ Examples:
 			receiveIDType = detectIDType(msgSendTo)
 		}
 
-		// Build message content
-		hasMentions := len(msgSendMentions) > 0
-		hasLink := msgSendLink != "" && msgSendURL != ""
-
-		var msgType string
-		var content string
-		var err error
-
-		if hasMentions || hasLink {
-			// Use post (rich text) type
-			msgType = "post"
-			content, err = buildPostContent(msgSendText, msgSendMentions, msgSendLink, msgSendURL)
-		} else {
-			// Use simple text type
-			msgType = "text"
-			content, err = buildTextContent(msgSendText)
-		}
-
+		// Build message content (markdown-lite post)
+		msgType := "post"
+		content, err := buildMarkdownPostContent(msgSendText)
 		if err != nil {
 			output.Fatal("VALIDATION_ERROR", err)
 		}
@@ -398,71 +379,37 @@ func unescapeString(s string) string {
 	return unquoted
 }
 
-// buildTextContent creates JSON content for text message type
-func buildTextContent(text string) (string, error) {
-	// Unescape the text to handle \n, \t, etc.
-	unescapedText := unescapeString(text)
-
-	content := map[string]interface{}{
-		"text": unescapedText,
-	}
-	jsonBytes, err := json.Marshal(content)
-	if err != nil {
-		return "", fmt.Errorf("failed to build text content: %w", err)
-	}
-	return string(jsonBytes), nil
+type postElement struct {
+	tag    string
+	text   string
+	href   string
+	userID string
+	bold   bool
+	italic bool
 }
 
-// buildPostContent creates JSON content for post (rich text) message type
-func buildPostContent(text string, mentions []string, linkText, linkURL string) (string, error) {
-	// Build content array
-	var elements []map[string]interface{}
+// buildMarkdownPostContent creates JSON content for markdown-lite post messages.
+func buildMarkdownPostContent(text string) (string, error) {
+	unescapedText := unescapeString(text)
+	lines := strings.Split(unescapedText, "\n")
+	contentLines := make([][]map[string]interface{}, 0, len(lines))
 
-	// Add main text
-	if text != "" {
-		// Unescape the text to handle \n, \t, etc.
-		unescapedText := unescapeString(text)
-		elements = append(elements, map[string]interface{}{
-			"tag":  "text",
-			"text": unescapedText,
-		})
-	}
-
-	// Add mentions
-	for _, userID := range mentions {
-		// Add space before mention
-		elements = append(elements, map[string]interface{}{
-			"tag":  "text",
-			"text": " ",
-		})
-		elements = append(elements, map[string]interface{}{
-			"tag":     "at",
-			"user_id": userID,
-		})
-	}
-
-	// Add link
-	if linkText != "" && linkURL != "" {
-		// Add space before link
-		elements = append(elements, map[string]interface{}{
-			"tag":  "text",
-			"text": " ",
-		})
-		elements = append(elements, map[string]interface{}{
-			"tag":  "a",
-			"text": linkText,
-			"href": linkURL,
-		})
+	for _, line := range lines {
+		elements := parseMarkdownLine(line)
+		if len(elements) == 0 {
+			elements = append(elements, postElement{tag: "text", text: ""})
+		}
+		contentLines = append(contentLines, buildPostElements(elements))
 	}
 
 	content := map[string]interface{}{
 		"zh_cn": map[string]interface{}{
 			"title":   "",
-			"content": [][]map[string]interface{}{elements},
+			"content": contentLines,
 		},
 		"en_us": map[string]interface{}{
 			"title":   "",
-			"content": [][]map[string]interface{}{elements},
+			"content": contentLines,
 		},
 	}
 
@@ -471,6 +418,133 @@ func buildPostContent(text string, mentions []string, linkText, linkURL string) 
 		return "", fmt.Errorf("failed to build post content: %w", err)
 	}
 	return string(jsonBytes), nil
+}
+
+func parseMarkdownLine(line string) []postElement {
+	var elements []postElement
+	var buffer strings.Builder
+
+	flushText := func(text string) {
+		if text == "" {
+			return
+		}
+		elements = append(elements, postElement{tag: "text", text: text})
+	}
+
+	i := 0
+	for i < len(line) {
+		if strings.HasPrefix(line[i:], "@{") {
+			closing := strings.Index(line[i+2:], "}")
+			if closing >= 0 {
+				flushText(buffer.String())
+				buffer.Reset()
+				userID := line[i+2 : i+2+closing]
+				elements = append(elements, postElement{tag: "at", userID: userID})
+				i += closing + 3
+				continue
+			}
+		}
+
+		if line[i] == '[' {
+			closeBracket := strings.Index(line[i+1:], "]")
+			if closeBracket >= 0 {
+				closeBracket += i + 1
+				if closeBracket+1 < len(line) && line[closeBracket+1] == '(' {
+					closeParen := strings.Index(line[closeBracket+2:], ")")
+					if closeParen >= 0 {
+						closeParen += closeBracket + 2
+						linkText := line[i+1 : closeBracket]
+						linkURL := line[closeBracket+2 : closeParen]
+						flushText(buffer.String())
+						buffer.Reset()
+						elements = append(elements, postElement{tag: "a", text: linkText, href: linkURL})
+						i = closeParen + 1
+						continue
+					}
+				}
+			}
+		}
+
+		if strings.HasPrefix(line[i:], "**") {
+			closing := strings.Index(line[i+2:], "**")
+			if closing >= 0 {
+				flushText(buffer.String())
+				buffer.Reset()
+				boldText := line[i+2 : i+2+closing]
+				if boldText != "" {
+					elements = append(elements, postElement{tag: "text", text: boldText, bold: true})
+				}
+				i += closing + 4
+				continue
+			}
+		}
+
+		if line[i] == '*' {
+			closing := strings.Index(line[i+1:], "*")
+			if closing >= 0 {
+				flushText(buffer.String())
+				buffer.Reset()
+				italicText := line[i+1 : i+1+closing]
+				if italicText != "" {
+					elements = append(elements, postElement{tag: "text", text: italicText, italic: true})
+				}
+				i += closing + 2
+				continue
+			}
+		}
+
+		buffer.WriteByte(line[i])
+		i++
+	}
+
+	flushText(buffer.String())
+	return elements
+}
+
+func buildPostElements(elements []postElement) []map[string]interface{} {
+	content := make([]map[string]interface{}, 0, len(elements))
+	for _, elem := range elements {
+		switch elem.tag {
+		case "text":
+			entry := map[string]interface{}{
+				"tag":  "text",
+				"text": elem.text,
+			}
+			style := buildPostTextStyle(elem.bold, elem.italic)
+			if len(style) > 0 {
+				entry["style"] = style
+			}
+			content = append(content, entry)
+		case "a":
+			entry := map[string]interface{}{
+				"tag":  "a",
+				"text": elem.text,
+				"href": elem.href,
+			}
+			style := buildPostTextStyle(elem.bold, elem.italic)
+			if len(style) > 0 {
+				entry["style"] = style
+			}
+			content = append(content, entry)
+		case "at":
+			content = append(content, map[string]interface{}{
+				"tag":     "at",
+				"user_id": elem.userID,
+			})
+		}
+	}
+	return content
+}
+
+func buildPostTextStyle(isBold, isItalic bool) []string {
+	var style []string
+	if isBold {
+		style = append(style, "bold")
+	}
+	if isItalic {
+		style = append(style, "italic")
+	}
+	return style
 }
 
 // --- msg recall ---
@@ -519,10 +593,7 @@ func init() {
 	// msg send flags
 	msgSendCmd.Flags().StringVar(&msgSendTo, "to", "", "Recipient ID (user ID, open_id, email, or chat_id) (required)")
 	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient ID type: open_id, user_id, email, chat_id (auto-detected if not specified)")
-	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (required)")
-	msgSendCmd.Flags().StringArrayVar(&msgSendMentions, "mention", []string{}, "User ID to mention (can be repeated)")
-	msgSendCmd.Flags().StringVar(&msgSendLink, "link", "", "Link text (requires --url)")
-	msgSendCmd.Flags().StringVar(&msgSendURL, "url", "", "Link URL (requires --link)")
+	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (markdown-lite) (required)")
 
 	// Register subcommands
 	msgCmd.AddCommand(msgHistoryCmd)
