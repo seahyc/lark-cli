@@ -362,92 +362,6 @@ func formatUnixTimestamp(ts int64) string {
 	return time.Unix(ts, 0).Format(time.RFC3339)
 }
 
-// --- doc wiki-search ---
-
-// objTypeToString converts the API obj_type integer to a string
-func objTypeToString(objType int) string {
-	switch objType {
-	case 1:
-		return "doc"
-	case 2:
-		return "sheet"
-	case 3:
-		return "bitable"
-	case 4:
-		return "mindnote"
-	case 5:
-		return "file"
-	case 6:
-		return "slide"
-	case 7:
-		return "wiki"
-	case 8:
-		return "docx"
-	case 9:
-		return "folder"
-	case 10:
-		return "catalog"
-	default:
-		return fmt.Sprintf("unknown(%d)", objType)
-	}
-}
-
-var docWikiSearchCmd = &cobra.Command{
-	Use:   "wiki-search <query>",
-	Short: "Search wiki nodes by keyword",
-	Long: `Search for wiki nodes by keyword. Optionally filter by space_id or node_id.
-
-Results include all matching wiki nodes that the user has permission to view.
-Use --space-id to restrict search to a specific wiki space.
-Use --node-id (with --space-id) to search within a specific node and its children.
-
-Examples:
-  lark doc wiki-search "project plan"
-  lark doc wiki-search "meeting notes" --space-id 7307457194084925443
-  lark doc wiki-search "design" --space-id 7307457194084925443 --node-id BAgPwq6lIi5Nykk0E5fcJeabcef`,
-	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		query := args[0]
-		spaceID, _ := cmd.Flags().GetString("space-id")
-		nodeID, _ := cmd.Flags().GetString("node-id")
-
-		// Validate that node-id requires space-id
-		if nodeID != "" && spaceID == "" {
-			output.Fatal("INVALID_ARG", fmt.Errorf("--node-id requires --space-id to be set"))
-		}
-
-		client := api.NewClient()
-
-		items, err := client.SearchWikiNodes(query, spaceID, nodeID)
-		if err != nil {
-			output.Fatal("API_ERROR", err)
-		}
-
-		// Convert to output format
-		results := make([]api.OutputWikiSearchItem, len(items))
-		for i, item := range items {
-			results[i] = api.OutputWikiSearchItem{
-				NodeID:   item.NodeID,
-				ObjToken: item.ObjToken,
-				ObjType:  objTypeToString(item.ObjType),
-				Title:    item.Title,
-				URL:      item.URL,
-				SpaceID:  item.SpaceID,
-			}
-		}
-
-		result := api.OutputWikiSearchResult{
-			Query:   query,
-			SpaceID: spaceID,
-			NodeID:  nodeID,
-			Results: results,
-			Count:   len(results),
-		}
-
-		output.JSON(result)
-	},
-}
-
 // --- doc image ---
 
 var docImageCmd = &cobra.Command{
@@ -521,13 +435,8 @@ func init() {
 	docCmd.AddCommand(docWikiChildrenCmd)
 	docCmd.AddCommand(docCommentsCmd)
 	docCmd.AddCommand(docImageCmd)
-	docCmd.AddCommand(docWikiSearchCmd)
 
 	// Flags for doc image
 	docImageCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
 	docImageCmd.Flags().StringP("doc", "d", "", "Document ID (required for authentication)")
-
-	// Flags for doc wiki-search
-	docWikiSearchCmd.Flags().String("space-id", "", "Filter to a specific wiki space")
-	docWikiSearchCmd.Flags().String("node-id", "", "Search within a node and its children (requires --space-id)")
 }

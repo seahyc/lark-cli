@@ -78,10 +78,6 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - `doc get <document_id>` - Get document content as markdown
 - `doc blocks <document_id>` - Get document block structure (JSON)
 - `doc wiki <node_token>` - Resolve wiki node to document token
-- `doc wiki-children <node_token>` - List child nodes of a wiki node
-- `doc wiki-search <query>` - Search wiki nodes by keyword
-- `doc comments <document_id>` - Get document comments
-- `doc image <image_token>` - Download a document image
 
 ### Mail (`mail`)
 - `mail setup` - Configure IMAP credentials (interactive)
