@@ -362,6 +362,57 @@ func formatUnixTimestamp(ts int64) string {
 	return time.Unix(ts, 0).Format(time.RFC3339)
 }
 
+// --- doc search ---
+
+var docSearchCmd = &cobra.Command{
+	Use:   "search <query>",
+	Short: "Search documents by keyword",
+	Long: `Search for documents by keyword. Optionally filter by owner, chat, or document type.
+
+The search returns documents from your Drive that match the query.
+Maximum 200 results can be returned.
+
+Document types: doc, sheet, slide, bitable, mindnote, file
+
+Examples:
+  lark doc search "project plan"
+  lark doc search "budget" --type sheet
+  lark doc search "meeting notes" --type doc --type sheet`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		query := args[0]
+		ownerIDs, _ := cmd.Flags().GetStringSlice("owner")
+		chatIDs, _ := cmd.Flags().GetStringSlice("chat")
+		docTypes, _ := cmd.Flags().GetStringSlice("type")
+
+		client := api.NewClient()
+
+		results, total, err := client.SearchDocuments(query, ownerIDs, chatIDs, docTypes)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		outputItems := make([]api.OutputDocSearchItem, len(results))
+		for i, item := range results {
+			outputItems[i] = api.OutputDocSearchItem{
+				Token:   item.DocsToken,
+				Type:    item.DocsType,
+				Title:   item.Title,
+				OwnerID: item.OwnerID,
+			}
+		}
+
+		result := api.OutputDocSearchResult{
+			Query:   query,
+			Results: outputItems,
+			Total:   total,
+			Count:   len(outputItems),
+		}
+
+		output.JSON(result)
+	},
+}
+
 // --- doc image ---
 
 var docImageCmd = &cobra.Command{
@@ -434,7 +485,13 @@ func init() {
 	docCmd.AddCommand(docWikiCmd)
 	docCmd.AddCommand(docWikiChildrenCmd)
 	docCmd.AddCommand(docCommentsCmd)
+	docCmd.AddCommand(docSearchCmd)
 	docCmd.AddCommand(docImageCmd)
+
+	// Flags for doc search
+	docSearchCmd.Flags().StringSlice("owner", nil, "Filter by owner user ID (can be repeated)")
+	docSearchCmd.Flags().StringSlice("chat", nil, "Filter by chat ID (can be repeated)")
+	docSearchCmd.Flags().StringSlice("type", nil, "Filter by doc type: doc, sheet, slide, bitable, mindnote, file (can be repeated)")
 
 	// Flags for doc image
 	docImageCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")

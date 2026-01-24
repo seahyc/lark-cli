@@ -19,6 +19,38 @@ LARK_CONFIG_DIR=/path/to/.lark lark doc <command>
 
 ## Commands Reference
 
+### Search Documents
+
+```bash
+lark doc search <query> [--owner <user-id>] [--chat <chat-id>] [--type <doc-type>]
+```
+
+Searches for documents by keyword. Returns documents from Drive that match the query.
+
+Options:
+- `--owner`: Filter by owner user ID (can be repeated)
+- `--chat`: Filter by chat ID where document is located (can be repeated)
+- `--type`: Filter by document type (can be repeated). Valid types: `doc`, `sheet`, `slide`, `bitable`, `mindnote`, `file`
+
+Output:
+```json
+{
+  "query": "project plan",
+  "results": [
+    {
+      "token": "doxcntan34DX4QoKJu7jJyabcef",
+      "type": "docx",
+      "title": "Q4 Project Plan",
+      "owner_id": "ou_xxxx"
+    }
+  ],
+  "total": 15,
+  "count": 15
+}
+```
+
+**Note:** Maximum 200 results can be returned per search.
+
 ### List Folder Items
 
 ```bash
@@ -188,6 +220,7 @@ Fields:
 
 | Use Case | Command | Why |
 |----------|---------|-----|
+| Search for documents | `doc search` | Find docs by keyword across Drive |
 | List folder contents | `doc list [folder-token]` | Browse Drive files and folders |
 | Wiki URL | `doc wiki` then `doc get` | Must resolve wiki node first |
 | List wiki sub-pages | `doc wiki-children` | Browse wiki hierarchy |

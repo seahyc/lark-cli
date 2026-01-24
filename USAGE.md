@@ -416,6 +416,46 @@ Output:
 
 ### Documents
 
+#### Search Documents
+
+```bash
+# Search by keyword
+./lark doc search "project plan"
+
+# Filter by document type
+./lark doc search "budget" --type sheet
+./lark doc search "meeting notes" --type doc --type sheet
+
+# Filter by owner
+./lark doc search "report" --owner ou_xxxx
+```
+
+Flags:
+- `--owner`: Filter by owner user ID (can be repeated)
+- `--chat`: Filter by chat ID where document is located (can be repeated)
+- `--type`: Filter by document type (can be repeated)
+
+Valid document types: `doc`, `sheet`, `slide`, `bitable`, `mindnote`, `file`
+
+Output:
+```json
+{
+  "query": "project plan",
+  "results": [
+    {
+      "token": "doxcntan34DX4QoKJu7jJyabcef",
+      "type": "docx",
+      "title": "Q4 Project Plan",
+      "owner_id": "ou_xxxx"
+    }
+  ],
+  "total": 15,
+  "count": 15
+}
+```
+
+**Note:** Maximum 200 results can be returned per search.
+
 #### List Folder Items
 
 ```bash

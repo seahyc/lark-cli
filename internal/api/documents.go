@@ -185,3 +185,50 @@ func (c *Client) DownloadMedia(fileToken, documentID string) (io.ReadCloser, str
 
 	return c.Download(path)
 }
+
+// SearchDocuments searches for documents using the Lark Docs API
+// query: search keyword (required)
+// ownerIDs: optional filter by owner user IDs
+// chatIDs: optional filter by chat IDs
+// docTypes: optional filter by doc types (doc, sheet, slide, bitable, mindnote, file)
+// Returns all matching documents (up to 200) and total count
+func (c *Client) SearchDocuments(query string, ownerIDs, chatIDs, docTypes []string) ([]DocSearchEntity, int, error) {
+	var allResults []DocSearchEntity
+	offset := 0
+	const pageSize = 50
+
+	for {
+		req := DocSearchRequest{
+			SearchKey: query,
+			Count:     pageSize,
+			Offset:    offset,
+		}
+		if len(ownerIDs) > 0 {
+			req.OwnerIDs = ownerIDs
+		}
+		if len(chatIDs) > 0 {
+			req.ChatIDs = chatIDs
+		}
+		if len(docTypes) > 0 {
+			req.DocsTypes = docTypes
+		}
+
+		var resp DocSearchResponse
+		if err := c.Post("/suite/docs-api/search/object", req, &resp); err != nil {
+			return nil, 0, err
+		}
+
+		if resp.Code != 0 {
+			return nil, 0, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+		}
+
+		allResults = append(allResults, resp.Data.DocsEntities...)
+
+		// Check if we should continue (has_more and offset+count < 200)
+		if !resp.Data.HasMore || offset+pageSize >= 200 {
+			return allResults, resp.Data.Total, nil
+		}
+
+		offset += pageSize
+	}
+}

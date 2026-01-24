@@ -1119,3 +1119,49 @@ type OutputMinuteTranscript struct {
 	File    string `json:"file,omitempty"` // Output file path if written to file
 }
 
+// --- Document Search Types ---
+
+// DocSearchRequest is the request body for POST /suite/docs-api/search/object
+type DocSearchRequest struct {
+	SearchKey string   `json:"search_key"`
+	Count     int      `json:"count,omitempty"`
+	Offset    int      `json:"offset,omitempty"`
+	OwnerIDs  []string `json:"owner_ids,omitempty"`
+	ChatIDs   []string `json:"chat_ids,omitempty"`
+	DocsTypes []string `json:"docs_types,omitempty"`
+}
+
+// DocSearchEntity represents a document from search results
+type DocSearchEntity struct {
+	DocsToken string `json:"docs_token"`
+	DocsType  string `json:"docs_type"`
+	Title     string `json:"title"`
+	OwnerID   string `json:"owner_id"`
+}
+
+// DocSearchResponse is the response from POST /suite/docs-api/search/object
+type DocSearchResponse struct {
+	BaseResponse
+	Data struct {
+		DocsEntities []DocSearchEntity `json:"docs_entities,omitempty"`
+		HasMore      bool              `json:"has_more"`
+		Total        int               `json:"total"`
+	} `json:"data"`
+}
+
+// OutputDocSearchResult is the doc search response for CLI
+type OutputDocSearchResult struct {
+	Query   string                `json:"query"`
+	Results []OutputDocSearchItem `json:"results"`
+	Total   int                   `json:"total"`
+	Count   int                   `json:"count"`
+}
+
+// OutputDocSearchItem is a search result item for CLI output
+type OutputDocSearchItem struct {
+	Token   string `json:"token"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	OwnerID string `json:"owner_id"`
+}
+
