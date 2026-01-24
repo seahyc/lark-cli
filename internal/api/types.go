@@ -768,6 +768,53 @@ type OutputWikiChildren struct {
 	Count           int              `json:"count"`
 }
 
+// WikiSearchRequest is the request body for POST /wiki/v2/nodes/search
+type WikiSearchRequest struct {
+	Query     string `json:"query"`
+	SpaceID   string `json:"space_id,omitempty"`
+	NodeID    string `json:"node_id,omitempty"`
+	PageToken string `json:"page_token,omitempty"`
+	PageSize  int    `json:"page_size,omitempty"`
+}
+
+// WikiSearchItem represents a wiki node from search results
+type WikiSearchItem struct {
+	NodeID   string `json:"node_id"`
+	SpaceID  string `json:"space_id"`
+	ObjType  int    `json:"obj_type"`
+	ObjToken string `json:"obj_token"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+}
+
+// WikiSearchResponse is the response from POST /wiki/v2/nodes/search
+type WikiSearchResponse struct {
+	BaseResponse
+	Data struct {
+		Items     []WikiSearchItem `json:"items,omitempty"`
+		PageToken string           `json:"page_token,omitempty"`
+		HasMore   bool             `json:"has_more"`
+	} `json:"data"`
+}
+
+// OutputWikiSearchResult is the wiki search response for CLI
+type OutputWikiSearchResult struct {
+	Query   string                 `json:"query"`
+	SpaceID string                 `json:"space_id,omitempty"`
+	Results []OutputWikiSearchItem `json:"results"`
+	Count   int                    `json:"count"`
+}
+
+// OutputWikiSearchItem is a search result item for CLI output
+type OutputWikiSearchItem struct {
+	NodeID   string `json:"node_id"`
+	ObjToken string `json:"obj_token"`
+	ObjType  string `json:"obj_type"` // Human-readable type
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+	SpaceID  string `json:"space_id"`
+}
+
 // --- Folder/Drive Types ---
 
 // ShortcutInfo contains information about a shortcut's target

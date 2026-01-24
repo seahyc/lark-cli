@@ -519,6 +519,47 @@ Output:
 
 Use the `obj_token` value with `doc get` to retrieve the document content.
 
+#### Search Wiki
+
+```bash
+# Search all wikis by keyword
+./lark doc wiki-search "meeting notes"
+
+# Filter by wiki space
+./lark doc wiki-search "PRD" --space-id 7344964278161604639
+
+# Search within a specific node and its children
+./lark doc wiki-search "design" --space-id 7344964278161604639 --node-id ABC123xyz
+```
+
+Searches for wiki nodes by keyword. Returns wiki nodes the user has permission to view.
+
+**Note:** Results are limited to 50 items to avoid API rate limits.
+
+Flags:
+- `--space-id`: Filter to a specific wiki space ID
+- `--node-id`: Search within a node and its children (requires `--space-id`)
+
+Output:
+```json
+{
+  "query": "meeting notes",
+  "results": [
+    {
+      "node_id": "BAgPwq6lIi5Nykk0E5fcJeabcef",
+      "obj_token": "AcnMdexrlokOShxe40Fc0Oabcef",
+      "obj_type": "docx",
+      "title": "Weekly Meeting Notes",
+      "url": "https://sample.larksuite.com/wiki/BAgPwq6lIi5Nykk0E5fcJeabcef",
+      "space_id": "7307457194084925443"
+    }
+  ],
+  "count": 1
+}
+```
+
+Use the `obj_token` value with `doc get` to retrieve the document content.
+
 #### Get Document as Markdown
 
 ```bash

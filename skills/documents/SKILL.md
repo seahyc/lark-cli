@@ -133,6 +133,40 @@ Output:
 
 The command automatically resolves the space_id from the node token. Use `obj_token` with `doc get` to read child documents.
 
+### Search Wiki Nodes
+
+```bash
+lark doc wiki-search <query> [--space-id <space-id>] [--node-id <node-id>]
+```
+
+Searches for wiki nodes by keyword. Returns wiki nodes the user has permission to view.
+
+**Note:** Results are limited to 50 items to avoid API rate limits.
+
+Options:
+- `--space-id`: Filter to a specific wiki space ID
+- `--node-id`: Search within a node and its children (requires `--space-id`)
+
+Output:
+```json
+{
+  "query": "meeting notes",
+  "results": [
+    {
+      "node_id": "BAgPwq6lIi5Nykk0E5fcJeabcef",
+      "obj_token": "AcnMdexrlokOShxe40Fc0Oabcef",
+      "obj_type": "docx",
+      "title": "Weekly Meeting Notes",
+      "url": "https://sample.larksuite.com/wiki/BAgPwq6lIi5Nykk0E5fcJeabcef",
+      "space_id": "7307457194084925443"
+    }
+  ],
+  "count": 1
+}
+```
+
+Use the `obj_token` value with `doc get` to retrieve the document content.
+
 ### Get Document as Markdown
 
 ```bash
@@ -221,6 +255,7 @@ Fields:
 | Use Case | Command | Why |
 |----------|---------|-----|
 | Search for documents | `doc search` | Find docs by keyword across Drive |
+| Search wiki by keyword | `doc wiki-search` | Find wiki nodes by keyword |
 | List folder contents | `doc list [folder-token]` | Browse Drive files and folders |
 | Wiki URL | `doc wiki` then `doc get` | Must resolve wiki node first |
 | List wiki sub-pages | `doc wiki-children` | Browse wiki hierarchy |

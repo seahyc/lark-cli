@@ -362,6 +362,87 @@ func formatUnixTimestamp(ts int64) string {
 	return time.Unix(ts, 0).Format(time.RFC3339)
 }
 
+// --- doc wiki-search ---
+
+// objTypeToString converts wiki obj_type int to human-readable string
+func objTypeToString(objType int) string {
+	switch objType {
+	case 1:
+		return "doc"
+	case 2:
+		return "sheet"
+	case 3:
+		return "bitable"
+	case 4:
+		return "mindnote"
+	case 5:
+		return "file"
+	case 6:
+		return "slide"
+	case 7:
+		return "wiki"
+	case 8:
+		return "docx"
+	case 9:
+		return "folder"
+	case 10:
+		return "catalog"
+	default:
+		return fmt.Sprintf("unknown(%d)", objType)
+	}
+}
+
+var docWikiSearchCmd = &cobra.Command{
+	Use:   "wiki-search <query>",
+	Short: "Search wiki nodes by keyword",
+	Long: `Search for wiki nodes by keyword. Returns wiki nodes the user has permission to view.
+
+Optionally filter by wiki space or search within a specific node's children.
+
+Examples:
+  lark doc wiki-search "meeting notes"
+  lark doc wiki-search "PRD" --space-id 7344964278161604639`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		query := args[0]
+		spaceID, _ := cmd.Flags().GetString("space-id")
+		nodeID, _ := cmd.Flags().GetString("node-id")
+
+		// Validate: node-id requires space-id
+		if nodeID != "" && spaceID == "" {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("--node-id requires --space-id"))
+		}
+
+		client := api.NewClient()
+
+		results, err := client.SearchWikiNodes(query, spaceID, nodeID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		outputItems := make([]api.OutputWikiSearchItem, len(results))
+		for i, item := range results {
+			outputItems[i] = api.OutputWikiSearchItem{
+				NodeID:   item.NodeID,
+				ObjToken: item.ObjToken,
+				ObjType:  objTypeToString(item.ObjType),
+				Title:    item.Title,
+				URL:      item.URL,
+				SpaceID:  item.SpaceID,
+			}
+		}
+
+		result := api.OutputWikiSearchResult{
+			Query:   query,
+			SpaceID: spaceID,
+			Results: outputItems,
+			Count:   len(outputItems),
+		}
+
+		output.JSON(result)
+	},
+}
+
 // --- doc search ---
 
 var docSearchCmd = &cobra.Command{
@@ -487,6 +568,11 @@ func init() {
 	docCmd.AddCommand(docCommentsCmd)
 	docCmd.AddCommand(docSearchCmd)
 	docCmd.AddCommand(docImageCmd)
+	docCmd.AddCommand(docWikiSearchCmd)
+
+	// Flags for doc wiki-search
+	docWikiSearchCmd.Flags().String("space-id", "", "Filter to specific wiki space ID")
+	docWikiSearchCmd.Flags().String("node-id", "", "Search within a node and its children (requires --space-id)")
 
 	// Flags for doc search
 	docSearchCmd.Flags().StringSlice("owner", nil, "Filter by owner user ID (can be repeated)")

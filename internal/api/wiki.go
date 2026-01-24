@@ -23,6 +23,35 @@ func (c *Client) GetWikiNode(nodeToken string) (*WikiNode, error) {
 	return resp.Data.Node, nil
 }
 
+// SearchWikiNodes searches wiki nodes by keyword
+// query: search keyword (required)
+// spaceID: optional filter to specific wiki space
+// nodeID: optional filter to search within a node (requires spaceID)
+// Returns matching wiki nodes (limited to first page of 50 results to avoid rate limits)
+func (c *Client) SearchWikiNodes(query, spaceID, nodeID string) ([]WikiSearchItem, error) {
+	req := WikiSearchRequest{
+		Query:    query,
+		PageSize: 50,
+	}
+	if spaceID != "" {
+		req.SpaceID = spaceID
+	}
+	if nodeID != "" {
+		req.NodeID = nodeID
+	}
+
+	var resp WikiSearchResponse
+	if err := c.Post("/wiki/v2/nodes/search", req, &resp); err != nil {
+		return nil, err
+	}
+
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return resp.Data.Items, nil
+}
+
 // GetWikiNodeChildren retrieves the immediate children of a wiki node
 // spaceID: the wiki space ID
 // parentNodeToken: the parent node token
