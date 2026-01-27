@@ -983,6 +983,25 @@ type Message struct {
 	UpperMessageID string           `json:"upper_message_id,omitempty"` // For combined/forwarded messages
 }
 
+// ReactionType represents a reaction resource type
+type ReactionType struct {
+	EmojiType string `json:"emoji_type,omitempty"`
+}
+
+// ReactionOperator represents the operator info for a reaction
+type ReactionOperator struct {
+	OperatorID   string `json:"operator_id,omitempty"`
+	OperatorType string `json:"operator_type,omitempty"`
+}
+
+// MessageReaction represents a reaction on a message
+type MessageReaction struct {
+	ReactionID   string            `json:"reaction_id,omitempty"`
+	ReactionType *ReactionType     `json:"reaction_type,omitempty"`
+	Operator     *ReactionOperator `json:"operator,omitempty"`
+	ActionTime   string            `json:"action_time,omitempty"`
+}
+
 // --- Message API Response Types ---
 
 // MessageListResponse is the response from GET /im/v1/messages
@@ -992,6 +1011,33 @@ type MessageListResponse struct {
 		HasMore   bool      `json:"has_more"`
 		PageToken string    `json:"page_token,omitempty"`
 		Items     []Message `json:"items,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// AddMessageReactionRequest is the request body for POST /im/v1/messages/:message_id/reactions
+type AddMessageReactionRequest struct {
+	ReactionType ReactionType `json:"reaction_type"`
+}
+
+// AddMessageReactionResponse is the response from POST /im/v1/messages/:message_id/reactions
+type AddMessageReactionResponse struct {
+	BaseResponse
+	Data *MessageReaction `json:"data,omitempty"`
+}
+
+// DeleteMessageReactionResponse is the response from DELETE /im/v1/messages/:message_id/reactions/:reaction_id
+type DeleteMessageReactionResponse struct {
+	BaseResponse
+	Data *MessageReaction `json:"data,omitempty"`
+}
+
+// MessageReactionListResponse is the response from GET /im/v1/messages/:message_id/reactions
+type MessageReactionListResponse struct {
+	BaseResponse
+	Data struct {
+		Items     []MessageReaction `json:"items,omitempty"`
+		HasMore   bool              `json:"has_more"`
+		PageToken string            `json:"page_token,omitempty"`
 	} `json:"data,omitempty"`
 }
 
@@ -1028,6 +1074,31 @@ type OutputMessageList struct {
 	Messages []OutputMessage `json:"messages"`
 	Count    int             `json:"count"`
 	ChatID   string          `json:"chat_id"`
+}
+
+// OutputMessageReaction is the simplified reaction format for CLI output
+type OutputMessageReaction struct {
+	Success      bool   `json:"success"`
+	MessageID    string `json:"message_id"`
+	ReactionType string `json:"reaction_type"`
+	ReactionID   string `json:"reaction_id"`
+	EmojiType    string `json:"emoji_type,omitempty"`
+}
+
+// OutputMessageReactionItem is a reaction entry for CLI output
+type OutputMessageReactionItem struct {
+	ReactionID   string `json:"reaction_id"`
+	EmojiType    string `json:"emoji_type"`
+	OperatorID   string `json:"operator_id,omitempty"`
+	OperatorType string `json:"operator_type,omitempty"`
+	ActionTime   string `json:"action_time,omitempty"`
+}
+
+// OutputMessageReactionList is the reaction list response for CLI
+type OutputMessageReactionList struct {
+	MessageID string                      `json:"message_id"`
+	Reactions []OutputMessageReactionItem `json:"reactions"`
+	Count     int                         `json:"count"`
 }
 
 // --- Send Message Types ---

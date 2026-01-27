@@ -23,6 +23,14 @@ type ListMessagesOptions struct {
 	PageToken string // Pagination token
 }
 
+// ListMessageReactionsOptions contains optional parameters for ListMessageReactions
+type ListMessageReactionsOptions struct {
+	ReactionType string // Emoji type (e.g., SMILE)
+	PageSize     int    // 1-50, default 20
+	PageToken    string // Pagination token
+	UserIDType   string // open_id, union_id, user_id
+}
+
 // ListMessages retrieves chat history from a chat or thread
 // containerIDType: "chat" for groups/private chats, "thread" for thread messages
 // containerID: chat_id or thread_id
@@ -63,6 +71,44 @@ func (c *Client) ListMessages(containerIDType, containerID string, opts *ListMes
 	path := "/im/v1/messages?" + params.Encode()
 
 	var resp MessageListResponse
+	if err := c.GetWithTenantToken(path, &resp); err != nil {
+		return nil, false, "", err
+	}
+
+	if resp.Code != 0 {
+		return nil, false, "", fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return resp.Data.Items, resp.Data.HasMore, resp.Data.PageToken, nil
+}
+
+// ListMessageReactions retrieves reactions for a message
+func (c *Client) ListMessageReactions(messageID string, opts *ListMessageReactionsOptions) ([]MessageReaction, bool, string, error) {
+	pageSize := 20
+	if opts != nil && opts.PageSize > 0 {
+		pageSize = opts.PageSize
+		if pageSize > 50 {
+			pageSize = 50
+		}
+	}
+
+	params := url.Values{}
+	params.Set("page_size", fmt.Sprintf("%d", pageSize))
+	if opts != nil {
+		if opts.ReactionType != "" {
+			params.Set("reaction_type", opts.ReactionType)
+		}
+		if opts.PageToken != "" {
+			params.Set("page_token", opts.PageToken)
+		}
+		if opts.UserIDType != "" {
+			params.Set("user_id_type", opts.UserIDType)
+		}
+	}
+
+	path := fmt.Sprintf("/im/v1/messages/%s/reactions?%s", messageID, params.Encode())
+
+	var resp MessageReactionListResponse
 	if err := c.GetWithTenantToken(path, &resp); err != nil {
 		return nil, false, "", err
 	}
@@ -193,4 +239,43 @@ func (c *Client) RecallMessage(messageID string) error {
 	}
 
 	return nil
+}
+
+// DeleteMessageReaction removes a reaction from a message
+func (c *Client) DeleteMessageReaction(messageID, reactionID string) (*MessageReaction, error) {
+	path := fmt.Sprintf("/im/v1/messages/%s/reactions/%s", messageID, reactionID)
+
+	var resp DeleteMessageReactionResponse
+	if err := c.DeleteWithTenantToken(path, &resp); err != nil {
+		return nil, err
+	}
+
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return resp.Data, nil
+}
+
+// AddMessageReaction adds an emoji reaction to a message
+// messageID: the ID of the message to react to
+// emojiType: emoji type key (e.g., "SMILE")
+func (c *Client) AddMessageReaction(messageID, emojiType string) (*MessageReaction, error) {
+	path := fmt.Sprintf("/im/v1/messages/%s/reactions", messageID)
+	req := AddMessageReactionRequest{
+		ReactionType: ReactionType{
+			EmojiType: emojiType,
+		},
+	}
+
+	var resp AddMessageReactionResponse
+	if err := c.PostWithTenantToken(path, req, &resp); err != nil {
+		return nil, err
+	}
+
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return resp.Data, nil
 }

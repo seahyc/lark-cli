@@ -17,6 +17,8 @@ A CLI tool for interacting with Lark APIs (calendar, contacts, documents). Desig
    - `space:document:retrieve` (list Drive folder contents)
    - `im:message:readonly` (read messages in chats)
    - `im:message` or `im:message:send_as_bot` (send messages)
+   - `im:message.reactions:read` (list reactions)
+   - `im:message.reactions:write_only` (add/remove reactions)
    - `offline_access` (for refresh tokens)
 3. Add redirect URI: `http://localhost:9999/callback`
 4. Enable "Refresh user_access_token" in Security Settings
@@ -409,6 +411,105 @@ Output:
 ```
 
 **Note:** Messages are sent as the bot/app. The bot must be added to group chats before it can send messages to them.
+
+#### React to Message
+
+Add a reaction to a message as the bot.
+
+```bash
+# Add a reaction by emoji type
+./lark msg react --message-id om_dc13264520392913993dd051dba21dcf --reaction SMILE
+
+# Add a reaction with explicit type
+./lark msg react --message-id om_dc13264520392913993dd051dba21dcf --reaction "+1" --type emoji
+```
+
+Flags:
+- `--message-id` (required): Message ID to react to
+- `--reaction` (required): Reaction ID or emoji name
+- `--type`: Reaction type (default: `emoji`)
+
+Output:
+```json
+{
+  "success": true,
+  "message_id": "om_dc13264520392913993dd051dba21dcf",
+  "reaction_type": "emoji",
+  "reaction_id": "ZCaCIjUBVVWSrm5L-3ZTw...",
+  "emoji_type": "SMILE"
+}
+```
+
+**Note:** Reactions are added as the bot/app. The bot must be in the chat to react.
+**Note:** Emoji types must match the Lark emoji catalog (e.g., `SMILE`, `LAUGH`). See the emoji list in the Lark docs: `im-v1/message-reaction/emojis-introduce`.
+
+#### Emoji Catalog Reference
+
+Show the official emoji catalog reference and common examples.
+
+```bash
+./lark msg react emojis
+```
+
+#### List Message Reactions
+
+List reactions for a message.
+
+```bash
+# List all reactions
+./lark msg react list --message-id om_dc13264520392913993dd051dba21dcf
+
+# Filter by emoji type
+./lark msg react list --message-id om_dc13264520392913993dd051dba21dcf --reaction SMILE
+
+# Limit results
+./lark msg react list --message-id om_dc13264520392913993dd051dba21dcf --limit 50
+```
+
+Flags:
+- `--message-id` (required): Message ID to list reactions for
+- `--reaction`: Emoji type filter (e.g., `SMILE`)
+- `--limit`: Maximum number of reactions to retrieve (0 = no limit)
+
+Output:
+```json
+{
+  "message_id": "om_dc13264520392913993dd051dba21dcf",
+  "reactions": [
+    {
+      "reaction_id": "ZCaCIjUBVVWSrm5L-3ZTw...",
+      "emoji_type": "SMILE",
+      "operator_id": "cli_xxx",
+      "operator_type": "app",
+      "action_time": "2026-01-27T12:00:21+08:00"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Remove Message Reaction
+
+Remove a reaction from a message.
+
+```bash
+./lark msg react remove --message-id om_dc13264520392913993dd051dba21dcf --reaction-id ZCaCIjUBVVWSrm5L-3ZTw...
+```
+
+Flags:
+- `--message-id` (required): Message ID to remove reaction from
+- `--reaction-id` (required): Reaction ID to remove
+
+Output:
+```json
+{
+  "success": true,
+  "message_id": "om_dc13264520392913993dd051dba21dcf",
+  "reaction_type": "emoji",
+  "reaction_id": "ZCaCIjUBVVWSrm5L-3ZTw...",
+  "emoji_type": "SMILE"
+}
+```
 
 #### Recall Message
 
