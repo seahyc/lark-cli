@@ -370,6 +370,197 @@ Examples:
 	},
 }
 
+// --- msg react ---
+
+var (
+	msgReactMessageID        string
+	msgReactReactionID       string
+	msgReactReactionType     string
+	msgReactListMessageID    string
+	msgReactListReactionID   string
+	msgReactListLimit        int
+	msgReactRemoveMessageID  string
+	msgReactRemoveReactionID string
+)
+
+var msgReactCmd = &cobra.Command{
+	Use:   "react",
+	Short: "Add a reaction to a message",
+	Long: `Add a reaction to a message as the bot.
+
+Examples:
+  lark msg react --message-id om_xxx --reaction smile
+  lark msg react --message-id om_xxx --reaction "+1" --type emoji`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if msgReactMessageID == "" {
+			output.Fatalf("VALIDATION_ERROR", "message-id is required")
+		}
+		if msgReactReactionID == "" {
+			output.Fatalf("VALIDATION_ERROR", "reaction is required")
+		}
+		if msgReactReactionType != "" && msgReactReactionType != "emoji" {
+			output.Fatalf("VALIDATION_ERROR", "type must be 'emoji'")
+		}
+
+		client := api.NewClient()
+		emojiType := strings.ToUpper(msgReactReactionID)
+		reaction, err := client.AddMessageReaction(msgReactMessageID, emojiType)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		result := api.OutputMessageReaction{
+			Success:      true,
+			MessageID:    msgReactMessageID,
+			ReactionType: "emoji",
+			ReactionID:   emojiType,
+			EmojiType:    emojiType,
+		}
+		if reaction != nil {
+			if reaction.ReactionID != "" {
+				result.ReactionID = reaction.ReactionID
+			}
+			if reaction.ReactionType != nil && reaction.ReactionType.EmojiType != "" {
+				result.EmojiType = reaction.ReactionType.EmojiType
+			}
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- msg react list ---
+
+var msgReactListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List reactions for a message",
+	Long: `List reactions for a message.
+
+Examples:
+  lark msg react list --message-id om_xxx
+  lark msg react list --message-id om_xxx --reaction SMILE
+  lark msg react list --message-id om_xxx --limit 50`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if msgReactListMessageID == "" {
+			output.Fatalf("VALIDATION_ERROR", "message-id is required")
+		}
+
+		client := api.NewClient()
+		opts := &api.ListMessageReactionsOptions{}
+		if msgReactListReactionID != "" {
+			opts.ReactionType = strings.ToUpper(msgReactListReactionID)
+		}
+
+		var allReactions []api.MessageReaction
+		var pageToken string
+		hasMore := true
+		remaining := msgReactListLimit
+
+		for hasMore {
+			pageSize := 20
+			if remaining > 0 && remaining < pageSize {
+				pageSize = remaining
+			}
+			opts.PageSize = pageSize
+			opts.PageToken = pageToken
+
+			reactions, more, nextToken, err := client.ListMessageReactions(msgReactListMessageID, opts)
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+
+			allReactions = append(allReactions, reactions...)
+			hasMore = more
+			pageToken = nextToken
+
+			if msgReactListLimit > 0 {
+				remaining = msgReactListLimit - len(allReactions)
+				if remaining <= 0 {
+					break
+				}
+			}
+		}
+
+		if msgReactListLimit > 0 && len(allReactions) > msgReactListLimit {
+			allReactions = allReactions[:msgReactListLimit]
+		}
+
+		outputReactions := make([]api.OutputMessageReactionItem, len(allReactions))
+		for i, r := range allReactions {
+			outputReactions[i] = convertMessageReaction(r)
+		}
+
+		result := api.OutputMessageReactionList{
+			MessageID: msgReactListMessageID,
+			Reactions: outputReactions,
+			Count:     len(outputReactions),
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- msg react remove ---
+
+var msgReactRemoveCmd = &cobra.Command{
+	Use:   "remove",
+	Short: "Remove a reaction from a message",
+	Long: `Remove a reaction from a message.
+
+Examples:
+  lark msg react remove --message-id om_xxx --reaction-id ZCaCIjUBVVWSrm5L-3ZTwxxxx`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if msgReactRemoveMessageID == "" {
+			output.Fatalf("VALIDATION_ERROR", "message-id is required")
+		}
+		if msgReactRemoveReactionID == "" {
+			output.Fatalf("VALIDATION_ERROR", "reaction-id is required")
+		}
+
+		client := api.NewClient()
+		reaction, err := client.DeleteMessageReaction(msgReactRemoveMessageID, msgReactRemoveReactionID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		result := api.OutputMessageReaction{
+			Success:      true,
+			MessageID:    msgReactRemoveMessageID,
+			ReactionType: "emoji",
+			ReactionID:   msgReactRemoveReactionID,
+			EmojiType:    "",
+		}
+		if reaction != nil {
+			if reaction.ReactionType != nil && reaction.ReactionType.EmojiType != "" {
+				result.EmojiType = reaction.ReactionType.EmojiType
+			}
+			if reaction.ReactionID != "" {
+				result.ReactionID = reaction.ReactionID
+			}
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- msg react emojis ---
+
+var msgReactEmojisCmd = &cobra.Command{
+	Use:   "emojis",
+	Short: "Show emoji catalog reference",
+	Long: `Show the Lark emoji catalog reference for reaction emoji types.
+
+Examples:
+  lark msg react emojis`,
+	Run: func(cmd *cobra.Command, args []string) {
+		output.JSON(map[string]interface{}{
+			"source":   "im-v1/message-reaction/emojis-introduce",
+			"url":      "https://open.larksuite.com/document/server-docs/im-v1/message-reaction/emojis-introduce",
+			"examples": []string{"SMILE", "LAUGH", "THUMBSUP", "CLAP", "OK", "HEART"},
+		})
+	},
+}
+
 // detectIDType infers the receive_id_type from the ID format
 func detectIDType(id string) string {
 	if strings.HasPrefix(id, "ou_") {
@@ -493,6 +684,23 @@ func buildMarkdownPostContentWithImages(text string, imageKeys []string) (string
 		return "", fmt.Errorf("failed to build post content: %w", err)
 	}
 	return string(jsonBytes), nil
+}
+
+func convertMessageReaction(r api.MessageReaction) api.OutputMessageReactionItem {
+	item := api.OutputMessageReactionItem{
+		ReactionID: r.ReactionID,
+	}
+	if r.ReactionType != nil {
+		item.EmojiType = r.ReactionType.EmojiType
+	}
+	if r.Operator != nil {
+		item.OperatorID = r.Operator.OperatorID
+		item.OperatorType = r.Operator.OperatorType
+	}
+	if r.ActionTime != "" {
+		item.ActionTime = formatMessageTime(r.ActionTime)
+	}
+	return item
 }
 
 func parseMarkdownLine(line string) []postElement {
@@ -671,9 +879,28 @@ func init() {
 	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (markdown-lite). Use {{image}} to place images")
 	msgSendCmd.Flags().StringSliceVar(&msgSendImages, "image", nil, "Image file path (repeatable)")
 
+	// msg react flags
+	msgReactCmd.Flags().StringVar(&msgReactMessageID, "message-id", "", "Message ID to react to (required)")
+	msgReactCmd.Flags().StringVar(&msgReactReactionID, "reaction", "", "Reaction ID or emoji name (required)")
+	msgReactCmd.Flags().StringVar(&msgReactReactionType, "type", "emoji", "Reaction type (default: emoji)")
+
+	// msg react list flags
+	msgReactListCmd.Flags().StringVar(&msgReactListMessageID, "message-id", "", "Message ID to list reactions for (required)")
+	msgReactListCmd.Flags().StringVar(&msgReactListReactionID, "reaction", "", "Emoji type to filter (optional)")
+	msgReactListCmd.Flags().IntVar(&msgReactListLimit, "limit", 0, "Maximum number of reactions to retrieve (0 = no limit)")
+
+	// msg react remove flags
+	msgReactRemoveCmd.Flags().StringVar(&msgReactRemoveMessageID, "message-id", "", "Message ID to remove reaction from (required)")
+	msgReactRemoveCmd.Flags().StringVar(&msgReactRemoveReactionID, "reaction-id", "", "Reaction ID to remove (required)")
+
 	// Register subcommands
 	msgCmd.AddCommand(msgHistoryCmd)
 	msgCmd.AddCommand(msgResourceCmd)
 	msgCmd.AddCommand(msgSendCmd)
+	msgCmd.AddCommand(msgReactCmd)
 	msgCmd.AddCommand(msgRecallCmd)
+
+	msgReactCmd.AddCommand(msgReactListCmd)
+	msgReactCmd.AddCommand(msgReactRemoveCmd)
+	msgReactCmd.AddCommand(msgReactEmojisCmd)
 }

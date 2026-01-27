@@ -36,7 +36,7 @@ var Groups = map[string]ScopeGroup{
 	"messages": {
 		Name:        "messages",
 		Description: "Chat and messaging",
-		Scopes:      []string{"im:message:readonly", "im:message", "im:message:send_as_bot"},
+		Scopes:      []string{"im:message:readonly", "im:message", "im:message:send_as_bot", "im:message.reactions:read", "im:message.reactions:write_only"},
 		Commands:    []string{"msg", "chat"},
 	},
 	"mail": {
