@@ -152,6 +152,15 @@ lark msg react emojis
 
 Use this command to list the supported emoji types for reactions.
 
+**Custom Emojis:** Organization-specific custom emojis can be configured in `.lark/config.yaml`:
+
+```yaml
+custom_emojis:
+  "7405453485858095136": "ez-pepe"
+```
+
+Custom emoji IDs will appear in the `custom_emojis` field of the output.
+
 ### List Message Reactions
 
 ```bash
