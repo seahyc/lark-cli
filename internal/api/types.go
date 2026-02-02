@@ -1290,3 +1290,92 @@ type OutputDocSearchItem struct {
 	Title   string `json:"title"`
 	OwnerID string `json:"owner_id"`
 }
+
+// --- Spreadsheet/Sheets Types ---
+
+// GridProperties represents the grid dimensions of a sheet
+type GridProperties struct {
+	FrozenRowCount    int `json:"frozen_row_count,omitempty"`
+	FrozenColumnCount int `json:"frozen_column_count,omitempty"`
+	RowCount          int `json:"row_count,omitempty"`
+	ColumnCount       int `json:"column_count,omitempty"`
+}
+
+// Sheet represents a sheet within a spreadsheet
+type Sheet struct {
+	SheetID        string          `json:"sheet_id"`
+	Title          string          `json:"title"`
+	Index          int             `json:"index"`
+	Hidden         bool            `json:"hidden,omitempty"`
+	GridProperties *GridProperties `json:"grid_properties,omitempty"`
+	ResourceType   string          `json:"resource_type,omitempty"`
+}
+
+// SheetValues represents cell data from a sheet
+type SheetValues struct {
+	Revision         int         `json:"revision,omitempty"`
+	SpreadsheetToken string      `json:"spreadsheetToken,omitempty"`
+	Range            string      `json:"range,omitempty"`
+	ValueRange       *ValueRange `json:"valueRange,omitempty"`
+}
+
+// ValueRange represents a range of cell values
+type ValueRange struct {
+	MajorDimension string      `json:"majorDimension,omitempty"`
+	Range          string      `json:"range,omitempty"`
+	Revision       int         `json:"revision,omitempty"`
+	Values         [][]any     `json:"values,omitempty"`
+}
+
+// --- Spreadsheet API Response Types ---
+
+// SpreadsheetSheetsResponse is the response from GET /sheets/v3/spreadsheets/:token/sheets/query
+type SpreadsheetSheetsResponse struct {
+	BaseResponse
+	Data struct {
+		Sheets []Sheet `json:"sheets,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// SheetMetadataResponse is the response from GET /sheets/v3/spreadsheets/:token/sheets/:sheet_id
+type SheetMetadataResponse struct {
+	BaseResponse
+	Data struct {
+		Sheet *Sheet `json:"sheet,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// SheetValuesResponse is the response from GET /sheets/v2/spreadsheets/:token/values/:range
+type SheetValuesResponse struct {
+	BaseResponse
+	Data *SheetValues `json:"data,omitempty"`
+}
+
+// --- Spreadsheet CLI Output Types ---
+
+// OutputSheetList is the list sheets response for CLI
+type OutputSheetList struct {
+	SpreadsheetToken string        `json:"spreadsheet_token"`
+	Sheets           []OutputSheet `json:"sheets"`
+	Count            int           `json:"count"`
+}
+
+// OutputSheet is the simplified sheet format for CLI output
+type OutputSheet struct {
+	SheetID     string `json:"sheet_id"`
+	Title       string `json:"title"`
+	Index       int    `json:"index"`
+	Hidden      bool   `json:"hidden,omitempty"`
+	RowCount    int    `json:"row_count,omitempty"`
+	ColumnCount int    `json:"column_count,omitempty"`
+}
+
+// OutputSheetData is the sheet data response for CLI
+type OutputSheetData struct {
+	SpreadsheetToken string  `json:"spreadsheet_token"`
+	SheetID          string  `json:"sheet_id"`
+	Range            string  `json:"range"`
+	RowCount         int     `json:"row_count"`
+	ColumnCount      int     `json:"column_count"`
+	Values           [][]any `json:"values"`
+}

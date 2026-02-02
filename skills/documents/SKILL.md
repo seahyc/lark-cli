@@ -14,7 +14,7 @@ Ensure `lark` is in your PATH, or use the full path to the binary. Set the confi
 ```bash
 lark doc <command>
 # Or with explicit config:
-LARK_CONFIG_DIR=/path/to/.lark lark doc <command>
+LARK_CONFIG_DIR=/Users/yingcong/Code/lark-cli/.lark lark doc <command>
 ```
 
 ## Commands Reference
@@ -241,12 +241,69 @@ Fields:
 - `is_solved`: whether the comment thread has been resolved
 - `quote`: the highlighted text from the document (for inline comments)
 
+## Spreadsheet Commands
+
+### List Sheets in a Spreadsheet
+
+```bash
+lark sheet list <spreadsheet_token>
+```
+
+Lists all sheets (tabs) within a Lark spreadsheet.
+
+Output:
+```json
+{
+  "spreadsheet_token": "T4mHsrFyzhXrj0tVzRslUGx8gkA",
+  "sheets": [
+    {
+      "sheet_id": "abc123",
+      "title": "Sheet1",
+      "index": 0,
+      "row_count": 100,
+      "column_count": 10
+    }
+  ],
+  "count": 1
+}
+```
+
+### Read Sheet Data
+
+```bash
+lark sheet read <spreadsheet_token> [--sheet <sheet_id>] [--range A1:Z100]
+```
+
+Reads cell values from a Lark spreadsheet.
+
+Options:
+- `--sheet`: Sheet ID to read from (default: first sheet by index)
+- `--range`: Cell range to read (e.g., `A1:Z100`). Default: all data up to 1000 rows
+
+Output:
+```json
+{
+  "spreadsheet_token": "T4mHsrFyzhXrj0tVzRslUGx8gkA",
+  "sheet_id": "abc123",
+  "range": "abc123!A1:D10",
+  "row_count": 10,
+  "column_count": 4,
+  "values": [
+    ["Header1", "Header2", "Header3", "Header4"],
+    ["Value1", "Value2", 123, true]
+  ]
+}
+```
+
+**Note:** Cell values preserve their types (string, number, boolean). Empty cells may be omitted from rows.
+
 ## Extracting IDs from URLs
 
-| URL Type | Example | How to Get Document Content |
+| URL Type | Example | How to Get Content |
 |----------|---------|----------------------------|
 | Direct doc | `https://xxx.larksuite.com/docx/ABC123xyz` | Use `ABC123xyz` directly with `doc get` |
 | Wiki | `https://xxx.larksuite.com/wiki/X8Tawq43...` | First run `doc wiki X8Tawq43...` to get `obj_token`, then use that with `doc get` |
+| Spreadsheet | `https://xxx.larksuite.com/sheets/T4mHsr...` | Use `T4mHsr...` with `sheet list` or `sheet read` |
 
 **Important**: Wiki URLs require a two-step process - resolve the node first, then fetch the document.
 
@@ -264,6 +321,8 @@ Fields:
 | Search for text | `doc get` | Grep-able markdown |
 | Count elements | `doc blocks` | Block types enumerated |
 | Read comments/feedback | `doc comments` | Get all comments and replies |
+| List sheets in spreadsheet | `sheet list` | See all tabs and their sizes |
+| Read spreadsheet data | `sheet read` | Get cell values as JSON |
 
 **Default to `doc get`** - it's 2-3x smaller and sufficient for most tasks.
 
