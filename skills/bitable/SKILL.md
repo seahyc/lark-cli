@@ -163,7 +163,7 @@ Common error codes:
 
 ## Required Permissions
 
-This skill requires the `bitable` scope group. If you see a `SCOPE_ERROR`, add the permissions:
+This skill requires the `bitable` scope group with the `bitable:app:readonly` scope. If you see a `SCOPE_ERROR`, add the permissions:
 
 ```bash
 lark auth login --add --scopes bitable

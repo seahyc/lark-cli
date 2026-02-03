@@ -36,7 +36,7 @@ var Groups = map[string]ScopeGroup{
 	"bitable": {
 		Name:        "bitable",
 		Description: "Lark Bitable (database) access",
-		Scopes:      []string{"bitable:app:readonly", "bitable:table:readonly", "bitable:record:readonly"},
+		Scopes:      []string{"bitable:app:readonly"},
 		Commands:    []string{"bitable"},
 	},
 	"messages": {
