@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -861,9 +862,45 @@ Examples:
 		blockID, _ := cmd.Flags().GetString("block-id")
 		useJSON, _ := cmd.Flags().GetBool("json")
 		index, _ := cmd.Flags().GetInt("index")
+		afterBlockID, _ := cmd.Flags().GetString("after")
+
+		// Validate: --after and --index are mutually exclusive
+		if afterBlockID != "" && cmd.Flags().Changed("index") {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("--after and --index are mutually exclusive"))
+		}
 
 		if blockID == "" {
 			blockID = documentID
+		}
+
+		// If --after is set, resolve the target block's parent and index
+		if afterBlockID != "" {
+			client := api.NewClient()
+			allBlocks, err := client.GetDocumentBlocks(documentID)
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+
+			found := false
+			for _, b := range allBlocks {
+				if b.Children == nil {
+					continue
+				}
+				for idx, childID := range b.Children {
+					if childID == afterBlockID {
+						blockID = b.BlockID
+						index = idx + 1
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				output.Fatal("NOT_FOUND", fmt.Errorf("block %s not found as a child of any block", afterBlockID))
+			}
 		}
 
 		var blocks []api.DocumentBlock
@@ -874,8 +911,8 @@ Examples:
 				output.Fatal("PARSE_ERROR", err)
 			}
 		} else {
-			bulletItems, _ := cmd.Flags().GetStringSlice("bullet")
-			orderedItems, _ := cmd.Flags().GetStringSlice("ordered")
+			bulletItems, _ := cmd.Flags().GetStringArray("bullet")
+			orderedItems, _ := cmd.Flags().GetStringArray("ordered")
 			blocks = buildBlocks(BlockBuildOpts{
 				TextContent:    getStringFlag(cmd, "text"),
 				HeadingContent: getStringFlag(cmd, "heading"),
@@ -1164,6 +1201,460 @@ Examples:
 	},
 }
 
+// --- doc find ---
+
+// extractBlockText extracts the text content from a block's elements
+func extractBlockText(block api.DocumentBlock) string {
+	var textBlock *api.TextBlock
+	switch {
+	case block.Text != nil:
+		textBlock = block.Text
+	case block.Heading1 != nil:
+		textBlock = block.Heading1
+	case block.Heading2 != nil:
+		textBlock = block.Heading2
+	case block.Heading3 != nil:
+		textBlock = block.Heading3
+	case block.Heading4 != nil:
+		textBlock = block.Heading4
+	case block.Heading5 != nil:
+		textBlock = block.Heading5
+	case block.Heading6 != nil:
+		textBlock = block.Heading6
+	case block.Heading7 != nil:
+		textBlock = block.Heading7
+	case block.Heading8 != nil:
+		textBlock = block.Heading8
+	case block.Heading9 != nil:
+		textBlock = block.Heading9
+	case block.Bullet != nil:
+		textBlock = block.Bullet
+	case block.Ordered != nil:
+		textBlock = block.Ordered
+	case block.TodoBlock != nil:
+		textBlock = block.TodoBlock
+	case block.Code != nil:
+		textBlock = block.Code
+	}
+
+	if textBlock == nil {
+		return ""
+	}
+
+	var parts []string
+	for _, elem := range textBlock.Elements {
+		if elem.TextRun != nil {
+			parts = append(parts, elem.TextRun.Content)
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+var docFindCmd = &cobra.Command{
+	Use:   "find <document_id> <query>",
+	Short: "Search for blocks containing text",
+	Long: `Search for blocks in a document that contain the given text.
+
+Returns matching block IDs with their parent, index, type, and a content preview.
+Useful for finding blocks before using doc replace or doc delete.
+
+The search is case-insensitive.
+
+Examples:
+  lark doc find ABC123xyz "Section Title"
+  lark doc find ABC123xyz "TODO" --type 17`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		query := args[1]
+		filterType, _ := cmd.Flags().GetInt("type")
+
+		client := api.NewClient()
+
+		blocks, err := client.GetDocumentBlocks(documentID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		// Build parent -> children index map
+		childIndex := make(map[string]map[string]int) // parentID -> blockID -> index
+		for _, block := range blocks {
+			if block.Children == nil {
+				continue
+			}
+			m := make(map[string]int)
+			for idx, childID := range block.Children {
+				m[childID] = idx
+			}
+			childIndex[block.BlockID] = m
+		}
+
+		queryLower := strings.ToLower(query)
+		var matches []api.OutputFindMatch
+
+		for _, block := range blocks {
+			if filterType > 0 && block.BlockType != filterType {
+				continue
+			}
+
+			text := extractBlockText(block)
+			if text == "" {
+				continue
+			}
+
+			if !strings.Contains(strings.ToLower(text), queryLower) {
+				continue
+			}
+
+			// Truncate preview
+			preview := text
+			if len(preview) > 120 {
+				preview = preview[:120] + "..."
+			}
+
+			// Find index within parent
+			idx := -1
+			if m, ok := childIndex[block.ParentID]; ok {
+				if i, ok := m[block.BlockID]; ok {
+					idx = i
+				}
+			}
+
+			matches = append(matches, api.OutputFindMatch{
+				BlockID:   block.BlockID,
+				ParentID:  block.ParentID,
+				Index:     idx,
+				BlockType: block.BlockType,
+				Preview:   preview,
+			})
+		}
+
+		result := api.OutputDocumentFind{
+			DocumentID: documentID,
+			Query:      query,
+			Matches:    matches,
+			Count:      len(matches),
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- doc replace ---
+
+var docReplaceCmd = &cobra.Command{
+	Use:   "replace <document_id> <block_id>",
+	Short: "Replace a block with new content",
+	Long: `Replace a block in a document with new content.
+
+Atomically deletes the specified block and inserts new content
+at the same position. Supports the same content flags as append.
+
+Block IDs can be found using 'doc find' or 'doc blocks'.
+
+Examples:
+  lark doc replace ABC123xyz doxlgXYZ123 --text "Updated content"
+  lark doc replace ABC123xyz doxlgXYZ123 --heading "New Title" --level 2
+  lark doc replace ABC123xyz doxlgXYZ123 --bullet "Item 1" --bullet "Item 2"
+  echo '[{"block_type":2,"text":{"elements":[{"text_run":{"content":"raw"}}]}}]' | lark doc replace ABC123xyz doxlgXYZ123 --json`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		blockID := args[1]
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		// Build the new blocks
+		var newBlocks []api.DocumentBlock
+		if useJSON {
+			var err error
+			newBlocks, err = readBlocksFromStdin()
+			if err != nil {
+				output.Fatal("PARSE_ERROR", err)
+			}
+		} else {
+			bulletItems, _ := cmd.Flags().GetStringArray("bullet")
+			orderedItems, _ := cmd.Flags().GetStringArray("ordered")
+			newBlocks = buildBlocks(BlockBuildOpts{
+				TextContent:    getStringFlag(cmd, "text"),
+				HeadingContent: getStringFlag(cmd, "heading"),
+				HeadingLevel:   getIntFlag(cmd, "level"),
+				CodeContent:    getStringFlag(cmd, "code"),
+				CodeLanguage:   getIntFlag(cmd, "language"),
+				BulletItems:    bulletItems,
+				OrderedItems:   orderedItems,
+				TodoContent:    getStringFlag(cmd, "todo"),
+				AddDivider:     getBoolFlag(cmd, "divider"),
+				LinkURL:        getStringFlag(cmd, "link"),
+			})
+		}
+
+		if len(newBlocks) == 0 {
+			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, or --json)"))
+		}
+
+		client := api.NewClient()
+
+		createdBlocks, revisionID, err := client.ReplaceDocumentBlock(documentID, blockID, newBlocks)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		output.JSON(api.OutputDocumentAppend{
+			Success:            true,
+			DocumentRevisionID: revisionID,
+			Blocks:             createdBlocks,
+		})
+	},
+}
+
+// --- doc outline ---
+
+var docOutlineCmd = &cobra.Command{
+	Use:   "outline <document_id>",
+	Short: "Show document heading outline",
+	Long: `Show the heading outline of a Lark document.
+
+Returns only heading blocks (H1-H9) with their block IDs, positions,
+and text content. Useful for understanding document structure.
+
+The document_id is the token from the document URL.
+
+Examples:
+  lark doc outline ABC123xyz`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+
+		client := api.NewClient()
+
+		doc, err := client.GetDocument(documentID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		blocks, err := client.GetDocumentBlocks(documentID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		// Build parent -> child index map
+		childIndex := make(map[string]map[string]int)
+		for _, block := range blocks {
+			if block.Children == nil {
+				continue
+			}
+			m := make(map[string]int)
+			for idx, childID := range block.Children {
+				m[childID] = idx
+			}
+			childIndex[block.BlockID] = m
+		}
+
+		var outline []api.OutlineEntry
+		for _, block := range blocks {
+			// Heading block types: 3=H1, 4=H2, ..., 11=H9
+			if block.BlockType < 3 || block.BlockType > 11 {
+				continue
+			}
+
+			level := block.BlockType - 2
+			text := extractBlockText(block)
+
+			idx := -1
+			if m, ok := childIndex[block.ParentID]; ok {
+				if i, ok := m[block.BlockID]; ok {
+					idx = i
+				}
+			}
+
+			outline = append(outline, api.OutlineEntry{
+				BlockID: block.BlockID,
+				Index:   idx,
+				Level:   level,
+				Text:    text,
+			})
+		}
+
+		var title string
+		if doc != nil {
+			title = doc.Title
+		}
+
+		result := api.OutputDocumentOutline{
+			DocumentID: documentID,
+			Title:      title,
+			Outline:    outline,
+			Count:      len(outline),
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- doc move ---
+
+var docMoveCmd = &cobra.Command{
+	Use:   "move <document_id> <block_id>",
+	Short: "Move a block to a new position",
+	Long: `Move a block to a new position in a Lark document.
+
+Relocates a block by deleting it from its current position and
+inserting it at the specified new position.
+
+Use --index to specify an absolute position, or --after to insert
+after a specific block.
+
+Examples:
+  lark doc move ABC123xyz doxlgXYZ123 --index 0
+  lark doc move ABC123xyz doxlgXYZ123 --after doxlgABC456`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		blockID := args[1]
+		index, _ := cmd.Flags().GetInt("index")
+		afterBlockID, _ := cmd.Flags().GetString("after")
+
+		hasIndex := cmd.Flags().Changed("index")
+		hasAfter := afterBlockID != ""
+
+		if hasIndex && hasAfter {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("--index and --after are mutually exclusive"))
+		}
+		if !hasIndex && !hasAfter {
+			output.Fatal("MISSING_ARG", fmt.Errorf("either --index or --after is required"))
+		}
+
+		client := api.NewClient()
+
+		// Get all blocks to find the target block
+		blocks, err := client.GetDocumentBlocks(documentID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		// Find the block's current parent and index
+		var srcParentID string
+		var srcIndex int
+		srcFound := false
+		for _, b := range blocks {
+			if b.Children == nil {
+				continue
+			}
+			for idx, childID := range b.Children {
+				if childID == blockID {
+					srcParentID = b.BlockID
+					srcIndex = idx
+					srcFound = true
+					break
+				}
+			}
+			if srcFound {
+				break
+			}
+		}
+		if !srcFound {
+			output.Fatal("NOT_FOUND", fmt.Errorf("block %s not found as a child of any block", blockID))
+		}
+
+		// Find the target block content to re-create it
+		var targetBlock *api.DocumentBlock
+		for i := range blocks {
+			if blocks[i].BlockID == blockID {
+				targetBlock = &blocks[i]
+				break
+			}
+		}
+		if targetBlock == nil {
+			output.Fatal("NOT_FOUND", fmt.Errorf("block %s not found", blockID))
+		}
+
+		// Resolve --after to a parent + index
+		destParentID := srcParentID
+		destIndex := index
+		if hasAfter {
+			found := false
+			for _, b := range blocks {
+				if b.Children == nil {
+					continue
+				}
+				for idx, childID := range b.Children {
+					if childID == afterBlockID {
+						destParentID = b.BlockID
+						destIndex = idx + 1
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				output.Fatal("NOT_FOUND", fmt.Errorf("--after block %s not found as a child of any block", afterBlockID))
+			}
+		}
+
+		// Delete the block from its current position
+		delPath := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
+			srcParentID, documentID)
+		// Use the proper URL format
+		delPath = fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
+			documentID, srcParentID)
+		delReq := api.DeleteBlocksRequest{
+			StartIndex: srcIndex,
+			EndIndex:   srcIndex + 1,
+		}
+		var delResp api.DeleteBlocksResponse
+		if err := client.DeleteWithBody(delPath, delReq, &delResp); err != nil {
+			output.Fatal("API_ERROR", fmt.Errorf("failed to delete block from current position: %w", err))
+		}
+		if err := delResp.Err(); err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		// Adjust destination index if needed (if in same parent and source was before dest)
+		if destParentID == srcParentID && srcIndex < destIndex {
+			destIndex--
+		}
+
+		// Build a clean block for re-insertion (strip block_id, parent_id, children)
+		newBlock := api.DocumentBlock{
+			BlockType: targetBlock.BlockType,
+			Page:      targetBlock.Page,
+			Text:      targetBlock.Text,
+			Heading1:  targetBlock.Heading1,
+			Heading2:  targetBlock.Heading2,
+			Heading3:  targetBlock.Heading3,
+			Heading4:  targetBlock.Heading4,
+			Heading5:  targetBlock.Heading5,
+			Heading6:  targetBlock.Heading6,
+			Heading7:  targetBlock.Heading7,
+			Heading8:  targetBlock.Heading8,
+			Heading9:  targetBlock.Heading9,
+			Bullet:    targetBlock.Bullet,
+			Ordered:   targetBlock.Ordered,
+			Code:      targetBlock.Code,
+			Quote:     targetBlock.Quote,
+			TodoBlock: targetBlock.TodoBlock,
+			Divider:   targetBlock.Divider,
+			Image:     targetBlock.Image,
+		}
+
+		// Insert at new position
+		createdBlocks, revisionID, err := client.CreateDocumentBlocks(documentID, destParentID, []api.DocumentBlock{newBlock}, destIndex)
+		if err != nil {
+			output.Fatal("API_ERROR", fmt.Errorf("deleted block but failed to insert at new position: %w", err))
+		}
+
+		output.JSON(api.OutputDocumentMove{
+			Success:            true,
+			DocumentRevisionID: revisionID,
+			BlockID:            blockID,
+			Blocks:             createdBlocks,
+		})
+	},
+}
+
 // codeLanguageHelp returns a string listing code language IDs for the help text
 func codeLanguageHelp() string {
 	return "Common language IDs: 1=PlainText, 7=Bash, 8=C#, 9=C++, 10=C, 12=CSS, 22=Go, 24=HTML, 28=JSON, 29=Java, 30=JavaScript, 32=Kotlin, 49=Python, 52=Ruby, 53=Rust, 56=SQL, 61=Swift, 63=TypeScript, 67=YAML"
@@ -1189,6 +1680,10 @@ func init() {
 	docCmd.AddCommand(docDeleteCmd)
 	docCmd.AddCommand(docUpdateCmd)
 	docCmd.AddCommand(docTrashCmd)
+	docCmd.AddCommand(docFindCmd)
+	docCmd.AddCommand(docReplaceCmd)
+	docCmd.AddCommand(docOutlineCmd)
+	docCmd.AddCommand(docMoveCmd)
 
 	// Flags for doc update
 	docUpdateCmd.Flags().String("text", "", "Update block with text content")
@@ -1237,17 +1732,38 @@ func init() {
 	docAppendCmd.Flags().Int("level", 1, "Heading level 1-9 (used with --heading)")
 	docAppendCmd.Flags().String("code", "", "Append a code block")
 	docAppendCmd.Flags().Int("language", 0, "Code language ID (used with --code). "+codeLanguageHelp())
-	docAppendCmd.Flags().StringSlice("bullet", nil, "Append bullet list items (repeatable)")
-	docAppendCmd.Flags().StringSlice("ordered", nil, "Append ordered list items (repeatable)")
+	docAppendCmd.Flags().StringArray("bullet", nil, "Append bullet list items (repeatable)")
+	docAppendCmd.Flags().StringArray("ordered", nil, "Append ordered list items (repeatable)")
 	docAppendCmd.Flags().String("todo", "", "Append a todo item")
 	docAppendCmd.Flags().Bool("divider", false, "Append a divider")
 	docAppendCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
 	docAppendCmd.Flags().Int("index", -1, "Insertion position (-1=end, 0=beginning)")
 	docAppendCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
+	docAppendCmd.Flags().String("after", "", "Insert after this block ID (mutually exclusive with --index)")
 
 	// Flags for doc update
 	docUpdateCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
 
 	// Flags for doc trash
 	docTrashCmd.Flags().String("type", "docx", "Document type: doc, docx, sheet, bitable, folder, file, mindnote, slides")
+
+	// Flags for doc find
+	docFindCmd.Flags().Int("type", 0, "Filter by block type (e.g., 2=text, 12=bullet, 14=code)")
+
+	// Flags for doc replace
+	docReplaceCmd.Flags().String("text", "", "Replace with text block")
+	docReplaceCmd.Flags().String("heading", "", "Replace with heading block")
+	docReplaceCmd.Flags().Int("level", 1, "Heading level 1-9 (used with --heading)")
+	docReplaceCmd.Flags().String("code", "", "Replace with code block")
+	docReplaceCmd.Flags().Int("language", 0, "Code language ID (used with --code). "+codeLanguageHelp())
+	docReplaceCmd.Flags().StringArray("bullet", nil, "Replace with bullet list items (repeatable)")
+	docReplaceCmd.Flags().StringArray("ordered", nil, "Replace with ordered list items (repeatable)")
+	docReplaceCmd.Flags().String("todo", "", "Replace with todo item")
+	docReplaceCmd.Flags().Bool("divider", false, "Replace with divider")
+	docReplaceCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
+	docReplaceCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
+
+	// Flags for doc move
+	docMoveCmd.Flags().Int("index", -1, "Target position index")
+	docMoveCmd.Flags().String("after", "", "Insert after this block ID (mutually exclusive with --index)")
 }
