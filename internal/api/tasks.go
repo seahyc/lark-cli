@@ -15,13 +15,11 @@ type TaskListOptions struct {
 
 // ListTasks lists tasks for the current user
 func (c *Client) ListTasks(opts *TaskListOptions) ([]Task, bool, string, error) {
-	pageSize := 50
-	if opts != nil && opts.PageSize > 0 {
-		pageSize = opts.PageSize
-		if pageSize > 100 {
-			pageSize = 100
-		}
+	reqSize := 0
+	if opts != nil {
+		reqSize = opts.PageSize
 	}
+	pageSize := ClampPageSize(reqSize, 50, 100)
 
 	params := url.Values{}
 	params.Set("page_size", strconv.Itoa(pageSize))
@@ -43,8 +41,8 @@ func (c *Client) ListTasks(opts *TaskListOptions) ([]Task, bool, string, error) 
 		return nil, false, "", err
 	}
 
-	if resp.Code != 0 {
-		return nil, false, "", fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, false, "", err
 	}
 
 	return resp.Data.Items, resp.Data.HasMore, resp.Data.PageToken, nil
@@ -62,8 +60,8 @@ func (c *Client) GetTask(taskGUID string) (*Task, error) {
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.Task, nil
