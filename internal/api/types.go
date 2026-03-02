@@ -1,6 +1,9 @@
 package api
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // TimeInfo represents Lark's time structure
 type TimeInfo struct {
@@ -83,6 +86,14 @@ type Calendar struct {
 type BaseResponse struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
+}
+
+// Err returns an error if the API response indicates failure, nil otherwise.
+func (r BaseResponse) Err() error {
+	if r.Code != 0 {
+		return fmt.Errorf("API error (code %d): %s", r.Code, r.Msg)
+	}
+	return nil
 }
 
 // UserCalendar wraps calendar with user info (for primary calendar response)
@@ -986,8 +997,7 @@ type DriveMetaRequestDoc struct {
 }
 
 type DriveMetaResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	BaseResponse
 	Data struct {
 		Metas []DriveMetaItem `json:"metas"`
 	} `json:"data"`
@@ -1023,8 +1033,7 @@ type CreateFolderRequest struct {
 }
 
 type CreateFolderResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	BaseResponse
 	Data struct {
 		Token string `json:"token"`
 		URL   string `json:"url"`
@@ -1584,8 +1593,7 @@ type SetSheetValuesData struct {
 
 // SetSheetValuesResponse is the response from PUT /sheets/v2/spreadsheets/:token/values
 type SetSheetValuesResponse struct {
-	Code int                 `json:"code"`
-	Msg  string              `json:"msg"`
+	BaseResponse
 	Data *SetSheetValuesData `json:"data,omitempty"`
 }
 
@@ -1718,8 +1726,7 @@ type SpreadsheetInfo struct {
 
 // CreateSpreadsheetResponse is the response from POST /sheets/v3/spreadsheets
 type CreateSpreadsheetResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	BaseResponse
 	Data struct {
 		Spreadsheet *SpreadsheetInfo `json:"spreadsheet,omitempty"`
 	} `json:"data,omitempty"`
@@ -1905,8 +1912,7 @@ type OutputTask struct {
 
 // UploadDriveFileResponse is the API response for uploading a file to Drive
 type UploadDriveFileResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	BaseResponse
 	Data struct {
 		FileToken string `json:"file_token"`
 	} `json:"data"`

@@ -25,8 +25,8 @@ func (c *Client) GetDocument(documentID string) (*Document, error) {
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.Document, nil
@@ -43,8 +43,8 @@ func (c *Client) GetDocumentContent(documentID string) (string, error) {
 		return "", err
 	}
 
-	if resp.Code != 0 {
-		return "", fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return "", err
 	}
 
 	return resp.Data.Content, nil
@@ -53,10 +53,7 @@ func (c *Client) GetDocumentContent(documentID string) (string, error) {
 // GetDocumentBlocks retrieves all blocks in a document with pagination
 // documentID: the document ID (token from document URL)
 func (c *Client) GetDocumentBlocks(documentID string) ([]DocumentBlock, error) {
-	var allBlocks []DocumentBlock
-	pageToken := ""
-
-	for {
+	return PaginateWith(func(pageToken string) ([]DocumentBlock, bool, string, error) {
 		path := fmt.Sprintf("/docx/v1/documents/%s/blocks?page_size=500",
 			url.PathEscape(documentID))
 		if pageToken != "" {
@@ -65,22 +62,13 @@ func (c *Client) GetDocumentBlocks(documentID string) ([]DocumentBlock, error) {
 
 		var resp DocumentBlocksResponse
 		if err := c.Get(path, &resp); err != nil {
-			return nil, err
+			return nil, false, "", err
 		}
-
-		if resp.Code != 0 {
-			return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+		if err := resp.Err(); err != nil {
+			return nil, false, "", err
 		}
-
-		allBlocks = append(allBlocks, resp.Data.Items...)
-
-		if !resp.Data.HasMore || resp.Data.PageToken == "" {
-			break
-		}
-		pageToken = resp.Data.PageToken
-	}
-
-	return allBlocks, nil
+		return resp.Data.Items, resp.Data.HasMore, resp.Data.PageToken, nil
+	})
 }
 
 // CreateDocument creates a new document
@@ -97,8 +85,8 @@ func (c *Client) CreateDocument(title, folderToken string) (*Document, error) {
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.Document, nil
@@ -123,8 +111,8 @@ func (c *Client) CreateDocumentBlocks(documentID, blockID string, children []Doc
 		return nil, 0, err
 	}
 
-	if resp.Code != 0 {
-		return nil, 0, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, 0, err
 	}
 
 	return resp.Data.Children, resp.Data.DocumentRevisionID, nil
@@ -155,8 +143,8 @@ func (c *Client) ListFolderItems(folderToken string, pageSize int, pageToken str
 	if err := c.Get(path, &resp); err != nil {
 		return nil, false, "", err
 	}
-	if resp.Code != 0 {
-		return nil, false, "", fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, false, "", err
 	}
 
 	return resp.Data.Files, resp.Data.HasMore, resp.Data.NextPageToken, nil
@@ -166,10 +154,7 @@ func (c *Client) ListFolderItems(folderToken string, pageSize int, pageToken str
 // fileToken: the document token (same as document ID)
 // fileType: document type (e.g., "docx", "doc", "sheet")
 func (c *Client) GetDocumentComments(fileToken, fileType string) ([]DocumentComment, error) {
-	var allComments []DocumentComment
-	pageToken := ""
-
-	for {
+	return PaginateWith(func(pageToken string) ([]DocumentComment, bool, string, error) {
 		path := fmt.Sprintf("/drive/v1/files/%s/comments?file_type=%s&page_size=100",
 			url.PathEscape(fileToken), url.QueryEscape(fileType))
 		if pageToken != "" {
@@ -178,22 +163,13 @@ func (c *Client) GetDocumentComments(fileToken, fileType string) ([]DocumentComm
 
 		var resp DocumentCommentsResponse
 		if err := c.Get(path, &resp); err != nil {
-			return nil, err
+			return nil, false, "", err
 		}
-
-		if resp.Code != 0 {
-			return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+		if err := resp.Err(); err != nil {
+			return nil, false, "", err
 		}
-
-		allComments = append(allComments, resp.Data.Items...)
-
-		if !resp.Data.HasMore || resp.Data.PageToken == "" {
-			break
-		}
-		pageToken = resp.Data.PageToken
-	}
-
-	return allComments, nil
+		return resp.Data.Items, resp.Data.HasMore, resp.Data.PageToken, nil
+	})
 }
 
 // GetMediaTempDownloadURL gets a temporary download URL for a media file
@@ -215,8 +191,8 @@ func (c *Client) GetMediaTempDownloadURL(fileToken, documentID string) (string, 
 		return "", err
 	}
 
-	if resp.Code != 0 {
-		return "", fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return "", err
 	}
 
 	if len(resp.Data.TmpDownloadURLs) == 0 {
@@ -331,8 +307,8 @@ func (c *Client) UploadDriveFile(filePath, parentToken, parentType string) (stri
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	if uploadResp.Code != 0 {
-		return "", fmt.Errorf("API error %d: %s", uploadResp.Code, uploadResp.Msg)
+	if err := uploadResp.Err(); err != nil {
+		return "", err
 	}
 
 	return uploadResp.Data.FileToken, nil
@@ -410,8 +386,8 @@ func (c *Client) DeleteDocumentBlocks(documentID string, blockIDs []string) (int
 			return lastRevisionID, fmt.Errorf("failed to delete block at index %d: %w", op.index, err)
 		}
 
-		if resp.Code != 0 {
-			return lastRevisionID, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+		if err := resp.Err(); err != nil {
+			return lastRevisionID, err
 		}
 
 		lastRevisionID = resp.Data.DocumentRevisionID
@@ -433,8 +409,8 @@ func (c *Client) UpdateDocumentBlock(documentID, blockID string, block DocumentB
 		return 0, err
 	}
 
-	if resp.Code != 0 {
-		return 0, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return 0, err
 	}
 
 	return resp.Data.DocumentRevisionID, nil
@@ -452,8 +428,8 @@ func (c *Client) DeleteDriveFile(fileToken, docType string) error {
 		return err
 	}
 
-	if resp.Code != 0 {
-		return fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return err
 	}
 
 	return nil
@@ -491,8 +467,8 @@ func (c *Client) SearchDocuments(query string, ownerIDs, chatIDs, docTypes []str
 			return nil, 0, err
 		}
 
-		if resp.Code != 0 {
-			return nil, 0, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+		if err := resp.Err(); err != nil {
+			return nil, 0, err
 		}
 
 		allResults = append(allResults, resp.Data.DocsEntities...)
@@ -516,8 +492,8 @@ func (c *Client) GetDriveMeta(docToken, docType string) (*DriveMetaItem, error) 
 	if err := c.Post("/drive/v1/metas/batch_query", req, &resp); err != nil {
 		return nil, err
 	}
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 	if len(resp.Data.Metas) == 0 {
 		return nil, fmt.Errorf("no metadata returned for token %s", docToken)
@@ -534,8 +510,8 @@ func (c *Client) CreateFolder(name, parentToken string) (string, string, error) 
 	if err := c.Post("/drive/v1/files/create_folder", req, &resp); err != nil {
 		return "", "", err
 	}
-	if resp.Code != 0 {
-		return "", "", fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return "", "", err
 	}
 	return resp.Data.Token, resp.Data.URL, nil
 }

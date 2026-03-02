@@ -15,8 +15,8 @@ func (c *Client) GetSpreadsheetSheets(token string) ([]Sheet, error) {
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.Sheets, nil
@@ -34,8 +34,8 @@ func (c *Client) GetSheetMetadata(token, sheetID string) (*Sheet, error) {
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.Sheet, nil
@@ -53,8 +53,8 @@ func (c *Client) GetSheetData(token, rangeStr string) (*SheetValues, error) {
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data, nil
@@ -79,8 +79,8 @@ func (c *Client) SetSheetData(token string, sheetRange string, values [][]any) (
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data, nil
@@ -106,8 +106,8 @@ func (c *Client) SetSheetColumnWidths(token, sheetID string, widths map[int]int)
 		if err := c.Put(path, req, &resp); err != nil {
 			return fmt.Errorf("column %d: %w", colIndex, err)
 		}
-		if resp.Code != 0 {
-			return fmt.Errorf("column %d: API error %d: %s", colIndex, resp.Code, resp.Msg)
+		if err := resp.Err(); err != nil {
+			return fmt.Errorf("column %d: %w", colIndex, err)
 		}
 	}
 	return nil
@@ -131,8 +131,8 @@ func (c *Client) SetSheetStyleBold(token, sheetID, rangeSpec string) error {
 	if err := c.Put(path, req, &resp); err != nil {
 		return err
 	}
-	if resp.Code != 0 {
-		return fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -153,8 +153,8 @@ func (c *Client) SetSheetStyle(token, sheetID, rangeSpec string, style SheetStyl
 	if err := c.Put(path, req, &resp); err != nil {
 		return err
 	}
-	if resp.Code != 0 {
-		return fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -173,8 +173,8 @@ func (c *Client) AddSheetTab(token, title string, index int) (*OutputSheetAddTab
 	if err := c.Post(path, req, &resp); err != nil {
 		return nil, err
 	}
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	result := &OutputSheetAddTab{Success: true, Title: title, Index: index}
@@ -201,8 +201,8 @@ func (c *Client) CreateSpreadsheet(title, folderToken string) (*SpreadsheetInfo,
 		return nil, err
 	}
 
-	if resp.Code != 0 {
-		return nil, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	if err := resp.Err(); err != nil {
+		return nil, err
 	}
 
 	return resp.Data.Spreadsheet, nil
