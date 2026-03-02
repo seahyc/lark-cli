@@ -338,6 +338,34 @@ func (c *Client) DeleteDocumentBlocks(documentID string, blockIDs []string) (int
 		blockMap[blocks[i].BlockID] = &blocks[i]
 	}
 
+	// Filter out blocks whose parent is also being deleted.
+	// When a parent block is deleted, its children are deleted too,
+	// so we only need to delete top-level blocks in the delete set.
+	topLevelDelete := make(map[string]bool)
+	for id := range toDelete {
+		block, ok := blockMap[id]
+		if !ok {
+			continue
+		}
+		// Walk up the parent chain to check if any ancestor is also being deleted
+		isDescendant := false
+		parentID := block.ParentID
+		for parentID != "" {
+			if toDelete[parentID] {
+				isDescendant = true
+				break
+			}
+			parent, ok := blockMap[parentID]
+			if !ok {
+				break
+			}
+			parentID = parent.ParentID
+		}
+		if !isDescendant {
+			topLevelDelete[id] = true
+		}
+	}
+
 	// Group blocks to delete by parent, tracking their child indices
 	// We need to delete from highest index to lowest to avoid shifting
 	type deleteOp struct {
@@ -351,7 +379,7 @@ func (c *Client) DeleteDocumentBlocks(documentID string, blockIDs []string) (int
 			continue
 		}
 		for idx, childID := range block.Children {
-			if toDelete[childID] {
+			if topLevelDelete[childID] {
 				ops = append(ops, deleteOp{parentID: block.BlockID, index: idx})
 			}
 		}
@@ -404,8 +432,10 @@ func (c *Client) UpdateDocumentBlock(documentID, blockID string, block DocumentB
 	path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s?document_revision_id=-1",
 		url.PathEscape(documentID), url.PathEscape(blockID))
 
+	updateReq := ConvertToUpdateRequest(block)
+
 	var resp UpdateBlockResponse
-	if err := c.Patch(path, block, &resp); err != nil {
+	if err := c.Patch(path, updateReq, &resp); err != nil {
 		return 0, err
 	}
 
@@ -414,6 +444,64 @@ func (c *Client) UpdateDocumentBlock(documentID, blockID string, block DocumentB
 	}
 
 	return resp.Data.DocumentRevisionID, nil
+}
+
+// ReplaceDocumentBlock atomically replaces a block: finds its position,
+// deletes it, and inserts new blocks at the same index.
+func (c *Client) ReplaceDocumentBlock(documentID, blockID string, newBlocks []DocumentBlock) ([]DocumentBlock, int, error) {
+	// Get all blocks to find the target block's parent and index
+	blocks, err := c.GetDocumentBlocks(documentID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get blocks: %w", err)
+	}
+
+	// Find the block's parent and its index within the parent's children
+	var parentID string
+	var childIdx int
+	found := false
+	for _, block := range blocks {
+		if block.Children == nil {
+			continue
+		}
+		for idx, childID := range block.Children {
+			if childID == blockID {
+				parentID = block.BlockID
+				childIdx = idx
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+
+	if !found {
+		return nil, 0, fmt.Errorf("block %s not found as a child of any block", blockID)
+	}
+
+	// Delete the block
+	path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
+		url.PathEscape(documentID), url.PathEscape(parentID))
+	req := DeleteBlocksRequest{
+		StartIndex: childIdx,
+		EndIndex:   childIdx + 1,
+	}
+	var delResp DeleteBlocksResponse
+	if err := c.DeleteWithBody(path, req, &delResp); err != nil {
+		return nil, 0, fmt.Errorf("failed to delete block: %w", err)
+	}
+	if err := delResp.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// Insert new blocks at the same index
+	createdBlocks, revisionID, err := c.CreateDocumentBlocks(documentID, parentID, newBlocks, childIdx)
+	if err != nil {
+		return nil, delResp.Data.DocumentRevisionID, fmt.Errorf("deleted block but failed to insert replacement: %w", err)
+	}
+
+	return createdBlocks, revisionID, nil
 }
 
 // DeleteDriveFile moves a file to trash in Lark Drive

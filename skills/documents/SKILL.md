@@ -457,7 +457,7 @@ lark doc update <document-id> <block-id> [flags]
 
 Updates the content of an existing block. Supports the same content flags as append: `--text`, `--heading`, `--code`, `--bullet`, `--ordered`, `--todo`, `--json`, `--link`.
 
-**Note:** The Lark PATCH block API has strict format requirements and may return "invalid param" errors. If update fails, use `doc delete` + `doc append --index` as a workaround to replace a block.
+**Note:** The Lark PATCH block API has strict format requirements and may return "invalid param" errors. If update fails, use `doc replace` instead (see below).
 
 Examples:
 ```bash
@@ -473,6 +473,62 @@ Output:
   "document_revision_id": 16
 }
 ```
+
+### Find Blocks by Content
+
+```bash
+lark doc find <document-id> <query> [--type <block-type>]
+```
+
+Searches block content for a text match (case-insensitive) and returns matching block IDs with their parent, index, type, and a content preview. Useful before using `doc replace` or `doc delete`.
+
+Options:
+- `--type`: Filter by block type number (e.g., 2=text, 12=bullet, 14=code, 17=todo)
+
+Examples:
+```bash
+lark doc find ABC123xyz "Section Title"
+lark doc find ABC123xyz "TODO" --type 17
+```
+
+Output:
+```json
+{
+  "document_id": "ABC123xyz",
+  "query": "Section Title",
+  "matches": [
+    {
+      "block_id": "doxlgXYZ123",
+      "parent_id": "ABC123xyz",
+      "index": 5,
+      "block_type": 4,
+      "preview": "Section Title"
+    }
+  ],
+  "count": 1
+}
+```
+
+### Replace a Block
+
+```bash
+lark doc replace <document-id> <block-id> [content flags]
+```
+
+Atomically replaces a block: deletes it and inserts new content at the same position. Supports the same content flags as `append`. This is the recommended way to modify block content (instead of `doc update` which has API limitations).
+
+Use `doc find` to locate the block ID first.
+
+Examples:
+```bash
+# Find a block, then replace it
+lark doc find ABC123xyz "Old Title"
+lark doc replace ABC123xyz doxlgXYZ123 --heading "New Title" --level 2
+lark doc replace ABC123xyz doxlgXYZ123 --text "Updated paragraph content"
+echo '[{"block_type":14,"code":{"style":{"language":49},"elements":[{"text_run":{"content":"print(hello)","text_element_style":{}}}]}}]' | lark doc replace ABC123xyz doxlgXYZ123 --json
+```
+
+Output: Same format as `doc append`.
 
 ### Trash a File or Document
 
@@ -545,8 +601,10 @@ lark doc append ABC123xyz --heading "Project Page" --level 2 --link "https://exa
 | Count elements | `doc blocks` | Block types enumerated |
 | Read comments/feedback | `doc comments` | Get all comments and replies |
 | Download image from doc | `doc image` | Requires image token from `doc blocks` |
+| Find blocks by content | `doc find` | Search blocks for text, get block IDs and indices |
+| Replace a block | `doc replace` | Delete + insert in one step (preferred over `doc update`) |
 | Delete blocks from doc | `doc delete` | Remove specific blocks by ID |
-| Update a block | `doc update` | Modify existing block content |
+| Update a block | `doc update` | Modify existing block content (may fail, use `doc replace` instead) |
 | Trash a file/document | `doc trash` | Move to trash in Drive |
 
 **Default to `doc get`** - it's 2-3x smaller and sufficient for most tasks.

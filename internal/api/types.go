@@ -723,7 +723,7 @@ type CreateDocumentRequest struct {
 // CreateBlockChildrenRequest is the request body for creating block children
 type CreateBlockChildrenRequest struct {
 	Children []DocumentBlock `json:"children"`
-	Index    int             `json:"index,omitempty"`
+	Index    int             `json:"index"`
 }
 
 // CreateBlockChildrenResponse is the response from creating block children
@@ -748,6 +748,51 @@ type DeleteBlocksResponse struct {
 	Data struct {
 		DocumentRevisionID int `json:"document_revision_id,omitempty"`
 	} `json:"data,omitempty"`
+}
+
+// UpdateBlockRequest is the request body for PATCH /docx/v1/documents/{id}/blocks/{block_id}
+// The Lark API uses update_text_elements for ALL text-based block types (text, headings, bullet, etc.)
+type UpdateBlockRequest struct {
+	UpdateTextElements *TextBlock `json:"update_text_elements,omitempty"`
+}
+
+// ConvertToUpdateRequest converts a DocumentBlock to an UpdateBlockRequest.
+// The Lark API uses a single update_text_elements field for all text-based blocks.
+func ConvertToUpdateRequest(block DocumentBlock) UpdateBlockRequest {
+	var req UpdateBlockRequest
+	switch {
+	case block.Text != nil:
+		req.UpdateTextElements = block.Text
+	case block.Heading1 != nil:
+		req.UpdateTextElements = block.Heading1
+	case block.Heading2 != nil:
+		req.UpdateTextElements = block.Heading2
+	case block.Heading3 != nil:
+		req.UpdateTextElements = block.Heading3
+	case block.Heading4 != nil:
+		req.UpdateTextElements = block.Heading4
+	case block.Heading5 != nil:
+		req.UpdateTextElements = block.Heading5
+	case block.Heading6 != nil:
+		req.UpdateTextElements = block.Heading6
+	case block.Heading7 != nil:
+		req.UpdateTextElements = block.Heading7
+	case block.Heading8 != nil:
+		req.UpdateTextElements = block.Heading8
+	case block.Heading9 != nil:
+		req.UpdateTextElements = block.Heading9
+	case block.Bullet != nil:
+		req.UpdateTextElements = block.Bullet
+	case block.Ordered != nil:
+		req.UpdateTextElements = block.Ordered
+	case block.Code != nil:
+		req.UpdateTextElements = block.Code
+	case block.Quote != nil:
+		req.UpdateTextElements = block.Quote
+	case block.TodoBlock != nil:
+		req.UpdateTextElements = block.TodoBlock
+	}
+	return req
 }
 
 // UpdateBlockResponse is the response from updating a block
@@ -1923,4 +1968,45 @@ type OutputDriveUpload struct {
 	FileToken string `json:"file_token"`
 	FileName  string `json:"file_name"`
 	Size      int64  `json:"size"`
+}
+
+// OutputFindMatch is a single match result from doc find
+type OutputFindMatch struct {
+	BlockID   string `json:"block_id"`
+	ParentID  string `json:"parent_id"`
+	Index     int    `json:"index"`
+	BlockType int    `json:"block_type"`
+	Preview   string `json:"preview"`
+}
+
+// OutputDocumentFind is the doc find response for CLI
+type OutputDocumentFind struct {
+	DocumentID string            `json:"document_id"`
+	Query      string            `json:"query"`
+	Matches    []OutputFindMatch `json:"matches"`
+	Count      int               `json:"count"`
+}
+
+// OutlineEntry is a single heading entry in the document outline
+type OutlineEntry struct {
+	BlockID string `json:"block_id"`
+	Index   int    `json:"index"`
+	Level   int    `json:"level"`
+	Text    string `json:"text"`
+}
+
+// OutputDocumentOutline is the doc outline response for CLI
+type OutputDocumentOutline struct {
+	DocumentID string         `json:"document_id"`
+	Title      string         `json:"title,omitempty"`
+	Outline    []OutlineEntry `json:"outline"`
+	Count      int            `json:"count"`
+}
+
+// OutputDocumentMove is the doc move response for CLI
+type OutputDocumentMove struct {
+	Success            bool            `json:"success"`
+	DocumentRevisionID int             `json:"document_revision_id"`
+	BlockID            string          `json:"block_id"`
+	Blocks             []DocumentBlock `json:"blocks,omitempty"`
 }
