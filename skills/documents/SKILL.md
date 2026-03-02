@@ -457,6 +457,8 @@ lark doc update <document-id> <block-id> [flags]
 
 Updates the content of an existing block. Supports the same content flags as append: `--text`, `--heading`, `--code`, `--bullet`, `--ordered`, `--todo`, `--json`, `--link`.
 
+**Note:** The Lark PATCH block API has strict format requirements and may return "invalid param" errors. If update fails, use `doc delete` + `doc append --index` as a workaround to replace a block.
+
 Examples:
 ```bash
 lark doc update ABC123xyz doxlgXYZ123 --text "Updated content"
