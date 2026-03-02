@@ -576,15 +576,21 @@ type Document struct {
 	Title      string `json:"title"`
 }
 
+// TextLink represents a hyperlink on a text element
+type TextLink struct {
+	URL string `json:"url"`
+}
+
 // TextElementStyle represents text styling
 type TextElementStyle struct {
-	Bold            bool `json:"bold,omitempty"`
-	Italic          bool `json:"italic,omitempty"`
-	Strikethrough   bool `json:"strikethrough,omitempty"`
-	Underline       bool `json:"underline,omitempty"`
-	InlineCode      bool `json:"inline_code,omitempty"`
-	BackgroundColor int  `json:"background_color,omitempty"`
-	TextColor       int  `json:"text_color,omitempty"`
+	Bold            bool      `json:"bold,omitempty"`
+	Italic          bool      `json:"italic,omitempty"`
+	Strikethrough   bool      `json:"strikethrough,omitempty"`
+	Underline       bool      `json:"underline,omitempty"`
+	InlineCode      bool      `json:"inline_code,omitempty"`
+	BackgroundColor int       `json:"background_color,omitempty"`
+	TextColor       int       `json:"text_color,omitempty"`
+	Link            *TextLink `json:"link,omitempty"`
 }
 
 // TextRun represents a text run element
@@ -717,6 +723,50 @@ type CreateBlockChildrenResponse struct {
 		DocumentRevisionID int             `json:"document_revision_id,omitempty"`
 		ClientToken        string          `json:"client_token,omitempty"`
 	} `json:"data,omitempty"`
+}
+
+// DeleteBlocksRequest is the request body for batch deleting block children
+type DeleteBlocksRequest struct {
+	StartIndex int `json:"start_index"`
+	EndIndex   int `json:"end_index"`
+}
+
+// DeleteBlocksResponse is the response from batch deleting blocks
+type DeleteBlocksResponse struct {
+	BaseResponse
+	Data struct {
+		DocumentRevisionID int `json:"document_revision_id,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// UpdateBlockResponse is the response from updating a block
+type UpdateBlockResponse struct {
+	BaseResponse
+	Data struct {
+		Block              DocumentBlock `json:"block,omitempty"`
+		DocumentRevisionID int           `json:"document_revision_id,omitempty"`
+	} `json:"data,omitempty"`
+}
+
+// OutputDocumentDelete is the delete blocks response for CLI
+type OutputDocumentDelete struct {
+	Success            bool     `json:"success"`
+	DocumentRevisionID int      `json:"document_revision_id"`
+	DeletedBlockIDs    []string `json:"deleted_block_ids"`
+}
+
+// OutputDocumentUpdate is the update block response for CLI
+type OutputDocumentUpdate struct {
+	Success            bool          `json:"success"`
+	DocumentRevisionID int           `json:"document_revision_id"`
+	Block              DocumentBlock `json:"block,omitempty"`
+}
+
+// OutputDriveTrash is the trash file response for CLI
+type OutputDriveTrash struct {
+	Success   bool   `json:"success"`
+	FileToken string `json:"file_token"`
+	Type      string `json:"type"`
 }
 
 // OutputDocumentCreate is the create document response for CLI

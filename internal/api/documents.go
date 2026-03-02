@@ -338,6 +338,127 @@ func (c *Client) UploadDriveFile(filePath, parentToken, parentType string) (stri
 	return uploadResp.Data.FileToken, nil
 }
 
+// DeleteDocumentBlocks deletes blocks from a document by their IDs
+// The Lark API deletes children by index range, so we need to resolve
+// block IDs to their parent and index positions first.
+// documentID: the document ID
+// blockIDs: IDs of blocks to delete
+func (c *Client) DeleteDocumentBlocks(documentID string, blockIDs []string) (int, error) {
+	// Build a set for quick lookup
+	toDelete := make(map[string]bool)
+	for _, id := range blockIDs {
+		toDelete[id] = true
+	}
+
+	// Get all blocks to find parent-child relationships
+	blocks, err := c.GetDocumentBlocks(documentID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get blocks: %w", err)
+	}
+
+	// Build a map of block ID -> block for quick lookup
+	blockMap := make(map[string]*DocumentBlock)
+	for i := range blocks {
+		blockMap[blocks[i].BlockID] = &blocks[i]
+	}
+
+	// Group blocks to delete by parent, tracking their child indices
+	// We need to delete from highest index to lowest to avoid shifting
+	type deleteOp struct {
+		parentID string
+		index    int
+	}
+	var ops []deleteOp
+
+	for _, block := range blocks {
+		if block.Children == nil {
+			continue
+		}
+		for idx, childID := range block.Children {
+			if toDelete[childID] {
+				ops = append(ops, deleteOp{parentID: block.BlockID, index: idx})
+			}
+		}
+	}
+
+	if len(ops) == 0 {
+		return 0, fmt.Errorf("none of the specified block IDs were found as children")
+	}
+
+	// Sort ops by index descending (delete from end first to preserve indices)
+	for i := 0; i < len(ops)-1; i++ {
+		for j := i + 1; j < len(ops); j++ {
+			if ops[j].index > ops[i].index || (ops[j].index == ops[i].index && ops[j].parentID > ops[i].parentID) {
+				ops[i], ops[j] = ops[j], ops[i]
+			}
+		}
+	}
+
+	// Delete one at a time from highest index to lowest
+	var lastRevisionID int
+	for _, op := range ops {
+		path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
+			url.PathEscape(documentID), url.PathEscape(op.parentID))
+
+		req := DeleteBlocksRequest{
+			StartIndex: op.index,
+			EndIndex:   op.index + 1,
+		}
+
+		var resp DeleteBlocksResponse
+		if err := c.DeleteWithBody(path, req, &resp); err != nil {
+			return lastRevisionID, fmt.Errorf("failed to delete block at index %d: %w", op.index, err)
+		}
+
+		if resp.Code != 0 {
+			return lastRevisionID, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+		}
+
+		lastRevisionID = resp.Data.DocumentRevisionID
+	}
+
+	return lastRevisionID, nil
+}
+
+// UpdateDocumentBlock updates a single block's content in a document
+// documentID: the document ID
+// blockID: the block ID to update
+// block: the updated block content
+func (c *Client) UpdateDocumentBlock(documentID, blockID string, block DocumentBlock) (int, error) {
+	path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s?document_revision_id=-1",
+		url.PathEscape(documentID), url.PathEscape(blockID))
+
+	var resp UpdateBlockResponse
+	if err := c.Patch(path, block, &resp); err != nil {
+		return 0, err
+	}
+
+	if resp.Code != 0 {
+		return 0, fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return resp.Data.DocumentRevisionID, nil
+}
+
+// DeleteDriveFile moves a file to trash in Lark Drive
+// fileToken: the file token
+// docType: document type (e.g., "docx", "doc", "sheet", "bitable", "folder", "file")
+func (c *Client) DeleteDriveFile(fileToken, docType string) error {
+	path := fmt.Sprintf("/drive/v1/files/%s?type=%s",
+		url.PathEscape(fileToken), url.QueryEscape(docType))
+
+	var resp BaseResponse
+	if err := c.Delete(path, &resp); err != nil {
+		return err
+	}
+
+	if resp.Code != 0 {
+		return fmt.Errorf("API error %d: %s", resp.Code, resp.Msg)
+	}
+
+	return nil
+}
+
 // SearchDocuments searches for documents using the Lark Docs API
 // query: search keyword (required)
 // ownerIDs: optional filter by owner user IDs

@@ -426,6 +426,95 @@ lark doc image K1TQbpmDuokIq3xq1WVl9J7ygkc --doc ABC123xyz > image.png
 
 **Workflow:** Use `doc blocks` to find image blocks (block_type 27), extract the image token from the block data, then download with this command.
 
+### Delete Blocks from a Document
+
+```bash
+lark doc delete <document-id> <block-id> [block-id...]
+```
+
+Deletes one or more blocks from a document. Block IDs can be found using `doc blocks`.
+
+Examples:
+```bash
+lark doc delete ABC123xyz doxlgXYZ123
+lark doc delete ABC123xyz doxlgXYZ123 doxlgABC456
+```
+
+Output:
+```json
+{
+  "success": true,
+  "document_revision_id": 15,
+  "deleted_block_ids": ["doxlgXYZ123"]
+}
+```
+
+### Update a Block in a Document
+
+```bash
+lark doc update <document-id> <block-id> [flags]
+```
+
+Updates the content of an existing block. Supports the same content flags as append: `--text`, `--heading`, `--code`, `--bullet`, `--ordered`, `--todo`, `--json`, `--link`.
+
+Examples:
+```bash
+lark doc update ABC123xyz doxlgXYZ123 --text "Updated content"
+lark doc update ABC123xyz doxlgXYZ123 --heading "New Title" --level 2
+lark doc update ABC123xyz doxlgXYZ123 --text "Click here" --link "https://example.com"
+```
+
+Output:
+```json
+{
+  "success": true,
+  "document_revision_id": 16
+}
+```
+
+### Trash a File or Document
+
+```bash
+lark doc trash <file-token> [--type <doc-type>]
+```
+
+Moves a file or document to trash in Lark Drive. The file is moved to trash (not permanently deleted).
+
+Options:
+- `--type`: Document type (default: `docx`). Supported: `doc`, `docx`, `sheet`, `bitable`, `folder`, `file`, `mindnote`, `slides`
+
+Examples:
+```bash
+lark doc trash ABC123xyz
+lark doc trash ABC123xyz --type sheet
+lark doc trash fldbcRho46N6... --type folder
+```
+
+Output:
+```json
+{
+  "success": true,
+  "file_token": "ABC123xyz",
+  "type": "docx"
+}
+```
+
+### Hyperlinks with --link
+
+The `--link` flag adds a hyperlink URL to text content in `doc append` and `doc update`. It works with `--text`, `--heading`, `--bullet`, `--ordered`, and `--todo`.
+
+Examples:
+```bash
+# Text with hyperlink
+lark doc append ABC123xyz --text "Official docs" --link "https://docs.example.com"
+
+# Bullet list item with hyperlink
+lark doc append ABC123xyz --bullet "Read the guide" --link "https://example.com/guide"
+
+# Heading with hyperlink
+lark doc append ABC123xyz --heading "Project Page" --level 2 --link "https://example.com"
+```
+
 ## Extracting IDs from URLs
 
 | URL Type | Example | How to Get Content |
@@ -454,6 +543,9 @@ lark doc image K1TQbpmDuokIq3xq1WVl9J7ygkc --doc ABC123xyz > image.png
 | Count elements | `doc blocks` | Block types enumerated |
 | Read comments/feedback | `doc comments` | Get all comments and replies |
 | Download image from doc | `doc image` | Requires image token from `doc blocks` |
+| Delete blocks from doc | `doc delete` | Remove specific blocks by ID |
+| Update a block | `doc update` | Modify existing block content |
+| Trash a file/document | `doc trash` | Move to trash in Drive |
 
 **Default to `doc get`** - it's 2-3x smaller and sufficient for most tasks.
 
@@ -478,6 +570,39 @@ When using `doc blocks`, key block types:
 ## Output Format
 
 All commands output JSON. Format appropriately when presenting to user.
+
+## Authentication
+
+Lark CLI uses OAuth 2.0 (browser-based flow). No API key auth is supported.
+
+### Initial Setup
+
+```bash
+# Login with documents scope
+lark auth login --scopes documents
+
+# Or login with all default scopes, then add documents later
+lark auth login
+lark auth login --add --scopes documents
+```
+
+### Check Permissions
+
+```bash
+lark auth status
+```
+
+### Configuration
+
+Config is stored in `~/.lark/config.yaml` with `app_id`. The app secret is stored in the `LARK_APP_SECRET` environment variable (or prompted during login).
+
+### Available Scope Groups
+
+- `calendar` - Calendar events and scheduling
+- `contacts` - User and department lookups
+- `documents` - Drive files and document operations
+- `messages` - Chat messages and reactions
+- `minutes` - Meeting recordings and transcripts
 
 ## Error Handling
 
