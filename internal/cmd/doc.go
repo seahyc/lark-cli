@@ -685,6 +685,22 @@ func makeTextBlock(content string) *api.TextBlock {
 	}
 }
 
+// makeLinkedTextBlock creates a TextBlock with a hyperlinked text run
+func makeLinkedTextBlock(content, url string) *api.TextBlock {
+	return &api.TextBlock{
+		Elements: []api.TextElement{
+			{
+				TextRun: &api.TextRun{
+					Content: content,
+					TextElementStyle: &api.TextElementStyle{
+						Link: &api.TextLink{URL: url},
+					},
+				},
+			},
+		},
+	}
+}
+
 // blockTypeForHeadingLevel returns the block type number for a heading level
 func blockTypeForHeadingLevel(level int) int {
 	// Block types: heading1=3, heading2=4, ..., heading9=11
@@ -725,6 +741,7 @@ Examples:
 		addDivider, _ := cmd.Flags().GetBool("divider")
 		useJSON, _ := cmd.Flags().GetBool("json")
 		index, _ := cmd.Flags().GetInt("index")
+		linkURL, _ := cmd.Flags().GetString("link")
 
 		if blockID == "" {
 			blockID = documentID
@@ -743,10 +760,18 @@ Examples:
 			}
 		} else {
 			// Build blocks from flags
+			// mkBlock creates a text block, optionally with a hyperlink
+			mkBlock := func(content string) *api.TextBlock {
+				if linkURL != "" {
+					return makeLinkedTextBlock(content, linkURL)
+				}
+				return makeTextBlock(content)
+			}
+
 			if textContent != "" {
 				blocks = append(blocks, api.DocumentBlock{
 					BlockType: 2, // text
-					Text:      makeTextBlock(textContent),
+					Text:      mkBlock(textContent),
 				})
 			}
 
@@ -757,7 +782,7 @@ Examples:
 				block := api.DocumentBlock{
 					BlockType: blockTypeForHeadingLevel(headingLevel),
 				}
-				tb := makeTextBlock(headingContent)
+				tb := mkBlock(headingContent)
 				// Set the heading field based on level
 				switch headingLevel {
 				case 1:
@@ -796,21 +821,21 @@ Examples:
 			for _, item := range bulletItems {
 				blocks = append(blocks, api.DocumentBlock{
 					BlockType: 12, // bullet
-					Bullet:    makeTextBlock(item),
+					Bullet:    mkBlock(item),
 				})
 			}
 
 			for _, item := range orderedItems {
 				blocks = append(blocks, api.DocumentBlock{
 					BlockType: 13, // ordered
-					Ordered:   makeTextBlock(item),
+					Ordered:   mkBlock(item),
 				})
 			}
 
 			if todoContent != "" {
 				blocks = append(blocks, api.DocumentBlock{
 					BlockType: 17, // todo
-					TodoBlock: makeTextBlock(todoContent),
+					TodoBlock: mkBlock(todoContent),
 				})
 			}
 
@@ -958,6 +983,205 @@ Examples:
 	},
 }
 
+// --- doc delete ---
+
+var docDeleteCmd = &cobra.Command{
+	Use:   "delete <document_id> <block_id> [block_id...]",
+	Short: "Delete blocks from a document",
+	Long: `Delete one or more blocks from a Lark document.
+
+The document_id is the token from the document URL.
+Block IDs can be found using 'doc blocks'.
+
+Examples:
+  lark doc delete ABC123xyz doxlgXYZ123
+  lark doc delete ABC123xyz doxlgXYZ123 doxlgABC456`,
+	Args: cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		blockIDs := args[1:]
+
+		client := api.NewClient()
+
+		revisionID, err := client.DeleteDocumentBlocks(documentID, blockIDs)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		result := api.OutputDocumentDelete{
+			Success:            true,
+			DocumentRevisionID: revisionID,
+			DeletedBlockIDs:    blockIDs,
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- doc update ---
+
+var docUpdateCmd = &cobra.Command{
+	Use:   "update <document_id> <block_id>",
+	Short: "Update a block in a document",
+	Long: `Update the content of a block in a Lark document.
+
+Supports updating text, heading, code, bullet, ordered, and todo blocks.
+The block type must match the existing block's type.
+
+Block IDs can be found using 'doc blocks'.
+
+Examples:
+  lark doc update ABC123xyz doxlgXYZ123 --text "Updated content"
+  lark doc update ABC123xyz doxlgXYZ123 --heading "New Title" --level 2
+  lark doc update ABC123xyz doxlgXYZ123 --code "fmt.Println()" --language 22
+  echo '{"block_type":2,"text":{"elements":[{"text_run":{"content":"raw"}}]}}' | lark doc update ABC123xyz doxlgXYZ123 --json`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		blockID := args[1]
+		textContent, _ := cmd.Flags().GetString("text")
+		headingContent, _ := cmd.Flags().GetString("heading")
+		headingLevel, _ := cmd.Flags().GetInt("level")
+		codeContent, _ := cmd.Flags().GetString("code")
+		codeLanguage, _ := cmd.Flags().GetInt("language")
+		bulletContent, _ := cmd.Flags().GetString("bullet")
+		orderedContent, _ := cmd.Flags().GetString("ordered")
+		todoContent, _ := cmd.Flags().GetString("todo")
+		useJSON, _ := cmd.Flags().GetBool("json")
+		linkURL, _ := cmd.Flags().GetString("link")
+
+		mkBlock := func(content string) *api.TextBlock {
+			if linkURL != "" {
+				return makeLinkedTextBlock(content, linkURL)
+			}
+			return makeTextBlock(content)
+		}
+
+		var block api.DocumentBlock
+
+		if useJSON {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				output.Fatal("INPUT_ERROR", fmt.Errorf("failed to read stdin: %w", err))
+			}
+			if err := json.Unmarshal(data, &block); err != nil {
+				output.Fatal("PARSE_ERROR", fmt.Errorf("invalid block JSON: %w", err))
+			}
+		} else if textContent != "" {
+			block = api.DocumentBlock{
+				BlockType: 2,
+				Text:      mkBlock(textContent),
+			}
+		} else if headingContent != "" {
+			if headingLevel < 1 || headingLevel > 9 {
+				headingLevel = 1
+			}
+			block = api.DocumentBlock{
+				BlockType: blockTypeForHeadingLevel(headingLevel),
+			}
+			tb := mkBlock(headingContent)
+			switch headingLevel {
+			case 1:
+				block.Heading1 = tb
+			case 2:
+				block.Heading2 = tb
+			case 3:
+				block.Heading3 = tb
+			case 4:
+				block.Heading4 = tb
+			case 5:
+				block.Heading5 = tb
+			case 6:
+				block.Heading6 = tb
+			case 7:
+				block.Heading7 = tb
+			case 8:
+				block.Heading8 = tb
+			case 9:
+				block.Heading9 = tb
+			}
+		} else if codeContent != "" {
+			tb := mkBlock(codeContent)
+			tb.Style = &api.TextStyle{
+				Language: codeLanguage,
+			}
+			block = api.DocumentBlock{
+				BlockType: 14,
+				Code:      tb,
+			}
+		} else if bulletContent != "" {
+			block = api.DocumentBlock{
+				BlockType: 12,
+				Bullet:    mkBlock(bulletContent),
+			}
+		} else if orderedContent != "" {
+			block = api.DocumentBlock{
+				BlockType: 13,
+				Ordered:   mkBlock(orderedContent),
+			}
+		} else if todoContent != "" {
+			block = api.DocumentBlock{
+				BlockType: 17,
+				TodoBlock: mkBlock(todoContent),
+			}
+		} else {
+			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, or --json)"))
+		}
+
+		client := api.NewClient()
+
+		revisionID, err := client.UpdateDocumentBlock(documentID, blockID, block)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		result := api.OutputDocumentUpdate{
+			Success:            true,
+			DocumentRevisionID: revisionID,
+		}
+
+		output.JSON(result)
+	},
+}
+
+// --- doc trash ---
+
+var docTrashCmd = &cobra.Command{
+	Use:   "trash <file_token>",
+	Short: "Move a file to trash in Lark Drive",
+	Long: `Move a file or document to trash in Lark Drive.
+
+The file_token is the document or file token.
+Use --type to specify the document type (default: docx).
+
+Supported types: doc, docx, sheet, bitable, folder, file, mindnote, slides
+
+Examples:
+  lark doc trash ABC123xyz
+  lark doc trash ABC123xyz --type sheet
+  lark doc trash fldbcRho46N6... --type folder`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		fileToken := args[0]
+		docType, _ := cmd.Flags().GetString("type")
+
+		client := api.NewClient()
+
+		err := client.DeleteDriveFile(fileToken, docType)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		result := api.OutputDriveTrash{
+			Success:   true,
+			FileToken: fileToken,
+			Type:      docType,
+		}
+
+		output.JSON(result)
+	},
+}
+
 // codeLanguageHelp returns a string listing code language IDs for the help text
 func codeLanguageHelp() string {
 	return "Common language IDs: 1=PlainText, 7=Bash, 8=C#, 9=C++, 10=C, 12=CSS, 22=Go, 24=HTML, 28=JSON, 29=Java, 30=JavaScript, 32=Kotlin, 49=Python, 52=Ruby, 53=Rust, 56=SQL, 61=Swift, 63=TypeScript, 67=YAML"
@@ -980,6 +1204,20 @@ func init() {
 	docCmd.AddCommand(docUploadCmd)
 	docCmd.AddCommand(docInfoCmd)
 	docCmd.AddCommand(docMkdirCmd)
+	docCmd.AddCommand(docDeleteCmd)
+	docCmd.AddCommand(docUpdateCmd)
+	docCmd.AddCommand(docTrashCmd)
+
+	// Flags for doc update
+	docUpdateCmd.Flags().String("text", "", "Update block with text content")
+	docUpdateCmd.Flags().String("heading", "", "Update block with heading content")
+	docUpdateCmd.Flags().Int("level", 1, "Heading level 1-9 (used with --heading)")
+	docUpdateCmd.Flags().String("code", "", "Update block with code content")
+	docUpdateCmd.Flags().Int("language", 0, "Code language ID (used with --code). "+codeLanguageHelp())
+	docUpdateCmd.Flags().String("bullet", "", "Update block with bullet content")
+	docUpdateCmd.Flags().String("ordered", "", "Update block with ordered list content")
+	docUpdateCmd.Flags().String("todo", "", "Update block with todo content")
+	docUpdateCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
 
 	// Flags for doc info
 	docInfoCmd.Flags().String("type", "file", "Document type: doc, docx, sheet, bitable, folder, file, mindnote, slides, wiki")
@@ -1023,4 +1261,11 @@ func init() {
 	docAppendCmd.Flags().Bool("divider", false, "Append a divider")
 	docAppendCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
 	docAppendCmd.Flags().Int("index", -1, "Insertion position (-1=end, 0=beginning)")
+	docAppendCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
+
+	// Flags for doc update
+	docUpdateCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
+
+	// Flags for doc trash
+	docTrashCmd.Flags().String("type", "docx", "Document type: doc, docx, sheet, bitable, folder, file, mindnote, slides")
 }
