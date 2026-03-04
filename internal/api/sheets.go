@@ -41,12 +41,19 @@ func (c *Client) GetSheetMetadata(token, sheetID string) (*Sheet, error) {
 	return resp.Data.Sheet, nil
 }
 
-// GetSheetData retrieves cell values from a sheet
+// GetSheetData retrieves cell values from a sheet.
 // token: the spreadsheet token
 // rangeStr: the range in format "sheetId!A1:Z100" or just "sheetId" for all data
-func (c *Client) GetSheetData(token, rangeStr string) (*SheetValues, error) {
-	path := fmt.Sprintf("/sheets/v2/spreadsheets/%s/values/%s",
-		url.PathEscape(token), url.PathEscape(rangeStr))
+// renderOption: controls how cell values are returned:
+//   - "ToString" (default): computed values as strings/numbers
+//   - "Formula": raw formula strings (e.g. "=SUM(A1:A10)")
+//   - "FormattedValue": display strings with number formatting applied
+func (c *Client) GetSheetData(token, rangeStr, renderOption string) (*SheetValues, error) {
+	if renderOption == "" {
+		renderOption = "ToString"
+	}
+	path := fmt.Sprintf("/sheets/v2/spreadsheets/%s/values/%s?valueRenderOption=%s",
+		url.PathEscape(token), url.PathEscape(rangeStr), url.QueryEscape(renderOption))
 
 	var resp SheetValuesResponse
 	if err := c.Get(path, &resp); err != nil {

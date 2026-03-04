@@ -120,6 +120,19 @@ Examples:
 		token := args[0]
 		sheetID, _ := cmd.Flags().GetString("sheet")
 		rangeSpec, _ := cmd.Flags().GetString("range")
+		render, _ := cmd.Flags().GetString("render")
+
+		// Map friendly flag values to Lark API values
+		renderOptionMap := map[string]string{
+			"":          "ToString",
+			"value":     "ToString",
+			"formula":   "Formula",
+			"formatted": "FormattedValue",
+		}
+		renderOption, ok := renderOptionMap[render]
+		if !ok {
+			output.Fatal("INVALID_ARG", fmt.Errorf("invalid --render value %q: must be value, formula, or formatted", render))
+		}
 
 		client := api.NewClient()
 
@@ -153,7 +166,7 @@ Examples:
 		}
 
 		// Get the data
-		data, err := client.GetSheetData(token, fullRange)
+		data, err := client.GetSheetData(token, fullRange, renderOption)
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
@@ -570,6 +583,7 @@ func init() {
 	// Flags for sheet read
 	sheetReadCmd.Flags().String("sheet", "", "Sheet ID to read from (default: first sheet)")
 	sheetReadCmd.Flags().String("range", "", "Cell range to read (e.g., A1:Z100)")
+	sheetReadCmd.Flags().String("render", "value", "How to render cell values: value (computed, default), formula (raw =formula), formatted (display string)")
 
 	// Flags for sheet write
 	sheetWriteCmd.Flags().String("sheet", "", "Sheet ID to write to (default: first sheet)")

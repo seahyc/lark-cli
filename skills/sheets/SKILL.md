@@ -71,6 +71,10 @@ Reads cell values from a Lark spreadsheet.
 Options:
 - `--sheet`: Sheet ID to read from (default: first sheet by index)
 - `--range`: Cell range to read (e.g., `A1:Z100`). Default: all data up to 1000 rows
+- `--render`: How to render cell values (default: `value`):
+  - `value` - computed values; numbers stay numeric, strings stay string
+  - `formula` - raw formula strings (e.g. `=SUM(A1:A10)`)
+  - `formatted` - display strings with number/date formatting applied (e.g. `"1,234.56"`)
 
 Output:
 ```json
@@ -88,7 +92,7 @@ Output:
 }
 ```
 
-**Note:** Cell values preserve their types (string, number, boolean). Empty cells may appear as `null` or be omitted from rows. Some cells with rich formatting may return structured objects instead of plain values.
+**Note:** Cell values preserve their types (string, number, boolean) with the default `--render value` mode. Use `--render formatted` to get display strings matching what the user sees in the sheet (e.g. `"-12%"` instead of `-0.116`), or `--render formula` to inspect raw formula expressions. Empty cells may appear as `null` or be omitted from rows. Some cells with rich formatting may return structured objects instead of plain values.
 
 Cells containing file attachments return structured objects like:
 ```json
@@ -276,6 +280,8 @@ The sheet_id can be found in the URL query parameter:
 | Read specific data | `sheet read --range` | Target specific cells |
 | Read full sheet | `sheet read --sheet` | Up to 1000 rows |
 | Read first sheet | `sheet read` | Auto-selects first by index |
+| Read as user sees it | `sheet read --render formatted` | Display strings (e.g. "-12%" not -0.116) |
+| Inspect formulas | `sheet read --render formula` | Raw formula expressions |
 | Write data to cells | `sheet write --values` | JSON array of arrays |
 | Create new spreadsheet | `sheet create` | Needs title; optional folder |
 | Add a new tab | `sheet add-tab` | Requires title flag |
