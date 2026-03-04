@@ -31,8 +31,8 @@ Use this to distinguish the three failure modes:
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `command not found` or binary missing | Tool not installed in this environment | Tell the user: "The lark CLI tool is not available in this environment. It needs to be installed at `tools/bin/lark`." Do NOT attempt workarounds. |
-| `AUTH_ERROR` or `access_token` is empty | Not logged in | Run `LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login` and follow the browser prompt |
-| `SCOPE_ERROR` on a command | Logged in but missing scope | Run `LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login --add --scopes documents` |
+| `AUTH_ERROR` or `access_token` is empty | Not logged in | Run `LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login` — this opens the browser automatically for the user to complete OAuth |
+| `SCOPE_ERROR` on a command | Logged in but missing scope | Run `LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login --add --scopes documents` — opens the browser to re-authorize with the new scope |
 | `API_ERROR (code 99991663)` on a specific file | Logged in and scoped, but no access to this file | Ask the file owner to share it (see Access Denied section below) |
 
 **Key distinction**: "tool not available" and "not authenticated" are completely different problems. Never tell the user the tool can't access Lark when the real issue is the binary is missing, and vice versa.
