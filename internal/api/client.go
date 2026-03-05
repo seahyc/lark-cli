@@ -175,6 +175,16 @@ func (c *Client) DeleteWithTenantToken(path string, result interface{}) error {
 	return c.doRequestWithTenantToken("DELETE", path, nil, result)
 }
 
+// PutWithTenantToken performs a PUT request using tenant access token
+func (c *Client) PutWithTenantToken(path string, body interface{}, result interface{}) error {
+	return c.doRequestWithTenantToken("PUT", path, body, result)
+}
+
+// PatchWithTenantToken performs a PATCH request using tenant access token
+func (c *Client) PatchWithTenantToken(path string, body interface{}, result interface{}) error {
+	return c.doRequestWithTenantToken("PATCH", path, body, result)
+}
+
 // DownloadWithTenantToken performs a GET request that returns binary data
 // The caller is responsible for closing the returned ReadCloser
 func (c *Client) DownloadWithTenantToken(path string) (io.ReadCloser, string, error) {
