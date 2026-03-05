@@ -1349,6 +1349,12 @@ type ReplyMessageRequest struct {
 	ReplyInThread bool   `json:"reply_in_thread,omitempty"`
 }
 
+// EditMessageRequest is the request body for PUT /im/v1/messages/:message_id
+type EditMessageRequest struct {
+	MsgType string `json:"msg_type"` // text, post
+	Content string `json:"content"`  // JSON string
+}
+
 // UploadImageResponse is the response from POST /im/v1/images
 type UploadImageResponse struct {
 	BaseResponse
