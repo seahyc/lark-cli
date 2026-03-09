@@ -932,6 +932,8 @@ Examples:
 			}
 		}
 
+		useMarkdown, _ := cmd.Flags().GetBool("markdown")
+
 		var blocks []api.DocumentBlock
 		if useJSON {
 			var err error
@@ -939,6 +941,12 @@ Examples:
 			if err != nil {
 				output.Fatal("PARSE_ERROR", err)
 			}
+		} else if useMarkdown {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				output.Fatal("READ_ERROR", err)
+			}
+			blocks = parseMarkdownToBlocks(data)
 		} else {
 			bulletItems, _ := cmd.Flags().GetStringArray("bullet")
 			orderedItems, _ := cmd.Flags().GetStringArray("ordered")
@@ -966,7 +974,7 @@ Examples:
 		}
 
 		if len(blocks) == 0 {
-			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, --table-header, or --json)"))
+			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, --table-header, --json, or --markdown)"))
 		}
 
 		client := api.NewClient()
@@ -1401,6 +1409,8 @@ Examples:
 		blockID := args[1]
 		useJSON, _ := cmd.Flags().GetBool("json")
 
+		useMarkdown, _ := cmd.Flags().GetBool("markdown")
+
 		// Build the new blocks
 		var newBlocks []api.DocumentBlock
 		if useJSON {
@@ -1409,6 +1419,12 @@ Examples:
 			if err != nil {
 				output.Fatal("PARSE_ERROR", err)
 			}
+		} else if useMarkdown {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				output.Fatal("READ_ERROR", err)
+			}
+			newBlocks = parseMarkdownToBlocks(data)
 		} else {
 			bulletItems, _ := cmd.Flags().GetStringArray("bullet")
 			orderedItems, _ := cmd.Flags().GetStringArray("ordered")
@@ -1428,7 +1444,7 @@ Examples:
 		}
 
 		if len(newBlocks) == 0 {
-			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, or --json)"))
+			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, --json, or --markdown)"))
 		}
 
 		client := api.NewClient()
@@ -1777,6 +1793,7 @@ func init() {
 	docAppendCmd.Flags().Bool("divider", false, "Append a divider")
 	docAppendCmd.Flags().String("quote", "", "Append a quote block")
 	docAppendCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
+	docAppendCmd.Flags().Bool("markdown", false, "Read markdown from stdin and convert to blocks")
 	docAppendCmd.Flags().Int("index", -1, "Insertion position (-1=end, 0=beginning)")
 	docAppendCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
 	docAppendCmd.Flags().String("after", "", "Insert after this block ID (mutually exclusive with --index)")
@@ -1804,6 +1821,7 @@ func init() {
 	docReplaceCmd.Flags().Bool("divider", false, "Replace with divider")
 	docReplaceCmd.Flags().String("quote", "", "Replace with quote block")
 	docReplaceCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
+	docReplaceCmd.Flags().Bool("markdown", false, "Read markdown from stdin and convert to blocks")
 	docReplaceCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
 
 	// Flags for doc move
