@@ -965,27 +965,79 @@ Examples:
 			})
 		}
 
-		// Build table blocks if --table-header is provided
+		// Handle table creation separately: create table, then populate cells
 		tableHeaders, _ := cmd.Flags().GetStringArray("table-header")
 		tableRows, _ := cmd.Flags().GetStringArray("table-row")
-		if len(tableHeaders) > 0 {
-			tableBlocks := buildTableBlocks(tableHeaders, tableRows)
-			blocks = append(blocks, tableBlocks...)
-		}
 
-		if len(blocks) == 0 {
+		if len(blocks) == 0 && len(tableHeaders) == 0 {
 			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, --table-header, --json, or --markdown)"))
 		}
 
 		client := api.NewClient()
-		createdBlocks, revisionID, err := client.CreateDocumentBlocks(documentID, blockID, blocks, index)
-		if err != nil {
-			output.Fatal("API_ERROR", err)
+
+		// Create non-table blocks first
+		var allCreatedBlocks []api.DocumentBlock
+		var revisionID int
+		if len(blocks) > 0 {
+			var err error
+			allCreatedBlocks, revisionID, err = client.CreateDocumentBlocks(documentID, blockID, blocks, index)
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
 		}
+
+		// Create table and auto-populate cells
+		if len(tableHeaders) > 0 {
+			tableBlocks := buildTableBlocks(tableHeaders, tableRows)
+			createdTableBlocks, tableRevID, err := client.CreateDocumentBlocks(documentID, blockID, tableBlocks, index)
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+			revisionID = tableRevID
+
+			// Populate cells with content
+			for _, tb := range createdTableBlocks {
+				if tb.BlockType == 31 && tb.Table != nil && len(tb.Table.Cells) > 0 {
+					// Build flat list of cell contents: headers first, then rows
+					var cellContents []string
+					cellContents = append(cellContents, tableHeaders...)
+					colSize := len(tableHeaders)
+					for _, row := range tableRows {
+						cells := strings.Split(row, "|")
+						for i := 0; i < colSize; i++ {
+							if i < len(cells) {
+								cellContents = append(cellContents, strings.TrimSpace(cells[i]))
+							} else {
+								cellContents = append(cellContents, "")
+							}
+						}
+					}
+
+					// Populate each cell (with delay and retry to handle API rate limits)
+					for i, cellID := range tb.Table.Cells {
+						if i < len(cellContents) && cellContents[i] != "" {
+							time.Sleep(200 * time.Millisecond)
+							textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
+							_, _, cellErr := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
+							if cellErr != nil {
+								// Retry once after a longer delay
+								time.Sleep(500 * time.Millisecond)
+								_, _, cellErr = client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
+								if cellErr != nil {
+									output.Fatal("API_ERROR", fmt.Errorf("failed to populate cell %d: %w", i, cellErr))
+								}
+							}
+						}
+					}
+				}
+			}
+			allCreatedBlocks = append(allCreatedBlocks, createdTableBlocks...)
+		}
+
 		output.JSON(api.OutputDocumentAppend{
 			Success:            true,
 			DocumentRevisionID: revisionID,
-			Blocks:             createdBlocks,
+			Blocks:             allCreatedBlocks,
 		})
 	},
 }
