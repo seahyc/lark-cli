@@ -743,6 +743,7 @@ type BlockBuildOpts struct {
 	OrderedItems   []string
 	TodoContent    string
 	AddDivider     bool
+	QuoteContent   string
 	LinkURL        string
 }
 
@@ -791,6 +792,10 @@ func buildBlocks(opts BlockBuildOpts) []api.DocumentBlock {
 
 	if opts.AddDivider {
 		blocks = append(blocks, api.DocumentBlock{BlockType: 22, Divider: &api.DividerBlock{}})
+	}
+
+	if opts.QuoteContent != "" {
+		blocks = append(blocks, api.DocumentBlock{BlockType: 15, Quote: mkBlock(opts.QuoteContent)})
 	}
 
 	return blocks
@@ -923,12 +928,13 @@ Examples:
 				OrderedItems:   orderedItems,
 				TodoContent:    getStringFlag(cmd, "todo"),
 				AddDivider:     getBoolFlag(cmd, "divider"),
+				QuoteContent:   getStringFlag(cmd, "quote"),
 				LinkURL:        getStringFlag(cmd, "link"),
 			})
 		}
 
 		if len(blocks) == 0 {
-			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, or --json)"))
+			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, or --json)"))
 		}
 
 		client := api.NewClient()
@@ -1146,7 +1152,7 @@ Examples:
 				LinkURL:        getStringFlag(cmd, "link"),
 			})
 			if len(blocks) == 0 {
-				output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, or --json)"))
+				output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --quote, or --json)"))
 			}
 			block = blocks[0]
 		}
@@ -1384,12 +1390,13 @@ Examples:
 				OrderedItems:   orderedItems,
 				TodoContent:    getStringFlag(cmd, "todo"),
 				AddDivider:     getBoolFlag(cmd, "divider"),
+				QuoteContent:   getStringFlag(cmd, "quote"),
 				LinkURL:        getStringFlag(cmd, "link"),
 			})
 		}
 
 		if len(newBlocks) == 0 {
-			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, or --json)"))
+			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, or --json)"))
 		}
 
 		client := api.NewClient()
@@ -1736,6 +1743,7 @@ func init() {
 	docAppendCmd.Flags().StringArray("ordered", nil, "Append ordered list items (repeatable)")
 	docAppendCmd.Flags().String("todo", "", "Append a todo item")
 	docAppendCmd.Flags().Bool("divider", false, "Append a divider")
+	docAppendCmd.Flags().String("quote", "", "Append a quote block")
 	docAppendCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
 	docAppendCmd.Flags().Int("index", -1, "Insertion position (-1=end, 0=beginning)")
 	docAppendCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
@@ -1760,6 +1768,7 @@ func init() {
 	docReplaceCmd.Flags().StringArray("ordered", nil, "Replace with ordered list items (repeatable)")
 	docReplaceCmd.Flags().String("todo", "", "Replace with todo item")
 	docReplaceCmd.Flags().Bool("divider", false, "Replace with divider")
+	docReplaceCmd.Flags().String("quote", "", "Replace with quote block")
 	docReplaceCmd.Flags().Bool("json", false, "Read raw block JSON from stdin")
 	docReplaceCmd.Flags().String("link", "", "Hyperlink URL to apply to the text")
 
