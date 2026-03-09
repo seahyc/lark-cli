@@ -398,6 +398,7 @@ Content flags (at least one required):
 Other flags:
 - `--block-id`: Parent block ID to append under (default: document root)
 - `--index`: Insertion position (-1=end, 0=beginning)
+- `--after`: Insert after this block ID (mutually exclusive with `--index`)
 
 Examples:
 ```bash
@@ -414,7 +415,7 @@ lark doc append ABC123xyz --code "print('hello')" --language 49
 # Add a quote block
 lark doc append ABC123xyz --quote "This is important"
 
-# Create a table
+# Create a table (cells are auto-populated with content)
 lark doc append ABC123xyz --table-header "Name" --table-header "Status" --table-row "API|Done" --table-row "CLI|WIP"
 
 # Append from markdown (pipe from stdin)
@@ -603,9 +604,35 @@ Output:
 }
 ```
 
+### Move a Block
+
+```bash
+lark doc move <document-id> <block-id> [--index <position>] [--after <block-id>]
+```
+
+Moves a block to a new position by deleting and reinserting it.
+
+Options:
+- `--index`: Target position index (-1=end, 0=beginning)
+- `--after`: Insert after this block ID (mutually exclusive with `--index`)
+
+Examples:
+```bash
+lark doc move ABC123xyz doxlgXYZ123 --index 0
+lark doc move ABC123xyz doxlgXYZ123 --after doxlgABC456
+```
+
+### Show Document Outline
+
+```bash
+lark doc outline <document-id>
+```
+
+Returns only heading blocks (H1-H9) with block IDs, positions, and text. Faster than `doc blocks` for understanding document structure.
+
 ### Hyperlinks with --link
 
-The `--link` flag adds a hyperlink URL to text content in `doc append` and `doc update`. It works with `--text`, `--heading`, `--bullet`, `--ordered`, and `--todo`.
+The `--link` flag adds a hyperlink URL to text content in `doc append` and `doc update`. It works with `--text`, `--heading`, `--bullet`, `--ordered`, `--todo`, and `--quote`.
 
 Examples:
 ```bash
@@ -652,6 +679,10 @@ lark doc append ABC123xyz --heading "Project Page" --level 2 --link "https://exa
 | Delete blocks from doc | `doc delete` | Remove specific blocks by ID |
 | Update a block | `doc update` | Modify existing block content (may fail, use `doc replace` instead) |
 | Trash a file/document | `doc trash` | Move to trash in Drive |
+| Move a block | `doc move` | Reorder blocks within a document |
+| Get heading outline | `doc outline` | Fast structural overview (headings only) |
+| Append from markdown | `doc append --markdown` | Pipe markdown, auto-converts to blocks |
+| Create a table | `doc append --table-header/--table-row` | Creates table with auto-populated cells |
 
 **Default to `doc get`** - it's 2-3x smaller and sufficient for most tasks.
 
@@ -670,8 +701,11 @@ When using `doc blocks`, key block types:
 | 15 | Quote |
 | 17 | Todo/checkbox |
 | 22 | Divider |
+| 19 | Callout |
+| 22 | Divider |
 | 27 | Image |
 | 31 | Table |
+| 32 | Table cell |
 
 ## Output Format
 
