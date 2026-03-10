@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -303,6 +304,7 @@ var (
 	msgSendToType   string
 	msgSendText     string
 	msgSendImages   []string
+	msgSendFiles    []string
 	msgSendRootID   string
 	msgSendParentID string
 	msgSendMsgType  string
@@ -348,6 +350,12 @@ Examples:
 	# Image only
 	lark msg send --to oc_xxx --image ./screenshot.png
 
+	# Send file
+	lark msg send --to oc_xxx --file ./report.pdf
+
+	# Send file with a message
+	lark msg send --to oc_xxx --text "Here's the report" --file ./report.pdf
+
 	# Reply in thread
 	lark msg send --to oc_xxx --parent-id om_xxx --text "Replying here"
 
@@ -357,8 +365,12 @@ Examples:
 		if msgSendTo == "" {
 			output.Fatalf("VALIDATION_ERROR", "--to is required")
 		}
-		if msgSendText == "" && len(msgSendImages) == 0 {
-			output.Fatalf("VALIDATION_ERROR", "--text or --image is required")
+		if msgSendText == "" && len(msgSendImages) == 0 && len(msgSendFiles) == 0 {
+			output.Fatalf("VALIDATION_ERROR", "--text, --image, or --file is required")
+		}
+		if len(msgSendFiles) > 0 && (len(msgSendImages) > 0 || msgSendText != "") {
+			// Files must be sent as separate messages; mixing not supported by Lark API
+			output.Fatalf("VALIDATION_ERROR", "--file cannot be combined with --text or --image (send files as separate messages)")
 		}
 		if msgSendMsgType != "post" && msgSendMsgType != "text" {
 			output.Fatalf("VALIDATION_ERROR", "--msg-type must be 'post' or 'text'")
@@ -366,7 +378,7 @@ Examples:
 		if msgSendMsgType == "text" && len(msgSendImages) > 0 {
 			output.Fatalf("VALIDATION_ERROR", "--image is only supported with --msg-type post")
 		}
-		if msgSendMsgType == "text" && msgSendText == "" {
+		if msgSendMsgType == "text" && msgSendText == "" && len(msgSendFiles) == 0 {
 			output.Fatalf("VALIDATION_ERROR", "--text is required with --msg-type text")
 		}
 		if msgSendRootID != "" && msgSendParentID == "" {
@@ -380,6 +392,47 @@ Examples:
 		}
 
 		client := api.NewClient()
+
+		// Handle file sends (one message per file)
+		if len(msgSendFiles) > 0 {
+			var results []api.OutputSendMessage
+			for _, filePath := range msgSendFiles {
+				fileType := inferFileType(filePath)
+				fileKey, err := client.UploadFile(filePath, fileType)
+				if err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						output.Fatalf("FILE_ERROR", "file not found: %s", filePath)
+					}
+					output.Fatal("API_ERROR", err)
+				}
+				fileContent, err := buildFileContent(fileKey, fileType)
+				if err != nil {
+					output.Fatal("VALIDATION_ERROR", err)
+				}
+				var resp *api.SendMessageResponse
+				if msgSendParentID != "" {
+					resp, err = client.ReplyMessage(msgSendParentID, "file", fileContent, msgSendRootID, true)
+				} else {
+					resp, err = client.SendMessage(receiveIDType, msgSendTo, "file", fileContent)
+				}
+				if err != nil {
+					output.Fatal("API_ERROR", err)
+				}
+				results = append(results, api.OutputSendMessage{
+					Success:    true,
+					MessageID:  resp.Data.MessageID,
+					ChatID:     resp.Data.ChatID,
+					CreateTime: formatMessageTime(resp.Data.CreateTime),
+				})
+			}
+			if len(results) == 1 {
+				output.JSON(results[0])
+			} else {
+				output.JSON(results)
+			}
+			return
+		}
+
 		imageKeys := make([]string, 0, len(msgSendImages))
 		for _, imagePath := range msgSendImages {
 			imageKey, err := client.UploadMessageImage(imagePath)
@@ -1077,6 +1130,39 @@ func buildPostElements(elements []postElement) []map[string]interface{} {
 	return content
 }
 
+// inferFileType maps a file extension to a Lark file_type value.
+// Lark accepts: opus, mp4, pdf, doc, xls, ppt, stream (generic)
+func inferFileType(filePath string) string {
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".pdf":
+		return "pdf"
+	case ".doc", ".docx":
+		return "doc"
+	case ".xls", ".xlsx":
+		return "xls"
+	case ".ppt", ".pptx":
+		return "ppt"
+	case ".mp4":
+		return "mp4"
+	case ".opus":
+		return "opus"
+	default:
+		return "stream"
+	}
+}
+
+// buildFileContent creates the JSON content body for a file message.
+func buildFileContent(fileKey, fileType string) (string, error) {
+	payload := map[string]string{
+		"file_key": fileKey,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func buildPostTextStyle(isBold, isItalic bool) []string {
 	var style []string
 	if isBold {
@@ -1190,6 +1276,7 @@ func init() {
 	msgSendCmd.Flags().StringVar(&msgSendMsgType, "msg-type", "post", "Message type: post (default) or text")
 	msgSendCmd.Flags().StringVar(&msgSendParentID, "parent-id", "", "Parent message ID to reply to (optional)")
 	msgSendCmd.Flags().StringVar(&msgSendRootID, "root-id", "", "Root message ID for thread replies (optional)")
+	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message)")
 
 	// msg react flags
 	msgReactCmd.Flags().StringVar(&msgReactMessageID, "message-id", "", "Message ID to react to (required)")
