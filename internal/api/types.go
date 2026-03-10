@@ -1385,6 +1385,14 @@ type UploadImageResponse struct {
 	} `json:"data,omitempty"`
 }
 
+// UploadFileResponse is the response from POST /im/v1/files
+type UploadFileResponse struct {
+	BaseResponse
+	Data struct {
+		FileKey string `json:"file_key"`
+	} `json:"data,omitempty"`
+}
+
 // SendMessageResponse is the response from POST /im/v1/messages
 type SendMessageResponse struct {
 	BaseResponse
