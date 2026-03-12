@@ -45,12 +45,12 @@ func (c *Client) GetSheetMetadata(token, sheetID string) (*Sheet, error) {
 // token: the spreadsheet token
 // rangeStr: the range in format "sheetId!A1:Z100" or just "sheetId" for all data
 // renderOption: controls how cell values are returned:
-//   - "ToString" (default): computed values as strings/numbers
+//   - "UnformattedValue" (default): computed values as raw numbers
 //   - "Formula": raw formula strings (e.g. "=SUM(A1:A10)")
 //   - "FormattedValue": display strings with number formatting applied
 func (c *Client) GetSheetData(token, rangeStr, renderOption string) (*SheetValues, error) {
 	if renderOption == "" {
-		renderOption = "ToString"
+		renderOption = "UnformattedValue"
 	}
 	path := fmt.Sprintf("/sheets/v2/spreadsheets/%s/values/%s?valueRenderOption=%s",
 		url.PathEscape(token), url.PathEscape(rangeStr), url.QueryEscape(renderOption))
