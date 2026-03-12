@@ -124,8 +124,8 @@ Examples:
 
 		// Map friendly flag values to Lark API values
 		renderOptionMap := map[string]string{
-			"":          "ToString",
-			"value":     "ToString",
+			"":          "UnformattedValue",
+			"value":     "UnformattedValue",
 			"formula":   "Formula",
 			"formatted": "FormattedValue",
 		}
@@ -302,6 +302,19 @@ Examples:
 			output.Fatal("PARSE_ERROR", fmt.Errorf("invalid values JSON (must be array of arrays): %w", err))
 		}
 
+		// Convert booleans to 1/0 (Lark API doesn't accept bool cell type)
+		for i, row := range values {
+			for j, cell := range row {
+				if b, ok := cell.(bool); ok {
+					if b {
+						values[i][j] = 1
+					} else {
+						values[i][j] = 0
+					}
+				}
+			}
+		}
+
 		autoType, _ := cmd.Flags().GetBool("auto-type")
 		if autoType {
 			values = autoTypeValues(values)
@@ -309,7 +322,19 @@ Examples:
 
 		// Build the range string
 		if rangeSpec == "" {
-			rangeSpec = "A1"
+			// Auto-calculate range from values dimensions
+			rows := len(values)
+			cols := 0
+			for _, row := range values {
+				if len(row) > cols {
+					cols = len(row)
+				}
+			}
+			if cols == 0 {
+				cols = 1
+			}
+			endCol := columnIndexToLetter(cols)
+			rangeSpec = fmt.Sprintf("A1:%s%d", endCol, rows)
 		}
 		fullRange := sheetID + "!" + rangeSpec
 
