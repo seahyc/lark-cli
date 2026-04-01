@@ -1,6 +1,6 @@
 # lark Usage Guide
 
-A CLI tool for interacting with Lark APIs (calendar, contacts, documents). Designed for use by Claude Code.
+A CLI tool for interacting with Lark APIs (calendar, contacts, documents, messages, mail, sheets, bitable, tasks, minutes). Designed for use by Claude Code.
 
 ## Setup
 
@@ -19,6 +19,8 @@ A CLI tool for interacting with Lark APIs (calendar, contacts, documents). Desig
    - `im:message` or `im:message:send_as_bot` (send messages)
    - `im:message.reactions:read` (list reactions)
    - `im:message.reactions:write_only` (add/remove reactions)
+   - `bitable:app:readonly` (read Bitable databases)
+   - `task:task:read` (read tasks)
    - `offline_access` (for refresh tokens)
 3. Add redirect URI: `http://localhost:9999/callback`
 4. Enable "Refresh user_access_token" in Security Settings
@@ -83,10 +85,12 @@ All commands output JSON by default.
 |-------|----------|-------------|
 | `calendar` | `cal *` | Calendar events and scheduling |
 | `contacts` | `contact *` | Company directory lookup |
-| `documents` | `doc *` | Lark Docs and Drive access |
+| `documents` | `doc *`, `sheet *` | Lark Docs, Drive, and Sheets |
 | `messages` | `msg *`, `chat *` | Chat and messaging |
 | `mail` | `mail *` | Email via IMAP |
 | `minutes` | `minutes *` | Meeting recordings |
+| `bitable` | `bitable *` | Bitable database access |
+| `tasks` | `task *` | Task management |
 
 By default, `lark auth login` requests all scopes. Use `--scopes` for minimal permissions.
 
@@ -98,14 +102,20 @@ By default, `lark auth login` requests all scopes. Use `--scopes` for minimal pe
 # Today's events (default)
 ./lark cal list
 
-# This week
-./lark cal list --week
+# Today's events with your RSVP status
+./lark cal list --rsvp
+
+# This week with RSVP status
+./lark cal list --week --rsvp
 
 # Custom date range (ISO 8601)
 ./lark cal list --from 2026-01-02 --to 2026-01-05
 
 # Events awaiting your RSVP
 ./lark cal list --pending --from 2026-01-02 --to 2026-01-31
+
+# Include all attendee info (slower)
+./lark cal list --week --attendees
 
 # With conflict detection
 ./lark cal list --week --detect-conflicts --buffer-minutes 15
@@ -249,6 +259,28 @@ Flags:
 ./lark contact list-dept od_xxxx
 ```
 
+#### Search Users by Name
+
+```bash
+./lark contact search "Jane"
+./lark contact search "John Smith"
+```
+
+Output:
+```json
+{
+  "contacts": [
+    {
+      "user_id": "ou_xxx",
+      "open_id": "ou_xxx",
+      "name": "Jane Doe",
+      "department": "Engineering"
+    }
+  ],
+  "count": 1
+}
+```
+
 #### Search Departments
 
 ```bash
@@ -256,6 +288,35 @@ Flags:
 ```
 
 ### Messages
+
+#### Search Chats
+
+```bash
+# Find chats and groups by name
+./lark chat search "project team"
+./lark chat search "engineering" --limit 10
+```
+
+Flags:
+- `--limit`: Maximum number of chats to retrieve (0 = no limit)
+
+Output:
+```json
+{
+  "query": "project team",
+  "chats": [
+    {
+      "chat_id": "oc_xxxxx",
+      "name": "Project Team Alpha",
+      "description": "Main project channel",
+      "owner_id": "ou_xxx",
+      "external": false,
+      "chat_status": "normal"
+    }
+  ],
+  "count": 1
+}
+```
 
 #### Get Chat History
 
@@ -387,6 +448,13 @@ Send messages to users or group chats as the bot.
 
 # Reply inside an existing thread
 ./lark msg send --to oc_xxxx --root-id om_root --parent-id om_parent --text "Follow-up"
+
+# Send a file (PDF, DOCX, XLSX, PPTX, MP4, etc.)
+./lark msg send --to oc_xxxx --file ./report.pdf
+./lark msg send --to oc_xxxx --file ./deck.pptx
+
+# Send multiple files (each sent as a separate message)
+./lark msg send --to oc_xxxx --file ./report.pdf --file ./appendix.xlsx
 ```
 
 Markdown-lite syntax supported:
@@ -405,6 +473,7 @@ Flags:
 - `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) - auto-detected if omitted
 - `--text`: Message text content (markdown-lite). Use `{{image}}` to place images.
 - `--image`: Image file path (repeatable)
+- `--file`: File path to send (repeatable; each file sent as a separate message). Supported: pdf, doc/docx, xls/xlsx, ppt/pptx, mp4, opus, and other file types. **Cannot be combined with `--text` or `--image`.** Max file size: 30MB.
 - `--msg-type`: Message type: `post` (default) or `text`
 - `--parent-id`: Parent message ID to reply in thread (optional)
 - `--root-id`: Root message ID for thread replies (optional)
@@ -1018,6 +1087,288 @@ Output:
   "path": "./emails/2026-01-14 Q4 Report.eml",
   "size": 15234
 }
+```
+
+### Sheets
+
+Read and write Lark Sheets (spreadsheets).
+
+The spreadsheet_token is from the URL:
+- URL: `https://xxx.larksuite.com/sheets/T4mHsrFyzhXrj0tVzRslUGx8gkA`
+- Token: `T4mHsrFyzhXrj0tVzRslUGx8gkA`
+
+#### List Sheet Tabs
+
+```bash
+./lark sheet list <spreadsheet_token>
+```
+
+Output:
+```json
+{
+  "spreadsheet_token": "T4mHsrFyzhXrj0tVzRslUGx8gkA",
+  "sheets": [
+    {
+      "sheet_id": "abc123",
+      "title": "Sheet1",
+      "index": 0,
+      "row_count": 100,
+      "column_count": 10
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Read Sheet Data
+
+```bash
+# Read first sheet (up to 1000 rows)
+./lark sheet read <spreadsheet_token>
+
+# Read specific sheet
+./lark sheet read <spreadsheet_token> --sheet abc123
+
+# Read a range
+./lark sheet read <spreadsheet_token> --range A1:D20
+
+# Read as display strings (e.g. "-12%" instead of -0.116)
+./lark sheet read <spreadsheet_token> --render formatted
+
+# Read raw formulas
+./lark sheet read <spreadsheet_token> --render formula
+```
+
+Flags:
+- `--sheet`: Sheet ID (default: first sheet by index)
+- `--range`: Cell range in A1 notation (default: all data up to 1000 rows)
+- `--render`: `value` (default), `formatted` (display strings), or `formula` (raw formulas)
+
+Output:
+```json
+{
+  "spreadsheet_token": "T4mHsrFyzhXrj0tVzRslUGx8gkA",
+  "sheet_id": "abc123",
+  "range": "abc123!A1:D3",
+  "row_count": 3,
+  "column_count": 4,
+  "values": [
+    ["Header1", "Header2", "Header3", "Header4"],
+    ["Value1", "Value2", 123, true],
+    ["Row2", null, 456, false]
+  ]
+}
+```
+
+Cells with file attachments return structured objects with `fileToken`, `mimeType`, `size`, and `text`.
+
+#### Write Sheet Data
+
+```bash
+# Write JSON array of arrays starting at A1
+./lark sheet write <spreadsheet_token> --values '[["a","b"],["c","d"]]'
+
+# Write to specific sheet and range
+./lark sheet write <spreadsheet_token> --sheet abc123 --range A2 --values '[["x","y"]]'
+
+# Auto-convert date strings and number strings to proper types
+./lark sheet write <spreadsheet_token> --values '[["2026-01-15","42"]]' --auto-type
+
+# Pipe from stdin
+echo '[["a","b"]]' | ./lark sheet write <spreadsheet_token>
+```
+
+Flags:
+- `--sheet`: Sheet ID (default: first sheet)
+- `--range`: Start cell or range in A1 notation (default: A1)
+- `--values`: JSON array of arrays
+- `--auto-type`: Convert date strings (`YYYY-MM-DD`) to serial numbers and numeric strings to numbers
+
+**Note:** Lark Sheets stores dates as serial numbers. Write with `--auto-type` then apply a date format with `sheet style --format "yyyy-MM-dd"`.
+
+#### Create Spreadsheet
+
+```bash
+./lark sheet create --title "My Spreadsheet"
+./lark sheet create --title "My Spreadsheet" --folder fldbcRho46N6MQ3mJkOAuPabcef
+```
+
+#### Add Sheet Tab
+
+```bash
+./lark sheet add-tab <spreadsheet_token> --title "Tab Name"
+./lark sheet add-tab <spreadsheet_token> --title "Tab Name" --index 0
+```
+
+#### Apply Cell Formatting
+
+```bash
+# Bold header row
+./lark sheet style <spreadsheet_token> --range A1:Q1 --bold
+
+# Format date columns
+./lark sheet style <spreadsheet_token> --range H2:I100 --format "yyyy-MM-dd"
+
+# Format numbers
+./lark sheet style <spreadsheet_token> --range J2:K100 --format "#,##0"
+
+# Bold and format together
+./lark sheet style <spreadsheet_token> --range A1:A1 --bold --format "#,##0"
+```
+
+Common format strings: `"yyyy-MM-dd"`, `"yyyy/MM/dd HH:mm:ss"`, `"#,##0"`, `"#,##0.00"`, `"0%"`, `"0.00%"`, `"$#,##0"`, `"@"` (text)
+
+Flags:
+- `--range` (required): Cell range in A1:B1 notation
+- `--sheet`: Sheet ID (default: first sheet)
+- `--bold`: Apply bold formatting
+- `--format`: Number/date format string
+
+#### Resize Columns
+
+```bash
+# Set specific column widths (0-based index)
+./lark sheet resize <spreadsheet_token> --widths '{"0":60,"1":280,"2":200}'
+
+# Set all columns to same width
+./lark sheet resize <spreadsheet_token> --all 200 --cols 17
+```
+
+#### Download Cell Attachment
+
+```bash
+./lark sheet download <file_token> --spreadsheet <spreadsheet_token> -o ./output.pdf
+```
+
+The `file_token` comes from the `fileToken` field in `sheet read` output.
+
+### Bitable
+
+Access Lark Bitable (database) content.
+
+The app_token is from the URL:
+- URL: `https://xxx.larksuite.com/base/ABC123xyz`
+- Token: `ABC123xyz`
+
+#### List Tables
+
+```bash
+./lark bitable tables <app_token>
+```
+
+Output:
+```json
+{
+  "app_token": "ABC123xyz",
+  "tables": [
+    {"table_id": "tblXYZ789", "name": "Projects"},
+    {"table_id": "tblABC456", "name": "Tasks"}
+  ],
+  "count": 2
+}
+```
+
+#### List Fields
+
+```bash
+./lark bitable fields <app_token> <table_id>
+```
+
+Output:
+```json
+{
+  "fields": [
+    {"field_id": "fldAAA111", "field_name": "Name", "type": "text", "is_primary": true},
+    {"field_id": "fldBBB222", "field_name": "Status", "type": "select"}
+  ],
+  "count": 2
+}
+```
+
+Field types: `text`, `number`, `select`, `multi_select`, `date`, `checkbox`, `person`, `phone`, `url`, `attachment`, `link`, `formula`, `duplex_link`, `location`, `created_time`, `modified_time`, `auto_number`
+
+#### List Records
+
+```bash
+# List all records
+./lark bitable records <app_token> <table_id>
+
+# With limit
+./lark bitable records <app_token> <table_id> --limit 100
+
+# Filter by view
+./lark bitable records <app_token> <table_id> --view <view_id>
+```
+
+Flags:
+- `--limit`: Maximum number of records (default: no limit)
+- `--view`: View ID to filter records
+- `--filter`: Filter expression (Lark API filter syntax)
+
+Output:
+```json
+{
+  "records": [
+    {
+      "record_id": "recAAA111",
+      "fields": {
+        "Name": "Project Alpha",
+        "Status": "In Progress",
+        "Due Date": 1704067200000
+      }
+    }
+  ],
+  "count": 1,
+  "has_more": false
+}
+```
+
+**Note:** Date fields return Unix timestamps in milliseconds. Person fields return user IDs (use `contact get` to resolve names).
+
+### Tasks
+
+View your Lark Tasks.
+
+#### List Tasks
+
+```bash
+# Show all incomplete tasks
+./lark task list
+
+# Show with limit
+./lark task list --limit 20
+
+# Include completed tasks
+./lark task list --completed
+```
+
+Flags:
+- `--limit`: Maximum number of tasks (default: no limit)
+- `--completed`: Include completed tasks
+
+Output:
+```json
+{
+  "tasks": [
+    {
+      "guid": "d300e75f-c56a-4be9-80d6-e47653b3e1a9",
+      "summary": "Review Q4 budget proposal",
+      "description": "Check the numbers and approve",
+      "due_date": "2026-02-05T00:00:00+08:00",
+      "is_all_day": true,
+      "status": "todo",
+      "creator_name": "John Doe"
+    }
+  ],
+  "count": 1,
+  "has_more": false
+}
+```
+
+#### Get Task Details
+
+```bash
+./lark task get <task_guid>
 ```
 
 ### Minutes
