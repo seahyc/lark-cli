@@ -6,13 +6,26 @@ import (
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 	"github.com/yjwong/lark-cli/internal/api"
 )
 
+// MarkdownTableData holds parsed table data from markdown for 2-phase table creation.
+type MarkdownTableData struct {
+	Headers []string
+	Rows    []string // each row is pipe-separated cells
+}
+
+// pendingMarkdownTables collects tables found during markdown parsing.
+// The caller (doc.go append) reads and drains this after parseMarkdownToBlocks returns.
+var pendingMarkdownTables []MarkdownTableData
+
 // parseMarkdownToBlocks converts markdown text into Lark document blocks.
 func parseMarkdownToBlocks(source []byte) []api.DocumentBlock {
-	md := goldmark.New()
+	pendingMarkdownTables = nil // reset
+	md := goldmark.New(goldmark.WithExtensions(extension.Table))
 	reader := text.NewReader(source)
 	doc := md.Parser().Parse(reader)
 
@@ -112,8 +125,64 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 		return []api.DocumentBlock{{BlockType: 22, Divider: &api.DividerBlock{}}}
 
 	default:
+		// Handle goldmark extension table nodes
+		if table, ok := node.(*east.Table); ok {
+			return convertMarkdownTable(table, source)
+		}
 		return nil
 	}
+}
+
+// convertMarkdownTable extracts header and row data from a goldmark table AST node,
+// stores it in pendingMarkdownTables for 2-phase creation, and returns a table block.
+func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock {
+	var headers []string
+	var rows []string
+
+	for child := table.FirstChild(); child != nil; child = child.NextSibling() {
+		switch row := child.(type) {
+		case *east.TableHeader:
+			// The header contains a single row of cells
+			for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+				if _, ok := cell.(*east.TableCell); ok {
+					headers = append(headers, strings.TrimSpace(nodeText(cell, source)))
+				}
+			}
+		case *east.TableRow:
+			var cells []string
+			for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+				if _, ok := cell.(*east.TableCell); ok {
+					cells = append(cells, strings.TrimSpace(nodeText(cell, source)))
+				}
+			}
+			rows = append(rows, strings.Join(cells, "|"))
+		}
+	}
+
+	if len(headers) == 0 {
+		return nil
+	}
+
+	pendingMarkdownTables = append(pendingMarkdownTables, MarkdownTableData{
+		Headers: headers,
+		Rows:    rows,
+	})
+
+	// Return a placeholder table block (block_type 31) with dimensions.
+	// The actual API creation and cell population is handled by the caller.
+	colSize := len(headers)
+	rowSize := 1 + len(rows)
+	return []api.DocumentBlock{{
+		BlockType: 31,
+		Table: &api.TableBlock{
+			Property: &api.TableProperty{
+				RowSize:     rowSize,
+				ColumnSize:  colSize,
+				ColumnWidth: calcColumnWidths(headers, rows),
+				HeaderRow:   true,
+			},
+		},
+	}}
 }
 
 // nodeText extracts text content from an AST node.
