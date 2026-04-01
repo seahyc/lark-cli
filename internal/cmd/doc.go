@@ -801,6 +801,37 @@ func buildBlocks(opts BlockBuildOpts) []api.DocumentBlock {
 	return blocks
 }
 
+// calcColumnWidths computes per-column widths based on content length.
+// Each width is clamped to [150, 500] pixels, scaled at ~8px per character.
+func calcColumnWidths(headers []string, rows []string) []int {
+	colSize := len(headers)
+	maxLen := make([]int, colSize)
+	for i, h := range headers {
+		if len(h) > maxLen[i] {
+			maxLen[i] = len(h)
+		}
+	}
+	for _, row := range rows {
+		cells := strings.SplitN(row, "|", colSize+1)
+		for i := 0; i < colSize && i < len(cells); i++ {
+			if l := len(strings.TrimSpace(cells[i])); l > maxLen[i] {
+				maxLen[i] = l
+			}
+		}
+	}
+	widths := make([]int, colSize)
+	for i, l := range maxLen {
+		w := l * 8
+		if w < 150 {
+			w = 150
+		} else if w > 500 {
+			w = 500
+		}
+		widths[i] = w
+	}
+	return widths
+}
+
 // buildTableBlocks creates a table block with the given dimensions.
 // The Lark API auto-generates cell blocks when a table is created.
 // Cell content can be populated via separate append calls to each cell.
@@ -815,9 +846,10 @@ func buildTableBlocks(headers []string, rows []string) []api.DocumentBlock {
 		BlockType: 31,
 		Table: &api.TableBlock{
 			Property: &api.TableProperty{
-				RowSize:    rowSize,
-				ColumnSize: colSize,
-				HeaderRow:  true,
+				RowSize:     rowSize,
+				ColumnSize:  colSize,
+				ColumnWidth: calcColumnWidths(headers, rows),
+				HeaderRow:   true,
 			},
 		},
 	}
@@ -947,6 +979,15 @@ Examples:
 				output.Fatal("READ_ERROR", err)
 			}
 			blocks = parseMarkdownToBlocks(data)
+			// Separate table blocks from non-table blocks;
+			// markdown tables need 2-phase creation (handled below).
+			var nonTableBlocks []api.DocumentBlock
+			for _, b := range blocks {
+				if b.BlockType != 31 {
+					nonTableBlocks = append(nonTableBlocks, b)
+				}
+			}
+			blocks = nonTableBlocks
 		} else {
 			bulletItems, _ := cmd.Flags().GetStringArray("bullet")
 			orderedItems, _ := cmd.Flags().GetStringArray("ordered")
@@ -969,7 +1010,7 @@ Examples:
 		tableHeaders, _ := cmd.Flags().GetStringArray("table-header")
 		tableRows, _ := cmd.Flags().GetStringArray("table-row")
 
-		if len(blocks) == 0 && len(tableHeaders) == 0 {
+		if len(blocks) == 0 && len(tableHeaders) == 0 && len(pendingMarkdownTables) == 0 {
 			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, --table-header, --json, or --markdown)"))
 		}
 
@@ -1033,6 +1074,51 @@ Examples:
 			}
 			allCreatedBlocks = append(allCreatedBlocks, createdTableBlocks...)
 		}
+
+		// Handle tables extracted from markdown input
+		for _, mdTable := range pendingMarkdownTables {
+			mdTableBlocks := buildTableBlocks(mdTable.Headers, mdTable.Rows)
+			createdMdTableBlocks, mdTableRevID, err := client.CreateDocumentBlocks(documentID, blockID, mdTableBlocks, index)
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+			revisionID = mdTableRevID
+
+			for _, tb := range createdMdTableBlocks {
+				if tb.BlockType == 31 && tb.Table != nil && len(tb.Table.Cells) > 0 {
+					var cellContents []string
+					cellContents = append(cellContents, mdTable.Headers...)
+					colSize := len(mdTable.Headers)
+					for _, row := range mdTable.Rows {
+						cells := strings.Split(row, "|")
+						for i := 0; i < colSize; i++ {
+							if i < len(cells) {
+								cellContents = append(cellContents, strings.TrimSpace(cells[i]))
+							} else {
+								cellContents = append(cellContents, "")
+							}
+						}
+					}
+
+					for i, cellID := range tb.Table.Cells {
+						if i < len(cellContents) && cellContents[i] != "" {
+							time.Sleep(200 * time.Millisecond)
+							textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
+							_, _, cellErr := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
+							if cellErr != nil {
+								time.Sleep(500 * time.Millisecond)
+								_, _, cellErr = client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
+								if cellErr != nil {
+									output.Fatal("API_ERROR", fmt.Errorf("failed to populate table cell %d: %w", i, cellErr))
+								}
+							}
+						}
+					}
+				}
+			}
+			allCreatedBlocks = append(allCreatedBlocks, createdMdTableBlocks...)
+		}
+		pendingMarkdownTables = nil
 
 		output.JSON(api.OutputDocumentAppend{
 			Success:            true,
