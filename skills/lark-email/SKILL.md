@@ -1,11 +1,11 @@
 ---
 name: email
-description: Read and search emails from Lark Mail via IMAP with local caching. Use when user asks about email, inbox, or messages.
+description: Read, search, send, reply, and manage emails from Lark Mail via IMAP/SMTP with local caching. Use when user asks about email, inbox, messages, sending, or replying.
 ---
 
 # Email Management Skill
 
-Read and search emails from Lark Mail via the `lark` CLI using IMAP with local caching.
+Read, search, send, reply, and manage emails from Lark Mail via the `lark` CLI using IMAP/SMTP with local caching.
 
 ## Setup
 
@@ -109,6 +109,87 @@ The UID is obtained from search results.
 ```bash
 lark mail fetch --uid <uid>
 lark mail fetch --uid <uid> --output ./emails/
+```
+
+### Reply to Email
+Reply to an email by UID, automatically setting threading headers:
+
+```bash
+# Simple reply
+lark mail reply --uid 12345 --body "Thanks for the update"
+
+# Reply with attachment
+lark mail reply --uid 12345 --body "Please see attached" --attach report.pdf
+
+# Reply from a different mailbox
+lark mail reply --mailbox Archive --uid 12345 --body "Will review"
+
+# Reply with body from file
+lark mail reply --uid 12345 --body-file reply.txt --attach video.mp4
+
+# Save reply as draft instead of sending
+lark mail reply --uid 12345 --body "Will review" --draft
+```
+
+Flags:
+- `--uid`: UID of email to reply to (required)
+- `--mailbox`, `-m`: Mailbox containing the email (default: INBOX)
+- `--body`: Reply body text
+- `--body-file`: Read reply body from file
+- `--attach`: File path(s) to attach (can be repeated)
+- `--cc`: CC email address(es)
+- `--draft`: Save as draft instead of sending
+
+### Send Email
+Send a new email via SMTP:
+
+```bash
+# Simple send
+lark mail send --to user@example.com --subject "Hello" --body "Hi there"
+
+# With CC and attachment
+lark mail send --to user@example.com --cc other@example.com --subject "Report" --body "See attached" --attach file.pdf
+
+# Thread a reply manually
+lark mail send --to user@example.com --subject "Re: Thread" --body "Reply" --in-reply-to "<msgid@server>"
+```
+
+Flags:
+- `--to`: Recipient email address(es) (required)
+- `--subject`: Email subject
+- `--body`: Email body text
+- `--body-file`: Read body from file
+- `--attach`: File path(s) to attach
+- `--cc`: CC email address(es)
+- `--in-reply-to`: Message-ID for threading
+- `--references`: Message-ID chain for threading
+
+**Note**: SMTP server is derived from the IMAP host (imap.x.com → smtp.x.com) unless smtp_host/smtp_port are set in mail.json.
+
+### Save Draft
+Save an email as a draft in the Drafts folder:
+
+```bash
+lark mail draft --to user@example.com --subject "Hello" --body "Hi there"
+lark mail draft --to user@example.com --subject "Re: Thread" --body-file msg.txt --attach file.pdf
+```
+
+Flags are the same as `send`.
+
+### Delete Email
+Flag an email as deleted and expunge:
+
+```bash
+lark mail delete --uid 12345
+lark mail delete --mailbox Archive --uid 12345
+```
+
+### Move Email
+Move an email to a different mailbox:
+
+```bash
+lark mail move --uid 12345 --dest Archive
+lark mail move --mailbox INBOX --uid 12345 --dest Trash
 ```
 
 ## Output Formats
