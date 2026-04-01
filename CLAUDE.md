@@ -71,6 +71,7 @@ See `USAGE.md` for full CLI documentation. Main commands:
 
 ### Contacts (`contact`)
 - `contact get <user_id>` - Get user info by ID
+- `contact search <name>` - Search users by name
 - `contact list-dept [dept_id]` - List users in department
 - `contact search-dept <query>` - Search departments by name
 
@@ -79,11 +80,13 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - `msg resource` - Download message attachments
 - `msg send` - Send messages to users or chats
 - `msg recall` - Recall/delete a message
+- `msg react` - Add/list/remove reactions
 - `chat search` - Find chats and groups
 
 **Message Sending Features:**
 - Send text messages with line breaks (`\n` creates newlines)
 - Send images with `--image` and place `{{image}}` in text to control placement
+- Send files with `--file` (pdf, docx, xlsx, pptx, mp4, etc.)
 - Mention users with `@{ou_xxx}` placeholders
 - Include links with markdown `[text](url)`
 - Send to emails, user IDs, or chat IDs
@@ -91,10 +94,32 @@ See `USAGE.md` for full CLI documentation. Main commands:
 - Support escape sequences (\n, \t, \", \\)
 
 ### Documents (`doc`)
+- `doc search <query>` - Search Drive documents
 - `doc list [folder_token]` - List items in a Drive folder
 - `doc get <document_id>` - Get document content as markdown
 - `doc blocks <document_id>` - Get document block structure (JSON)
+- `doc comments <document_id>` - Get document comments
 - `doc wiki <node_token>` - Resolve wiki node to document token
+- `doc wiki-search <query>` - Search wiki nodes
+
+### Sheets (`sheet`)
+- `sheet list <token>` - List tabs in a spreadsheet
+- `sheet read <token>` - Read cell data
+- `sheet write <token>` - Write cell values
+- `sheet create` - Create a new spreadsheet
+- `sheet add-tab <token>` - Add a sheet tab
+- `sheet style <token>` - Apply bold/number formatting
+- `sheet resize <token>` - Resize column widths
+- `sheet download <file_token>` - Download cell attachment
+
+### Bitable (`bitable`)
+- `bitable tables <app_token>` - List tables in a Bitable
+- `bitable fields <app_token> <table_id>` - List fields in a table
+- `bitable records <app_token> <table_id>` - List records
+
+### Tasks (`task`)
+- `task list` - List your tasks (incomplete by default)
+- `task get <guid>` - Get task details
 
 ### Mail (`mail`)
 - `mail setup` - Configure IMAP credentials (interactive)
