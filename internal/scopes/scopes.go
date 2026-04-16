@@ -94,11 +94,20 @@ var Groups = map[string]ScopeGroup{
 		},
 		Commands: []string{"meetings"},
 	},
+	"approval": {
+		Name:        "approval",
+		Description: "Approval workflows",
+		Scopes: []string{
+			"approval:approval", "approval:approval:readonly",
+			"approval:instance:write", "approval:task:write",
+		},
+		Commands: []string{"approval"},
+	},
 }
 
 // AllGroupNames returns all scope group names in a consistent order
 func AllGroupNames() []string {
-	return []string{"calendar", "contacts", "documents", "bitable", "messages", "mail", "minutes", "tasks", "meetings"}
+	return []string{"calendar", "contacts", "documents", "bitable", "messages", "mail", "minutes", "tasks", "meetings", "approval"}
 }
 
 // GetScopesForGroups returns the combined scopes for the given group names
