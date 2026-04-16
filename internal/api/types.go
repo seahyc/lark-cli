@@ -2430,3 +2430,129 @@ type AddTaskMemberRequest struct {
 type TaskReminderRequest struct {
 	RelativeFireMinute int `json:"relative_fire_minute"`
 }
+
+// --- Bitable Write Types ---
+
+// BitableApp represents a bitable app's metadata
+type BitableApp struct {
+	AppToken   string `json:"app_token"`
+	Name       string `json:"name"`
+	Revision   int    `json:"revision,omitempty"`
+	IsAdvanced bool   `json:"is_advanced,omitempty"`
+	TimeZone   string `json:"time_zone,omitempty"`
+}
+
+// CreateBitableRequest creates a new bitable
+type CreateBitableRequest struct {
+	Name        string `json:"name"`
+	FolderToken string `json:"folder_token,omitempty"`
+}
+
+// CreateBitableResponse returns the new bitable's metadata
+type CreateBitableResponse struct {
+	BaseResponse
+	Data struct {
+		App *BitableApp `json:"app"`
+	} `json:"data"`
+}
+
+// GetBitableResponse returns bitable metadata
+type GetBitableResponse struct {
+	BaseResponse
+	Data struct {
+		App *BitableApp `json:"app"`
+	} `json:"data"`
+}
+
+// CreateTableRequest creates a new table
+type CreateTableRequest struct {
+	Table struct {
+		Name string `json:"name"`
+	} `json:"table"`
+}
+
+// CreateTableResponse returns the new table id
+type CreateTableResponse struct {
+	BaseResponse
+	Data struct {
+		TableID string `json:"table_id"`
+	} `json:"data"`
+}
+
+// CreateFieldRequest creates a new field
+type CreateFieldRequest struct {
+	FieldName string                 `json:"field_name"`
+	Type      int                    `json:"type"`
+	Property  map[string]interface{} `json:"property,omitempty"`
+}
+
+// UpdateFieldRequest updates an existing field
+type UpdateFieldRequest struct {
+	FieldName string                 `json:"field_name,omitempty"`
+	Type      int                    `json:"type,omitempty"`
+	Property  map[string]interface{} `json:"property,omitempty"`
+}
+
+// CreateFieldResponse wraps the created field
+type CreateFieldResponse struct {
+	BaseResponse
+	Data struct {
+		Field *BitableField `json:"field"`
+	} `json:"data"`
+}
+
+// CreateRecordRequest creates a single record
+type CreateRecordRequest struct {
+	Fields map[string]interface{} `json:"fields"`
+}
+
+// CreateRecordResponse wraps the created record
+type CreateRecordResponse struct {
+	BaseResponse
+	Data struct {
+		Record *BitableRecord `json:"record"`
+	} `json:"data"`
+}
+
+// UpdateRecordRequest updates a record
+type UpdateRecordRequest struct {
+	Fields map[string]interface{} `json:"fields"`
+}
+
+// BatchCreateRecordsRequest batch-creates records
+type BatchCreateRecordsRequest struct {
+	Records []CreateRecordRequest `json:"records"`
+}
+
+// BatchCreateRecordsResponse wraps created records
+type BatchCreateRecordsResponse struct {
+	BaseResponse
+	Data struct {
+		Records []BitableRecord `json:"records"`
+	} `json:"data"`
+}
+
+// BatchDeleteRecordsRequest batch-deletes records by id
+type BatchDeleteRecordsRequest struct {
+	Records []string `json:"records"`
+}
+
+// SearchRecordsRequest searches records with filter/sort
+type SearchRecordsRequest struct {
+	ViewID       string                   `json:"view_id,omitempty"`
+	FieldNames   []string                 `json:"field_names,omitempty"`
+	Sort         []map[string]interface{} `json:"sort,omitempty"`
+	Filter       map[string]interface{}   `json:"filter,omitempty"`
+	Automatic    bool                     `json:"automatic_fields,omitempty"`
+}
+
+// SearchRecordsResponse wraps search results
+type SearchRecordsResponse struct {
+	BaseResponse
+	Data struct {
+		HasMore   bool            `json:"has_more"`
+		PageToken string          `json:"page_token,omitempty"`
+		Total     int             `json:"total,omitempty"`
+		Items     []BitableRecord `json:"items,omitempty"`
+	} `json:"data"`
+}
