@@ -2556,3 +2556,64 @@ type SearchRecordsResponse struct {
 		Items     []BitableRecord `json:"items,omitempty"`
 	} `json:"data"`
 }
+
+// --- Wiki Write Types ---
+
+// WikiSpace represents a wiki space.
+type WikiSpace struct {
+	SpaceID          string `json:"space_id"`
+	Name             string `json:"name"`
+	Description      string `json:"description,omitempty"`
+	SpaceType        string `json:"space_type,omitempty"`
+	Visibility       string `json:"visibility,omitempty"`
+	OpenSharing      string `json:"open_sharing,omitempty"`
+}
+
+// WikiSpacesResponse wraps a list of wiki spaces.
+type WikiSpacesResponse struct {
+	BaseResponse
+	Data struct {
+		HasMore   bool        `json:"has_more"`
+		PageToken string      `json:"page_token,omitempty"`
+		Items     []WikiSpace `json:"items,omitempty"`
+	} `json:"data"`
+}
+
+// WikiSpaceResponse wraps a single wiki space.
+type WikiSpaceResponse struct {
+	BaseResponse
+	Data struct {
+		Space *WikiSpace `json:"space"`
+	} `json:"data"`
+}
+
+// CreateWikiNodeRequest creates a wiki node.
+type CreateWikiNodeRequest struct {
+	ObjType         string `json:"obj_type"` // doc, docx, sheet, bitable, mindnote, file, slides
+	ParentNodeToken string `json:"parent_node_token,omitempty"`
+	NodeType        string `json:"node_type,omitempty"` // origin (default) or shortcut
+	OriginNodeToken string `json:"origin_node_token,omitempty"`
+	Title           string `json:"title,omitempty"`
+}
+
+// CreateWikiNodeResponse wraps the created wiki node.
+type CreateWikiNodeResponse struct {
+	BaseResponse
+	Data struct {
+		Node *WikiNode `json:"node"`
+	} `json:"data"`
+}
+
+// MoveWikiNodeRequest moves a wiki node under a new parent.
+type MoveWikiNodeRequest struct {
+	TargetParentToken string `json:"target_parent_token,omitempty"`
+	TargetSpaceID     string `json:"target_space_id,omitempty"`
+}
+
+// MoveWikiNodeResponse wraps the moved wiki node.
+type MoveWikiNodeResponse struct {
+	BaseResponse
+	Data struct {
+		Node *WikiNode `json:"node"`
+	} `json:"data"`
+}
