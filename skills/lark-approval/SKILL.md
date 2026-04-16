@@ -133,6 +133,12 @@ Grant with:
 lark auth login --add --scopes approval
 ```
 
+> **Scope-name note:** Lark's official docs sometimes list read-side scopes
+> as `approval:instance:read` / `approval:task:read` rather than the
+> umbrella `approval:approval[:readonly]` names we use. If an API call
+> returns `SCOPE_ERROR`, check the current open-platform docs for the
+> exact scope string and update `internal/scopes/scopes.go` accordingly.
+
 ## Notes
 
 - All commands use the tenant token. Lark's approval action endpoints require a tenant token even for user-driven actions — the `--user` flag supplies the acting identity.
