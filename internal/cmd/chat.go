@@ -134,9 +134,15 @@ var chatGetCmd = &cobra.Command{
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
+		// Echo chat_id from request since Lark's response omits it
+		if chat != nil && chat.ChatID == "" {
+			chat.ChatID = args[0]
+		}
 		output.JSON(chat)
 	},
 }
+
+var chatCreateTo string
 
 var chatCreateCmd = &cobra.Command{
 	Use:   "create",
@@ -145,20 +151,32 @@ var chatCreateCmd = &cobra.Command{
 
 Note: Members must have interacted with the bot before they can be added.
 If you don't have a pre-existing bot-user relationship, create the chat empty
-and have members join via the share link (lark chat link <chat-id>).`,
+and share the join link (lark chat link <chat-id>).
+
+Examples:
+  lark chat create --name "Launch Room"                              # empty chat
+  lark chat create --name "1:1 w/ Francis" --to ou_f87351...          # with one person
+  lark chat create --name "1:1 w/ Francis" --to "Francis Goh"         # by name
+  lark chat create --name "Sprint" --members ou_a,ou_b,ou_c          # with multiple`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if chatCreateName == "" {
 			output.Fatalf("VALIDATION_ERROR", "--name is required")
 		}
-		// Create is tenant-only by Lark API design — always use bot identity
-		memberIDs := resolveMembers(chatCreateMembers)
+		// Merge --to and --members into a single list, resolving names/emails to open_ids
+		members := append([]string{}, chatCreateMembers...)
+		if chatCreateTo != "" {
+			members = append(members, chatCreateTo)
+		}
+		memberIDs := resolveMembers(members)
+
 		client := api.NewClient()
 		req := &api.CreateChatRequest{
 			Name:        chatCreateName,
 			Description: chatCreateDescription,
 			UserIDList:  memberIDs,
 		}
-		resp, err := client.CreateChat(req, false) // always bot
+		// Create is tenant-only by Lark API design — always use bot identity
+		resp, err := client.CreateChat(req, false)
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
@@ -169,16 +187,19 @@ and have members join via the share link (lark chat link <chat-id>).`,
 	},
 }
 
+var chatDeleteAs string
+
 var chatDeleteCmd = &cobra.Command{
 	Use:   "delete <chat-id>",
 	Short: "Disband (delete) a group chat",
 	Long: `Disband a group chat. Requires owner privileges.
 
-Only the chat owner can disband. Bot-created chats are owned by the bot,
-so use --as bot (default) to delete them.`,
+Defaults to --as bot since chats created via 'lark chat create' are bot-owned.
+Pass --as user to delete chats you personally own.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		asUser := chatAs == "user"
+		// Override the persistent chatAs with local --as if provided
+		asUser := chatDeleteAs == "user"
 		client := api.NewClient()
 		if err := client.DeleteChat(args[0], asUser); err != nil {
 			output.Fatal("API_ERROR", err)
@@ -412,19 +433,32 @@ Examples:
 	},
 }
 
-// resolveMembers converts emails to open_ids, passes through other IDs unchanged.
+// resolveMembers converts emails or names to open_ids, passes through ou_* IDs unchanged.
 func resolveMembers(members []string) []string {
 	var resolved []string
 	client := api.NewClient()
 	for _, m := range members {
-		if strings.Contains(m, "@") {
+		switch {
+		case strings.HasPrefix(m, "ou_"):
+			// Already an open_id
+			resolved = append(resolved, m)
+		case strings.Contains(m, "@"):
+			// Email lookup
 			users, err := client.LookupUsers(api.UserLookupOptions{Emails: []string{m}})
 			if err == nil && len(users) > 0 && users[0].UserID != "" {
 				resolved = append(resolved, users[0].UserID)
 				continue
 			}
+			resolved = append(resolved, m)
+		default:
+			// Try name search
+			results, _, _, err := client.SearchUsers(m, 1, "")
+			if err == nil && len(results) > 0 && results[0].OpenID != "" {
+				resolved = append(resolved, results[0].OpenID)
+				continue
+			}
+			resolved = append(resolved, m)
 		}
-		resolved = append(resolved, m)
 	}
 	return resolved
 }
@@ -437,7 +471,9 @@ func init() {
 
 	chatCreateCmd.Flags().StringVar(&chatCreateName, "name", "", "Chat name (required)")
 	chatCreateCmd.Flags().StringVar(&chatCreateDescription, "description", "", "Chat description")
-	chatCreateCmd.Flags().StringSliceVar(&chatCreateMembers, "members", nil, "Member IDs or emails (comma-separated)")
+	chatCreateCmd.Flags().StringSliceVar(&chatCreateMembers, "members", nil, "Member IDs, emails, or names (comma-separated)")
+	chatCreateCmd.Flags().StringVar(&chatCreateTo, "to", "", "Shortcut to add a single person (open_id, email, or name)")
+	chatDeleteCmd.Flags().StringVar(&chatDeleteAs, "as", "bot", "Delete as 'bot' (default, for bot-created chats) or 'user'")
 
 	chatUpdateCmd.Flags().StringVar(&chatUpdateName, "name", "", "New chat name")
 	chatUpdateCmd.Flags().StringVar(&chatUpdateDescription, "description", "", "New description")

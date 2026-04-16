@@ -3,9 +3,40 @@ package auth
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 )
+
+// killPortHolder finds and kills any process holding the given TCP port on localhost.
+// Used so that repeat `auth login` attempts don't fail when a prior callback server
+// was interrupted and left the socket in TIME_WAIT or actively bound.
+func killPortHolder(port int) {
+	// Quick check: is the port free already?
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err == nil {
+		_ = ln.Close()
+		return
+	}
+
+	// Find PIDs holding the port and send SIGKILL.
+	out, err := exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port)).Output()
+	if err != nil {
+		return
+	}
+	pids := strings.Fields(strings.TrimSpace(string(out)))
+	for _, pid := range pids {
+		if _, err := strconv.Atoi(pid); err != nil {
+			continue
+		}
+		_ = exec.Command("kill", "-9", pid).Run()
+	}
+	// Give the OS a moment to release the port.
+	time.Sleep(200 * time.Millisecond)
+}
 
 // CallbackServer handles OAuth callback
 type CallbackServer struct {
@@ -26,6 +57,9 @@ func NewCallbackServer(port int) *CallbackServer {
 
 // Start begins listening for the OAuth callback
 func (s *CallbackServer) Start(expectedState string) error {
+	// Auto-kill any process holding our port from a previous failed auth attempt
+	killPortHolder(s.port)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
