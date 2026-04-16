@@ -567,17 +567,29 @@ Examples:
 
 var chatListDMsLimit int
 
+// classifyMemberIdent returns one of "open_id", "email", or "name" based on the
+// shape of the argument. open_id wins on the "ou_" prefix; any string containing
+// "@" is treated as an email; everything else is a name.
+func classifyMemberIdent(m string) string {
+	switch {
+	case strings.HasPrefix(m, "ou_"):
+		return "open_id"
+	case strings.Contains(m, "@"):
+		return "email"
+	default:
+		return "name"
+	}
+}
+
 // resolveMembers converts emails or names to open_ids, passes through ou_* IDs unchanged.
 func resolveMembers(members []string) []string {
 	var resolved []string
 	client := api.NewClient()
 	for _, m := range members {
-		switch {
-		case strings.HasPrefix(m, "ou_"):
-			// Already an open_id
+		switch classifyMemberIdent(m) {
+		case "open_id":
 			resolved = append(resolved, m)
-		case strings.Contains(m, "@"):
-			// Email lookup
+		case "email":
 			users, err := client.LookupUsers(api.UserLookupOptions{Emails: []string{m}})
 			if err == nil && len(users) > 0 && users[0].UserID != "" {
 				resolved = append(resolved, users[0].UserID)
@@ -585,7 +597,6 @@ func resolveMembers(members []string) []string {
 			}
 			resolved = append(resolved, m)
 		default:
-			// Try name search
 			results, _, _, err := client.SearchUsers(m, 1, "")
 			if err == nil && len(results) > 0 && results[0].OpenID != "" {
 				resolved = append(resolved, results[0].OpenID)

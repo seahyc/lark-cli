@@ -165,27 +165,32 @@ Examples:
 }
 
 // parseTimeArg parses a time argument as either Unix timestamp or ISO 8601
-func parseTimeArg(s string) string {
-	// First try as Unix timestamp
+// parseTimeArgE accepts a Unix timestamp string, an ISO 8601 string (with or
+// without timezone), or a YYYY-MM-DD date, and returns the value as a Unix
+// timestamp string. Returns an error on any other input.
+func parseTimeArgE(s string) (string, error) {
 	if _, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return s
+		return s, nil
 	}
-
-	// Try parsing as ISO 8601
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		// Try without timezone
 		t, err = time.Parse("2006-01-02T15:04:05", s)
 		if err != nil {
-			// Try date only
 			t, err = time.Parse("2006-01-02", s)
 			if err != nil {
-				output.Fatalf("PARSE_ERROR", "invalid time format: %s (use Unix timestamp or ISO 8601)", s)
+				return "", fmt.Errorf("invalid time format: %s (use Unix timestamp or ISO 8601)", s)
 			}
 		}
 	}
+	return strconv.FormatInt(t.Unix(), 10), nil
+}
 
-	return strconv.FormatInt(t.Unix(), 10)
+func parseTimeArg(s string) string {
+	v, err := parseTimeArgE(s)
+	if err != nil {
+		output.Fatal("PARSE_ERROR", err)
+	}
+	return v
 }
 
 // convertMessage converts an API message to CLI output format
