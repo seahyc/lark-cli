@@ -30,20 +30,26 @@ var Groups = map[string]ScopeGroup{
 	"documents": {
 		Name:        "documents",
 		Description: "Lark Docs and Drive access",
-		Scopes:      []string{"docx:document:readonly", "docx:document", "docx:document:create", "docs:doc:readonly", "docs:document.content:read", "docs:document.comment:read", "drive:drive:readonly", "drive:drive", "wiki:wiki:readonly", "space:document:retrieve"},
-		Commands:    []string{"doc"},
+		Scopes:      []string{"docx:document:readonly", "docx:document", "docx:document:create", "docs:doc:readonly", "docs:document.content:read", "docs:document.comment:read", "drive:drive:readonly", "drive:drive", "wiki:wiki:readonly", "wiki:wiki", "space:document:retrieve"},
+		Commands:    []string{"doc", "wiki"},
 	},
 	"bitable": {
 		Name:        "bitable",
 		Description: "Lark Bitable (database) access",
-		Scopes:      []string{"bitable:app:readonly"},
+		Scopes:      []string{"bitable:app:readonly", "bitable:app"},
 		Commands:    []string{"bitable"},
 	},
 	"messages": {
 		Name:        "messages",
 		Description: "Chat and messaging",
-		Scopes:      []string{"im:message:readonly", "im:message", "im:message:send_as_bot", "im:message.reactions:read", "im:message.reactions:write_only"},
-		Commands:    []string{"msg", "chat"},
+		Scopes: []string{
+			"im:message:readonly", "im:message", "im:message:send_as_bot",
+			"im:message.send_as_user", "im:resource",
+			"im:message.reactions:read", "im:message.reactions:write_only",
+			"im:chat", "im:chat:readonly",
+			"im:message:search",
+		},
+		Commands: []string{"msg", "chat"},
 	},
 	"mail": {
 		Name:        "mail",
@@ -60,14 +66,23 @@ var Groups = map[string]ScopeGroup{
 	"tasks": {
 		Name:        "tasks",
 		Description: "Lark Tasks management",
-		Scopes:      []string{"task:task:read"},
-		Commands:    []string{"task"},
+		Scopes: []string{
+			"task:task", "task:task:readonly",
+			"task:tasklist", "task:tasklist:readonly",
+		},
+		Commands: []string{"task"},
+	},
+	"meetings": {
+		Name:        "meetings",
+		Description: "Video conferencing records and notes",
+		Scopes:      []string{"vc:meeting:readonly", "vc:record:readonly"},
+		Commands:    []string{"meetings"},
 	},
 }
 
 // AllGroupNames returns all scope group names in a consistent order
 func AllGroupNames() []string {
-	return []string{"calendar", "contacts", "documents", "bitable", "messages", "mail", "minutes", "tasks"}
+	return []string{"calendar", "contacts", "documents", "bitable", "messages", "mail", "minutes", "tasks", "meetings"}
 }
 
 // GetScopesForGroups returns the combined scopes for the given group names
