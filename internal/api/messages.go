@@ -430,45 +430,55 @@ func (c *Client) ReplyMessageAsUser(messageID, msgType, content, rootID string, 
 	return &resp, nil
 }
 
-// EditMessage edits a sent message
-// messageID: the ID of the message to edit
-// msgType: "text" or "post"
-// content: JSON string of new message content
+// EditMessage edits a sent message as the bot
 func (c *Client) EditMessage(messageID, msgType, content string) error {
-	path := fmt.Sprintf("/im/v1/messages/%s", messageID)
-
-	req := EditMessageRequest{
-		MsgType: msgType,
-		Content: content,
-	}
-
-	var resp BaseResponse
-	if err := c.PutWithTenantToken(path, req, &resp); err != nil {
-		return err
-	}
-
-	if err := resp.Err(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.editMessageWithToken(messageID, msgType, content, false)
 }
 
-// RecallMessage recalls/deletes a message
-// messageID: the ID of the message to recall
-func (c *Client) RecallMessage(messageID string) error {
+// EditMessageAsUser edits a sent message as the authenticated user
+func (c *Client) EditMessageAsUser(messageID, msgType, content string) error {
+	return c.editMessageWithToken(messageID, msgType, content, true)
+}
+
+func (c *Client) editMessageWithToken(messageID, msgType, content string, asUser bool) error {
 	path := fmt.Sprintf("/im/v1/messages/%s", messageID)
-
+	req := EditMessageRequest{MsgType: msgType, Content: content}
 	var resp BaseResponse
-	if err := c.DeleteWithTenantToken(path, &resp); err != nil {
+	var err error
+	if asUser {
+		err = c.Put(path, req, &resp)
+	} else {
+		err = c.PutWithTenantToken(path, req, &resp)
+	}
+	if err != nil {
 		return err
 	}
+	return resp.Err()
+}
 
-	if err := resp.Err(); err != nil {
+// RecallMessage recalls a message as the bot
+func (c *Client) RecallMessage(messageID string) error {
+	return c.recallMessageWithToken(messageID, false)
+}
+
+// RecallMessageAsUser recalls a message as the authenticated user
+func (c *Client) RecallMessageAsUser(messageID string) error {
+	return c.recallMessageWithToken(messageID, true)
+}
+
+func (c *Client) recallMessageWithToken(messageID string, asUser bool) error {
+	path := fmt.Sprintf("/im/v1/messages/%s", messageID)
+	var resp BaseResponse
+	var err error
+	if asUser {
+		err = c.Delete(path, &resp)
+	} else {
+		err = c.DeleteWithTenantToken(path, &resp)
+	}
+	if err != nil {
 		return err
 	}
-
-	return nil
+	return resp.Err()
 }
 
 // DeleteMessageReaction removes a reaction from a message

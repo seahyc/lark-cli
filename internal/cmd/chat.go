@@ -319,6 +319,77 @@ var chatLinkCmd = &cobra.Command{
 	},
 }
 
+// --- chat dm ---
+
+var chatDMCmd = &cobra.Command{
+	Use:   "dm <user>",
+	Short: "Look up a user's DM info (email, name, or open_id)",
+	Long: `Resolve a user identifier to their open_id and DM info, ready to message.
+
+The argument can be:
+  - email (e.g. alice@example.com)
+  - open_id (ou_xxx) — passes through
+  - user name (e.g. "Francis Goh") — fuzzy match
+
+Returns the user's open_id, name, and a ready-to-use msg send command.
+To send a message: lark msg send --to <open_id> --text "Hi"
+Lark auto-creates the P2P chat on first message.
+
+Examples:
+  lark chat dm alice@example.com
+  lark chat dm "Francis Goh"
+  lark chat dm ou_f8735159a11237cb442c3d72aee8b073`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		input := args[0]
+		client := api.NewClient()
+
+		var openID, name, email string
+
+		switch {
+		case strings.HasPrefix(input, "ou_"):
+			openID = input
+			user, err := client.GetUser(openID, "open_id")
+			if err == nil && user != nil {
+				name = user.Name
+				email = user.Email
+			}
+		case strings.Contains(input, "@"):
+			email = input
+			users, err := client.LookupUsers(api.UserLookupOptions{Emails: []string{input}})
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+			if len(users) == 0 || users[0].UserID == "" {
+				output.Fatalf("NOT_FOUND", "no user found for email: %s", input)
+			}
+			openID = users[0].UserID
+			user, err := client.GetUser(openID, "open_id")
+			if err == nil && user != nil {
+				name = user.Name
+			}
+		default:
+			results, _, _, err := client.SearchUsers(input, 5, "")
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+			if len(results) == 0 {
+				output.Fatalf("NOT_FOUND", "no user found matching: %s", input)
+			}
+			openID = results[0].OpenID
+			name = results[0].Name
+		}
+
+		output.JSON(map[string]interface{}{
+			"open_id":      openID,
+			"name":         name,
+			"email":        email,
+			"send_command": "lark msg send --to " + openID + ` --text "..."`,
+			"hint":         "Lark auto-creates the P2P chat on first message. Use msg history --chat-id <oc_id> after sending to read DMs.",
+		})
+	},
+}
+
 // resolveMembers converts emails to open_ids, passes through other IDs unchanged.
 func resolveMembers(members []string) []string {
 	var resolved []string
@@ -368,4 +439,5 @@ func init() {
 	chatCmd.AddCommand(chatUnpinCmd)
 	chatCmd.AddCommand(chatPinsCmd)
 	chatCmd.AddCommand(chatLinkCmd)
+	chatCmd.AddCommand(chatDMCmd)
 }
