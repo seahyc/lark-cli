@@ -2185,3 +2185,107 @@ type OutputDocumentMove struct {
 	BlockID            string          `json:"block_id"`
 	Blocks             []DocumentBlock `json:"blocks,omitempty"`
 }
+
+// --- Chat Management Types ---
+
+// CreateChatRequest represents a request to create a group chat
+type CreateChatRequest struct {
+	Name        string   `json:"name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	UserIDList  []string `json:"user_id_list,omitempty"`
+	ChatMode    string   `json:"chat_mode,omitempty"` // group
+	ChatType    string   `json:"chat_type,omitempty"` // private, public
+}
+
+// CreateChatResponse is the API response for chat creation
+type CreateChatResponse struct {
+	BaseResponse
+	Data *struct {
+		ChatID string `json:"chat_id"`
+	} `json:"data"`
+}
+
+// UpdateChatRequest represents a request to update a chat
+type UpdateChatRequest struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// GetChatResponse is the API response for getting chat info
+type GetChatResponse struct {
+	BaseResponse
+	Data *ChatDetail `json:"data"`
+}
+
+// ChatDetail contains detailed chat information
+type ChatDetail struct {
+	ChatID      string `json:"chat_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	OwnerID     string `json:"owner_id"`
+	ChatMode    string `json:"chat_mode"`
+	ChatType    string `json:"chat_type"`
+	External    bool   `json:"external"`
+	ChatStatus  string `json:"chat_status"`
+}
+
+// ChatMember represents a chat member
+type ChatMember struct {
+	MemberIDType string `json:"member_id_type,omitempty"`
+	MemberID     string `json:"member_id"`
+	Name         string `json:"name,omitempty"`
+}
+
+// ChatMembersResponse is the API response for listing chat members
+type ChatMembersResponse struct {
+	BaseResponse
+	Data *struct {
+		Items     []ChatMember `json:"items"`
+		HasMore   bool         `json:"has_more"`
+		PageToken string       `json:"page_token"`
+	} `json:"data"`
+}
+
+// ModifyChatMembersRequest represents a request to add/remove chat members
+type ModifyChatMembersRequest struct {
+	IDList []string `json:"id_list"`
+}
+
+// PinMessageRequest represents a request to pin a message
+type PinMessageRequest struct {
+	MessageID string `json:"message_id"`
+}
+
+// PinMessageResponse is the API response for pinning a message
+type PinMessageResponse struct {
+	BaseResponse
+	Data *struct {
+		Pin *PinnedMessage `json:"pin"`
+	} `json:"data"`
+}
+
+// PinnedMessage represents a pinned message
+type PinnedMessage struct {
+	MessageID  string `json:"message_id"`
+	ChatID     string `json:"chat_id"`
+	OperatorID string `json:"operator_id"`
+	CreateTime string `json:"create_time"`
+}
+
+// ListPinsResponse is the API response for listing pinned messages
+type ListPinsResponse struct {
+	BaseResponse
+	Data *struct {
+		Items     []PinnedMessage `json:"items"`
+		HasMore   bool            `json:"has_more"`
+		PageToken string          `json:"page_token"`
+	} `json:"data"`
+}
+
+// ChatLinkResponse is the API response for getting a chat link
+type ChatLinkResponse struct {
+	BaseResponse
+	Data *struct {
+		ShareLink string `json:"share_link"`
+	} `json:"data"`
+}
