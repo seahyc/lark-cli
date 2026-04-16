@@ -134,11 +134,10 @@ Flags:
 ### Forward Messages
 
 ```bash
-lark msg forward --message-id om_xxx --to oc_yyy
-lark msg forward --message-id om_xxx --to ou_yyy --as user
+lark msg forward --message-id om_xxx --to oc_yyy       # default --as bot (required by Lark API)
 ```
 
-Forward a single existing message to another recipient.
+Forward a single existing message to another recipient. **Bot-only by Lark API design** — user token is not supported by the forward endpoint.
 
 Flags:
 - `--message-id` (required): Message to forward
@@ -163,18 +162,19 @@ Flags:
 ### Edit a Sent Message
 
 ```bash
-lark msg edit <message-id> --text "Fixed typo"
+lark msg edit --message-id om_xxx --text "Fixed typo"
 ```
 
-Edits a previously-sent message. Only works on messages you sent, within Lark's edit window.
+**Bot-only by Lark API design** — only works on messages the bot itself sent (the `--as` flag is locked to `bot`). Messages you sent via `--as user` cannot be edited via the API; recall and resend instead.
 
 ### Recall Messages
 
 ```bash
-lark msg recall om_dc13264520392913993dd051dba21dcf
+lark msg recall om_dc13264520392913993dd051dba21dcf            # default --as user
+lark msg recall om_xxx --as bot                                # for bot-sent messages
 ```
 
-Recalls/deletes previously sent messages.
+Recalls/deletes previously sent messages. Default identity is `--as user`. Switch to `--as bot` to recall messages the bot sent.
 
 ### React to a Message
 
@@ -217,6 +217,16 @@ Limitations:
 ## Group Chat Management
 
 All `lark chat` subcommands use the user token by default — override with `--as bot`.
+
+### DM Lookup
+
+```bash
+lark chat dm alice@example.com                       # by email
+lark chat dm "Francis Goh"                            # by name (fuzzy)
+lark chat dm ou_f8735159a11237cb442c3d72aee8b073      # passes through
+```
+
+Returns the user's `open_id`, name, and a ready-to-use `lark msg send --to <open_id>` command. Lark auto-creates the P2P chat on first message — to read DM history afterward, capture the `chat_id` from the send response and use `lark msg history --chat-id <oc_id>`.
 
 ### Search Chats
 
