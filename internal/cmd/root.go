@@ -32,7 +32,21 @@ Designed for use by Claude Code with JSON output.
 All commands output JSON by default.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Validate --format once per invocation.
+		if outputFormat != "" {
+			switch outputFormat {
+			case "pretty", "json", "ndjson", "table", "csv":
+				output.Format = outputFormat
+			default:
+				output.Fatalf("VALIDATION_ERROR", "invalid --format %q; want one of: pretty, json, ndjson, table, csv", outputFormat)
+			}
+		}
+	},
 }
+
+// outputFormat is the value of the global --format flag.
+var outputFormat string
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
@@ -62,6 +76,9 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "pretty",
+		"Output format: pretty (default), json, ndjson, table, csv")
+
 	rootCmd.AddCommand(apiCmd)
 	rootCmd.AddCommand(approvalCmd)
 	rootCmd.AddCommand(authCmd)
