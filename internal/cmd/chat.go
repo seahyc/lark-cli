@@ -140,13 +140,17 @@ var chatGetCmd = &cobra.Command{
 
 var chatCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a group chat",
+	Short: "Create a group chat (bot identity required by Lark API)",
+	Long: `Create a group chat. Bot identity is required by the Lark API.
+
+Note: Members must have interacted with the bot before they can be added.
+If you don't have a pre-existing bot-user relationship, create the chat empty
+and have members join via the share link (lark chat link <chat-id>).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if chatCreateName == "" {
 			output.Fatalf("VALIDATION_ERROR", "--name is required")
 		}
-		asUser := chatAs == "user"
-		// Resolve emails to open_ids
+		// Create is tenant-only by Lark API design — always use bot identity
 		memberIDs := resolveMembers(chatCreateMembers)
 		client := api.NewClient()
 		req := &api.CreateChatRequest{
@@ -154,7 +158,7 @@ var chatCreateCmd = &cobra.Command{
 			Description: chatCreateDescription,
 			UserIDList:  memberIDs,
 		}
-		resp, err := client.CreateChat(req, asUser)
+		resp, err := client.CreateChat(req, false) // always bot
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
@@ -162,6 +166,24 @@ var chatCreateCmd = &cobra.Command{
 			"success": true,
 			"chat_id": resp.Data.ChatID,
 		})
+	},
+}
+
+var chatDeleteCmd = &cobra.Command{
+	Use:   "delete <chat-id>",
+	Short: "Disband (delete) a group chat",
+	Long: `Disband a group chat. Requires owner privileges.
+
+Only the chat owner can disband. Bot-created chats are owned by the bot,
+so use --as bot (default) to delete them.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		asUser := chatAs == "user"
+		client := api.NewClient()
+		if err := client.DeleteChat(args[0], asUser); err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+		output.JSON(map[string]interface{}{"success": true, "chat_id": args[0]})
 	},
 }
 
@@ -440,4 +462,5 @@ func init() {
 	chatCmd.AddCommand(chatPinsCmd)
 	chatCmd.AddCommand(chatLinkCmd)
 	chatCmd.AddCommand(chatDMCmd)
+	chatCmd.AddCommand(chatDeleteCmd)
 }
