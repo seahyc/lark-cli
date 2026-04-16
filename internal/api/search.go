@@ -66,19 +66,20 @@ func (c *Client) SearchMessages(query string, opts *SearchMessagesOptions) ([]Se
 
 // BatchGetMessages fetches multiple messages by ID
 func (c *Client) BatchGetMessages(messageIDs []string) ([]Message, error) {
-	params := url.Values{}
+	// Lark has no batch endpoint — fetch each message individually.
+	results := make([]Message, 0, len(messageIDs))
 	for _, id := range messageIDs {
-		params.Add("message_ids", id)
+		var resp BatchGetMessagesResponse
+		path := fmt.Sprintf("/im/v1/messages/%s", id)
+		if err := c.Get(path, &resp); err != nil {
+			return nil, err
+		}
+		if err := resp.Err(); err != nil {
+			return nil, err
+		}
+		results = append(results, resp.Data.Items...)
 	}
-	path := "/im/v1/messages/get_batch?" + params.Encode()
-	var resp BatchGetMessagesResponse
-	if err := c.Get(path, &resp); err != nil {
-		return nil, err
-	}
-	if err := resp.Err(); err != nil {
-		return nil, err
-	}
-	return resp.Data.Items, nil
+	return results, nil
 }
 
 // ForwardMessage forwards a message to another chat
