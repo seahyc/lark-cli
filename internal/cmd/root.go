@@ -92,6 +92,7 @@ func init() {
 	rootCmd.AddCommand(meetingsCmd)
 	rootCmd.AddCommand(minutesCmd)
 	rootCmd.AddCommand(msgCmd)
+	rootCmd.AddCommand(schemaCmd)
 	rootCmd.AddCommand(sheetCmd)
 	rootCmd.AddCommand(slidesCmd)
 	rootCmd.AddCommand(taskCmd)
