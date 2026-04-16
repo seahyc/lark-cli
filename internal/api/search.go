@@ -17,37 +17,45 @@ type SearchMessagesOptions struct {
 }
 
 // SearchMessages searches messages across chats (user token only)
-func (c *Client) SearchMessages(query string, opts *SearchMessagesOptions) ([]Message, bool, string, error) {
-	params := url.Values{}
-	params.Set("query", query)
+func (c *Client) SearchMessages(query string, opts *SearchMessagesOptions) ([]SearchMessageResult, bool, string, error) {
+	// Query params for pagination
+	qp := url.Values{}
 	if opts != nil {
-		if opts.ChatID != "" {
-			params.Set("chat_id", opts.ChatID)
-		}
-		if opts.SenderID != "" {
-			params.Set("sender_id", opts.SenderID)
-		}
-		if opts.StartTime != "" {
-			params.Set("start_time", opts.StartTime)
-		}
-		if opts.EndTime != "" {
-			params.Set("end_time", opts.EndTime)
-		}
-		if opts.MsgType != "" {
-			params.Set("message_type", opts.MsgType)
-		}
 		if opts.PageSize > 0 {
-			params.Set("page_size", fmt.Sprintf("%d", opts.PageSize))
+			qp.Set("page_size", fmt.Sprintf("%d", opts.PageSize))
 		}
 		if opts.PageToken != "" {
-			params.Set("page_token", opts.PageToken)
+			qp.Set("page_token", opts.PageToken)
+		}
+	}
+	path := "/im/v1/messages/search"
+	if encoded := qp.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	// Body with filters
+	body := map[string]interface{}{"query": query}
+	if opts != nil {
+		if opts.ChatID != "" {
+			body["chat_ids"] = []string{opts.ChatID}
+		}
+		if opts.SenderID != "" {
+			body["from_ids"] = []string{opts.SenderID}
+		}
+		if opts.StartTime != "" {
+			body["start_time"] = opts.StartTime
+		}
+		if opts.EndTime != "" {
+			body["end_time"] = opts.EndTime
+		}
+		if opts.MsgType != "" {
+			body["message_type"] = opts.MsgType
 		}
 	}
 
-	path := "/im/v1/messages/search?" + params.Encode()
 	var resp SearchMessagesResponse
-	// Search is user-token only
-	if err := c.Get(path, &resp); err != nil {
+	// Search is user-token only, POST
+	if err := c.Post(path, body, &resp); err != nil {
 		return nil, false, "", err
 	}
 	if err := resp.Err(); err != nil {

@@ -31,6 +31,52 @@ type ListMessageReactionsOptions struct {
 	UserIDType   string // open_id, union_id, user_id
 }
 
+// ListMessagesAsUser retrieves chat history using user token
+func (c *Client) ListMessagesAsUser(containerIDType, containerID string, opts *ListMessagesOptions) ([]Message, bool, string, error) {
+	if containerIDType == "" {
+		containerIDType = "chat"
+	}
+
+	reqSize := 0
+	if opts != nil {
+		reqSize = opts.PageSize
+	}
+	pageSize := ClampPageSize(reqSize, 20, 50)
+
+	params := url.Values{}
+	params.Set("container_id_type", containerIDType)
+	params.Set("container_id", containerID)
+	params.Set("page_size", fmt.Sprintf("%d", pageSize))
+
+	if opts != nil {
+		if opts.StartTime != "" {
+			params.Set("start_time", opts.StartTime)
+		}
+		if opts.EndTime != "" {
+			params.Set("end_time", opts.EndTime)
+		}
+		if opts.SortType != "" {
+			params.Set("sort_type", opts.SortType)
+		}
+		if opts.PageToken != "" {
+			params.Set("page_token", opts.PageToken)
+		}
+	}
+
+	path := "/im/v1/messages?" + params.Encode()
+
+	var resp MessageListResponse
+	if err := c.Get(path, &resp); err != nil {
+		return nil, false, "", err
+	}
+
+	if err := resp.Err(); err != nil {
+		return nil, false, "", err
+	}
+
+	return resp.Data.Items, resp.Data.HasMore, resp.Data.PageToken, nil
+}
+
 // ListMessages retrieves chat history from a chat or thread
 // containerIDType: "chat" for groups/private chats, "thread" for thread messages
 // containerID: chat_id or thread_id
@@ -128,12 +174,8 @@ func (c *Client) GetMessageResource(messageID, fileKey, resourceType string) (io
 	return c.DownloadWithTenantToken(path)
 }
 
-// UploadMessageImage uploads an image for message sending and returns the image key
-func (c *Client) UploadMessageImage(filePath string) (string, error) {
-	if err := auth.EnsureValidTenantToken(); err != nil {
-		return "", err
-	}
-
+// uploadImageWithToken is the shared implementation for image uploads
+func (c *Client) uploadImageWithToken(filePath string, token string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open image: %w", err)
@@ -163,7 +205,6 @@ func (c *Client) UploadMessageImage(filePath string) (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	token := auth.GetTenantTokenStore().GetAccessToken()
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
@@ -194,13 +235,24 @@ func (c *Client) UploadMessageImage(filePath string) (string, error) {
 	return uploadResp.Data.ImageKey, nil
 }
 
-// UploadFile uploads a file for message sending and returns the file key.
-// fileType must be one of: opus, mp4, pdf, doc, xls, ppt, stream
-func (c *Client) UploadFile(filePath, fileType string) (string, error) {
+// UploadMessageImage uploads an image for message sending using bot token
+func (c *Client) UploadMessageImage(filePath string) (string, error) {
 	if err := auth.EnsureValidTenantToken(); err != nil {
 		return "", err
 	}
+	return c.uploadImageWithToken(filePath, auth.GetTenantTokenStore().GetAccessToken())
+}
 
+// UploadMessageImageAsUser uploads an image using user token
+func (c *Client) UploadMessageImageAsUser(filePath string) (string, error) {
+	if err := auth.EnsureValidToken(); err != nil {
+		return "", err
+	}
+	return c.uploadImageWithToken(filePath, auth.GetTokenStore().GetAccessToken())
+}
+
+// uploadFileWithToken is the shared implementation for file uploads
+func (c *Client) uploadFileWithToken(filePath, fileType, token string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -233,7 +285,6 @@ func (c *Client) UploadFile(filePath, fileType string) (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	token := auth.GetTenantTokenStore().GetAccessToken()
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
@@ -264,7 +315,24 @@ func (c *Client) UploadFile(filePath, fileType string) (string, error) {
 	return uploadResp.Data.FileKey, nil
 }
 
-// SendMessage sends a message to a user or chat
+// UploadFile uploads a file for message sending using bot token.
+// fileType must be one of: opus, mp4, pdf, doc, xls, ppt, stream
+func (c *Client) UploadFile(filePath, fileType string) (string, error) {
+	if err := auth.EnsureValidTenantToken(); err != nil {
+		return "", err
+	}
+	return c.uploadFileWithToken(filePath, fileType, auth.GetTenantTokenStore().GetAccessToken())
+}
+
+// UploadFileAsUser uploads a file using user token.
+func (c *Client) UploadFileAsUser(filePath, fileType string) (string, error) {
+	if err := auth.EnsureValidToken(); err != nil {
+		return "", err
+	}
+	return c.uploadFileWithToken(filePath, fileType, auth.GetTokenStore().GetAccessToken())
+}
+
+// SendMessage sends a message to a user or chat as the bot (tenant token)
 // receiveIDType: "open_id", "user_id", "email", "chat_id"
 // receiveID: the recipient identifier
 // msgType: "text" or "post"
@@ -290,7 +358,29 @@ func (c *Client) SendMessage(receiveIDType, receiveID, msgType, content string) 
 	return &resp, nil
 }
 
-// ReplyMessage replies to a message by message_id
+// SendMessageAsUser sends a message to a user or chat as the authenticated user
+func (c *Client) SendMessageAsUser(receiveIDType, receiveID, msgType, content string) (*SendMessageResponse, error) {
+	path := fmt.Sprintf("/im/v1/messages?receive_id_type=%s", receiveIDType)
+
+	req := SendMessageRequest{
+		ReceiveID: receiveID,
+		MsgType:   msgType,
+		Content:   content,
+	}
+
+	var resp SendMessageResponse
+	if err := c.Post(path, req, &resp); err != nil {
+		return nil, err
+	}
+
+	if err := resp.Err(); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// ReplyMessage replies to a message by message_id as the bot
 // msgType: "text" or "post"
 // content: JSON string of message content (format depends on msgType)
 // rootID: optional root message ID for thread replies
@@ -307,6 +397,29 @@ func (c *Client) ReplyMessage(messageID, msgType, content, rootID string, replyI
 
 	var resp SendMessageResponse
 	if err := c.PostWithTenantToken(path, req, &resp); err != nil {
+		return nil, err
+	}
+
+	if err := resp.Err(); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// ReplyMessageAsUser replies to a message as the authenticated user
+func (c *Client) ReplyMessageAsUser(messageID, msgType, content, rootID string, replyInThread bool) (*SendMessageResponse, error) {
+	path := fmt.Sprintf("/im/v1/messages/%s/reply", messageID)
+
+	req := ReplyMessageRequest{
+		MsgType:       msgType,
+		Content:       content,
+		RootID:        rootID,
+		ReplyInThread: replyInThread,
+	}
+
+	var resp SendMessageResponse
+	if err := c.Post(path, req, &resp); err != nil {
 		return nil, err
 	}
 

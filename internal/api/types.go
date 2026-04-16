@@ -2292,13 +2292,34 @@ type ChatLinkResponse struct {
 
 // --- Message Search Types ---
 
+// SearchMessageResult represents a single search hit (schema differs from regular Message)
+type SearchMessageResult struct {
+	ID          string             `json:"id"`
+	DisplayInfo string             `json:"display_info"`
+	MetaData    *SearchMessageMeta `json:"meta_data"`
+}
+
+// SearchMessageMeta contains metadata for a search result
+type SearchMessageMeta struct {
+	ChatID         string `json:"chat_id"`
+	MessageID      string `json:"message_id"`
+	FromID         string `json:"from_id"`
+	Type           string `json:"type"` // TEXT, POST, IMAGE, etc.
+	IsP2PChat      bool   `json:"is_p2p_chat"`
+	CreateTime     string `json:"create_time"`
+	UpdateTime     string `json:"update_time"`
+	Position       int    `json:"position"`
+	ThreadID       string `json:"thread_id,omitempty"`
+	ThreadPosition int    `json:"thread_position,omitempty"`
+}
+
 // SearchMessagesResponse is the API response for message search
 type SearchMessagesResponse struct {
 	BaseResponse
 	Data *struct {
-		Items     []Message `json:"items"`
-		HasMore   bool      `json:"has_more"`
-		PageToken string    `json:"page_token"`
+		Items     []SearchMessageResult `json:"items"`
+		HasMore   bool                  `json:"has_more"`
+		PageToken string                `json:"page_token"`
 	} `json:"data"`
 }
 

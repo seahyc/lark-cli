@@ -45,6 +45,9 @@ var Groups = map[string]ScopeGroup{
 		Scopes: []string{
 			"im:message:readonly", "im:message", "im:message:send_as_bot",
 			"im:message.send_as_user", "im:resource",
+			"im:message:recall", "im:message:update",
+			"im:message.group_msg:get_as_user", "im:message.p2p_msg:get_as_user",
+			"im:message.pins:read", "im:message.pins:write_only",
 			"im:message.reactions:read", "im:message.reactions:write_only",
 			"im:chat", "im:chat:readonly",
 			"search:message",
