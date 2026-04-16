@@ -2320,3 +2320,92 @@ type MergeForwardRequest struct {
 	ReceiveID  string   `json:"receive_id"`
 	MessageIDs []string `json:"message_id_list"`
 }
+
+// --- Task Write Types ---
+
+// CreateTaskRequest represents a request to create a task
+type CreateTaskRequest struct {
+	Summary string      `json:"summary"`
+	Due     *TaskDue    `json:"due,omitempty"`
+	Origin  *TaskOrigin `json:"origin,omitempty"`
+}
+
+// TaskOrigin represents the source of a task
+type TaskOrigin struct {
+	PlatformI18nName map[string]string `json:"platform_i18n_name,omitempty"`
+}
+
+// UpdateTaskRequest represents a request to update a task
+type UpdateTaskRequest struct {
+	Task         map[string]interface{} `json:"task"`
+	UpdateFields []string               `json:"update_fields"`
+}
+
+// CreateTaskResponse is the API response for task creation/update
+type CreateTaskResponse struct {
+	BaseResponse
+	Data *struct {
+		Task *Task `json:"task"`
+	} `json:"data"`
+}
+
+// TaskCommentRequest represents a request to add a comment
+type TaskCommentRequest struct {
+	Content string `json:"content"`
+}
+
+// CreateSubtaskRequest represents a request to create a subtask
+type CreateSubtaskRequest struct {
+	Summary string   `json:"summary"`
+	Due     *TaskDue `json:"due,omitempty"`
+}
+
+// SubtaskListResponse is the API response for listing subtasks
+type SubtaskListResponse struct {
+	BaseResponse
+	Data *struct {
+		Items     []Task `json:"items"`
+		HasMore   bool   `json:"has_more"`
+		PageToken string `json:"page_token"`
+	} `json:"data"`
+}
+
+// Tasklist represents a tasklist
+type Tasklist struct {
+	GUID    string      `json:"guid"`
+	Name    string      `json:"name"`
+	Creator *TaskMember `json:"creator,omitempty"`
+}
+
+// TasklistListResponse is the API response for listing tasklists
+type TasklistListResponse struct {
+	BaseResponse
+	Data *struct {
+		Items     []Tasklist `json:"items"`
+		HasMore   bool       `json:"has_more"`
+		PageToken string     `json:"page_token"`
+	} `json:"data"`
+}
+
+// CreateTasklistRequest represents a request to create a tasklist
+type CreateTasklistRequest struct {
+	Name string `json:"name"`
+}
+
+// CreateTasklistResponse is the API response for tasklist creation
+type CreateTasklistResponse struct {
+	BaseResponse
+	Data *struct {
+		Tasklist *Tasklist `json:"tasklist"`
+	} `json:"data"`
+}
+
+// AddTaskMemberRequest represents adding members to a task
+type AddTaskMemberRequest struct {
+	Members []TaskMember `json:"members"`
+}
+
+// TaskReminderRequest represents setting a reminder
+type TaskReminderRequest struct {
+	RelativeFireMinute int `json:"relative_fire_minute"`
+}
