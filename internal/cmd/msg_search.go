@@ -47,7 +47,7 @@ Examples:
 		}
 
 		client := api.NewClient()
-		var allMessages []api.Message
+		var allMessages []api.SearchMessageResult
 		var pageToken string
 		hasMore := true
 		remaining := msgSearchLimit
@@ -76,15 +76,10 @@ Examples:
 			allMessages = allMessages[:msgSearchLimit]
 		}
 
-		outputMessages := make([]api.OutputMessage, len(allMessages))
-		for i, m := range allMessages {
-			outputMessages[i] = convertMessage(m)
-		}
-
 		output.JSON(map[string]interface{}{
 			"query":    query,
-			"messages": outputMessages,
-			"count":    len(outputMessages),
+			"messages": allMessages,
+			"count":    len(allMessages),
 		})
 	},
 }

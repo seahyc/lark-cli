@@ -35,6 +35,7 @@ var (
 	msgHistoryEndTime   string
 	msgHistorySort      string
 	msgHistoryLimit     int
+	msgHistoryAs        string
 )
 
 var msgHistoryCmd = &cobra.Command{
@@ -42,11 +43,12 @@ var msgHistoryCmd = &cobra.Command{
 	Short: "Get chat message history",
 	Long: `Retrieve message history from a chat or thread.
 
-Requires the bot to be in the group chat. For group chats, the app must have
-the "Read all messages in associated group chat" permission scope.
+By default, reads as the bot (requires bot to be in the group). Use --as user
+to read as yourself, which works for DMs and any group you're a member of.
 
 Examples:
   lark msg history --chat-id oc_xxxxx
+  lark msg history --chat-id oc_xxxxx --as user
   lark msg history --chat-id oc_xxxxx --limit 50
   lark msg history --chat-id oc_xxxxx --start 1704067200 --end 1704153600
   lark msg history --chat-id oc_xxxxx --sort desc
@@ -55,7 +57,11 @@ Examples:
 		if msgHistoryChatID == "" {
 			output.Fatalf("VALIDATION_ERROR", "chat-id is required")
 		}
+		if msgHistoryAs != "" && msgHistoryAs != "bot" && msgHistoryAs != "user" {
+			output.Fatalf("VALIDATION_ERROR", "--as must be 'bot' or 'user'")
+		}
 
+		historyAsUser := msgHistoryAs == "user"
 		client := api.NewClient()
 
 		// Build options
@@ -92,7 +98,15 @@ Examples:
 			opts.PageSize = pageSize
 			opts.PageToken = pageToken
 
-			messages, more, nextToken, err := client.ListMessages(msgHistoryType, msgHistoryChatID, opts)
+			var messages []api.Message
+			var more bool
+			var nextToken string
+			var err error
+			if historyAsUser {
+				messages, more, nextToken, err = client.ListMessagesAsUser(msgHistoryType, msgHistoryChatID, opts)
+			} else {
+				messages, more, nextToken, err = client.ListMessages(msgHistoryType, msgHistoryChatID, opts)
+			}
 			if err != nil {
 				output.Fatal("API_ERROR", err)
 			}
@@ -315,6 +329,7 @@ var (
 	msgSendRootID   string
 	msgSendParentID string
 	msgSendMsgType  string
+	msgSendAs       string
 
 	// msg edit flags
 	msgEditMessageID string
@@ -325,7 +340,9 @@ var (
 var msgSendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a message to a user or chat",
-	Long: `Send a message to a user or chat as the bot.
+	Long: `Send a message to a user or chat.
+
+By default, messages are sent as the bot. Use --as user to send as yourself.
 
 Message format:
 - Markdown-lite (default): Use --text with **bold**, *italic*, [text](url), and @{ou_xxx} mentions
@@ -333,8 +350,11 @@ Message format:
 - Message type: post (default) or text (plain)
 
 Examples:
-	# Send text to user
+	# Send text to user (as bot)
 	lark msg send --to ou_xxx --text "Hello!"
+
+	# Send as yourself (user token)
+	lark msg send --to ou_xxx --text "Hello!" --as user
 
 	# Send to group chat with line breaks
 	lark msg send --to oc_xxx --text "Line 1\nLine 2\nLine 3"
@@ -360,8 +380,8 @@ Examples:
 	# Send file
 	lark msg send --to oc_xxx --file ./report.pdf
 
-	# Send file with a message
-	lark msg send --to oc_xxx --text "Here's the report" --file ./report.pdf
+	# Send file as yourself
+	lark msg send --to oc_xxx --file ./report.pdf --as user
 
 	# Reply in thread
 	lark msg send --to oc_xxx --parent-id om_xxx --text "Replying here"
@@ -391,6 +411,11 @@ Examples:
 		if msgSendRootID != "" && msgSendParentID == "" {
 			output.Fatalf("VALIDATION_ERROR", "--parent-id is required when --root-id is set")
 		}
+		if msgSendAs != "" && msgSendAs != "bot" && msgSendAs != "user" {
+			output.Fatalf("VALIDATION_ERROR", "--as must be 'bot' or 'user'")
+		}
+
+		asUser := msgSendAs == "user"
 
 		// Auto-detect receive_id_type if not specified
 		receiveIDType := msgSendToType
@@ -405,7 +430,13 @@ Examples:
 			var results []api.OutputSendMessage
 			for _, filePath := range msgSendFiles {
 				fileType := inferFileType(filePath)
-				fileKey, err := client.UploadFile(filePath, fileType)
+				var fileKey string
+				var err error
+				if asUser {
+					fileKey, err = client.UploadFileAsUser(filePath, fileType)
+				} else {
+					fileKey, err = client.UploadFile(filePath, fileType)
+				}
 				if err != nil {
 					if errors.Is(err, os.ErrNotExist) {
 						output.Fatalf("FILE_ERROR", "file not found: %s", filePath)
@@ -418,9 +449,17 @@ Examples:
 				}
 				var resp *api.SendMessageResponse
 				if msgSendParentID != "" {
-					resp, err = client.ReplyMessage(msgSendParentID, "file", fileContent, msgSendRootID, true)
+					if asUser {
+						resp, err = client.ReplyMessageAsUser(msgSendParentID, "file", fileContent, msgSendRootID, true)
+					} else {
+						resp, err = client.ReplyMessage(msgSendParentID, "file", fileContent, msgSendRootID, true)
+					}
 				} else {
-					resp, err = client.SendMessage(receiveIDType, msgSendTo, "file", fileContent)
+					if asUser {
+						resp, err = client.SendMessageAsUser(receiveIDType, msgSendTo, "file", fileContent)
+					} else {
+						resp, err = client.SendMessage(receiveIDType, msgSendTo, "file", fileContent)
+					}
 				}
 				if err != nil {
 					output.Fatal("API_ERROR", err)
@@ -442,7 +481,13 @@ Examples:
 
 		imageKeys := make([]string, 0, len(msgSendImages))
 		for _, imagePath := range msgSendImages {
-			imageKey, err := client.UploadMessageImage(imagePath)
+			var imageKey string
+			var err error
+			if asUser {
+				imageKey, err = client.UploadMessageImageAsUser(imagePath)
+			} else {
+				imageKey, err = client.UploadMessageImage(imagePath)
+			}
 			if err != nil {
 				if errors.Is(err, os.ErrNotExist) {
 					output.Fatalf("FILE_ERROR", "image not found: %s", imagePath)
@@ -477,9 +522,17 @@ Examples:
 		// Send message
 		var resp *api.SendMessageResponse
 		if msgSendParentID != "" {
-			resp, err = client.ReplyMessage(msgSendParentID, msgType, content, msgSendRootID, true)
+			if asUser {
+				resp, err = client.ReplyMessageAsUser(msgSendParentID, msgType, content, msgSendRootID, true)
+			} else {
+				resp, err = client.ReplyMessage(msgSendParentID, msgType, content, msgSendRootID, true)
+			}
 		} else {
-			resp, err = client.SendMessage(receiveIDType, msgSendTo, msgType, content)
+			if asUser {
+				resp, err = client.SendMessageAsUser(receiveIDType, msgSendTo, msgType, content)
+			} else {
+				resp, err = client.SendMessage(receiveIDType, msgSendTo, msgType, content)
+			}
 		}
 		if err != nil {
 			output.Fatal("API_ERROR", err)
@@ -1268,6 +1321,7 @@ func init() {
 	msgHistoryCmd.Flags().StringVar(&msgHistoryEndTime, "end", "", "End time (Unix timestamp or ISO 8601)")
 	msgHistoryCmd.Flags().StringVar(&msgHistorySort, "sort", "", "Sort order: 'asc' or 'desc' (default: asc)")
 	msgHistoryCmd.Flags().IntVar(&msgHistoryLimit, "limit", 0, "Maximum number of messages to retrieve (0 = no limit)")
+	msgHistoryCmd.Flags().StringVar(&msgHistoryAs, "as", "bot", "Read as 'bot' (default) or 'user' (your identity)")
 
 	// msg resource flags
 	msgResourceCmd.Flags().StringVar(&msgResourceMessageID, "message-id", "", "Message ID containing the resource (required)")
@@ -1284,6 +1338,7 @@ func init() {
 	msgSendCmd.Flags().StringVar(&msgSendParentID, "parent-id", "", "Parent message ID to reply to (optional)")
 	msgSendCmd.Flags().StringVar(&msgSendRootID, "root-id", "", "Root message ID for thread replies (optional)")
 	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message)")
+	msgSendCmd.Flags().StringVar(&msgSendAs, "as", "bot", "Send as 'bot' (default) or 'user' (your identity)")
 
 	// msg react flags
 	msgReactCmd.Flags().StringVar(&msgReactMessageID, "message-id", "", "Message ID to react to (required)")

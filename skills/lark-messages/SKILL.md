@@ -10,6 +10,7 @@ Retrieve chat message history, send messages, manage reactions, and search for c
 ## 🤖 Capabilities and Use Cases
 
 - Send markdown-lite messages with links and mentions
+- **Send as user** (`--as user`) or as bot (default) — user mode sends from your identity, bypassing bot availability restrictions
 - Send images with `--image` and `{{image}}` placement
 - Send files (PDF, PPTX, DOCX, XLSX, etc.) with `--file`
 - Reply to messages and threads with `--parent-id` / `--root-id`
@@ -23,9 +24,14 @@ Retrieve chat message history, send messages, manage reactions, and search for c
 
 ## 🚀 Quick Reference
 
-**Send message:**
+**Send message (as bot):**
 ```bash
 lark msg send --to user@example.com --text "Hello!"
+```
+
+**Send message as yourself (user token):**
+```bash
+lark msg send --to user@example.com --text "Hello!" --as user
 ```
 
 **Reply in thread:**
@@ -36,6 +42,7 @@ lark msg send --to oc_12345 --parent-id om_abcdef --msg-type text --text "Replyi
 **Read messages:**
 ```bash
 lark msg history --chat-id oc_12345 --limit 10
+lark msg history --chat-id oc_12345 --limit 10 --as user  # read as yourself (works for DMs)
 ```
 
 **Find chats:**
@@ -89,10 +96,11 @@ Output fields include:
 
 ### Send Messages
 
-Send messages to users or group chats as the bot.
+Send messages to users or group chats. By default sends as the bot; use `--as user` to send as yourself.
 
 ```bash
 lark msg send --to ou_xxxx --text "Hello!"
+lark msg send --to ou_xxxx --text "Hello!" --as user
 ```
 
 Reply in thread:
@@ -108,6 +116,7 @@ Available flags:
 - `--image`: Image file path (repeatable)
 - `--file`: File path to send (repeatable; each file sent as a separate message). Supported: pdf, doc/docx, xls/xlsx, ppt/pptx, mp4, opus, and any other file (sent as `stream`). **Cannot be combined with `--text` or `--image`.** Max file size: 30MB.
 - `--msg-type`: Message type: `post` (default) or `text`
+- `--as`: Send as `bot` (default) or `user` (your identity). User mode bypasses bot availability restrictions for DMs.
 - `--parent-id`: Parent message ID to reply in thread (optional)
 - `--root-id`: Root message ID for thread replies (optional)
 
@@ -130,6 +139,7 @@ lark msg history --chat-id oc_xxxxx --limit 50 --sort desc
 Available flags:
 - `--chat-id` (required): Chat ID or thread ID
 - `--type`: Container type - `chat` (default) or `thread`
+- `--as`: Read as `bot` (default) or `user` (your identity). User mode works for DMs and any group you're a member of.
 - `--start`: Start time (Unix timestamp or ISO 8601)
 - `--end`: End time (Unix timestamp or ISO 8601)
 - `--sort`: Sort order - `asc` (default) or `desc`
