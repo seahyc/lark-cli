@@ -36,12 +36,7 @@ func (c *Client) DoRawRequest(method, path string, params, data map[string]inter
 	}
 
 	// Normalize path
-	fullURL := path
-	if strings.HasPrefix(path, "/open-apis") {
-		fullURL = baseURL + strings.TrimPrefix(path, "/open-apis")
-	} else if !strings.HasPrefix(path, "http") {
-		fullURL = baseURL + path
-	}
+	fullURL := NormalizeAPIPath(baseURL, path)
 
 	// Append query params
 	if len(params) > 0 {
@@ -146,6 +141,23 @@ func (c *Client) DoRawRequest(method, path string, params, data map[string]inter
 		Body:        body,
 		ContentType: resp.Header.Get("Content-Type"),
 	}, nil
+}
+
+// NormalizeAPIPath resolves a Lark API path against a baseURL. Three forms are
+// accepted:
+//   - Absolute URLs ("http://..." / "https://...") pass through untouched.
+//   - Paths beginning with "/open-apis" are rooted at baseURL (which itself
+//     already ends in "/open-apis"), so the "/open-apis" prefix is stripped
+//     before concatenation.
+//   - Any other path is appended to baseURL as-is.
+func NormalizeAPIPath(baseURL, path string) string {
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	if strings.HasPrefix(path, "/open-apis") {
+		return baseURL + strings.TrimPrefix(path, "/open-apis")
+	}
+	return baseURL + path
 }
 
 // FormField represents a multipart form field
