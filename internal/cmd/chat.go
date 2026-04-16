@@ -423,15 +423,149 @@ Examples:
 			name = results[0].Name
 		}
 
+		// Try to find existing P2P chat_id by searching messages from this user
+		chatID := findP2PChatIDForUser(client, openID, name)
+
+		result := map[string]interface{}{
+			"open_id": openID,
+			"name":    name,
+			"email":   email,
+		}
+		if chatID != "" {
+			result["chat_id"] = chatID
+			result["read_command"] = "lark msg history --chat-id " + chatID + " --limit 20 --sort desc"
+			result["send_command"] = "lark msg send --to " + chatID + ` --text "..."`
+		} else {
+			result["chat_id"] = ""
+			result["send_command"] = "lark msg send --to " + openID + ` --text "..."`
+			result["hint"] = "No prior DM found. Send a message to create the P2P chat — the response will include chat_id."
+		}
+		output.JSON(result)
+	},
+}
+
+// findP2PChatIDForUser searches recent messages for a P2P chat with the given user
+// and returns the chat_id. Returns empty string if no prior DM exists. Best-effort.
+//
+// Strategy: scan recent message history across multiple search queries, filter to P2P
+// chats, and find one where either the sender or recipient matches the target open_id.
+// Lark's SenderID filter on the search API isn't strictly enforced, so we filter
+// client-side instead.
+func findP2PChatIDForUser(client *api.Client, openID, name string) string {
+	// Use a few common short queries to surface recent activity
+	queries := []string{name, "a", "i", "the", " "}
+
+	seen := make(map[string]bool)
+	for _, q := range queries {
+		if q == "" {
+			continue
+		}
+		results, _, _, err := client.SearchMessages(q, &api.SearchMessagesOptions{
+			PageSize: 50,
+		})
+		if err != nil {
+			continue
+		}
+		for _, r := range results {
+			if r.MetaData == nil || !r.MetaData.IsP2PChat || r.MetaData.ChatID == "" {
+				continue
+			}
+			// Match if the message sender is the target user (most reliable signal)
+			if r.MetaData.FromID == openID {
+				return r.MetaData.ChatID
+			}
+			// Otherwise note this P2P chat — counterpart name in display_info may match
+			if !seen[r.MetaData.ChatID] {
+				seen[r.MetaData.ChatID] = true
+				if name != "" && strings.HasPrefix(r.DisplayInfo, name) {
+					return r.MetaData.ChatID
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// --- chat list-dms ---
+
+var chatListDMsCmd = &cobra.Command{
+	Use:   "list-dms",
+	Short: "List recent P2P (direct message) chats with their chat_ids",
+	Long: `Enumerate recent P2P (1:1) chats by scanning recent messages.
+
+Lark's /im/v1/chats endpoint only returns group chats — P2P chats are not listed
+anywhere directly. This command works around that by searching recent messages
+across all chats and filtering to P2P (is_p2p_chat=true), deduping by chat_id.
+
+Examples:
+  lark chat list-dms                # last ~50 distinct DMs from recent activity
+  lark chat list-dms --limit 100    # scan more messages`,
+	Run: func(cmd *cobra.Command, args []string) {
+		client := api.NewClient()
+
+		// Try several common short queries to maximise coverage of recent messages
+		seedQueries := []string{"a", "i", "o", "the", " "}
+
+		dms := make(map[string]map[string]interface{})
+
+		for _, q := range seedQueries {
+			results, _, _, err := client.SearchMessages(q, &api.SearchMessagesOptions{
+				PageSize: 50,
+			})
+			if err != nil {
+				continue
+			}
+			for _, r := range results {
+				if r.MetaData == nil || !r.MetaData.IsP2PChat || r.MetaData.ChatID == "" {
+					continue
+				}
+				cid := r.MetaData.ChatID
+				existing, ok := dms[cid]
+				createTime := r.MetaData.CreateTime
+				if !ok || createTime > existing["last_message_at"].(string) {
+					// Extract counterpart name from display_info ("Chat Name\nSender: ...")
+					counterpart := ""
+					if idx := strings.Index(r.DisplayInfo, "\n"); idx > 0 {
+						counterpart = r.DisplayInfo[:idx]
+					}
+					dms[cid] = map[string]interface{}{
+						"chat_id":         cid,
+						"counterpart":     counterpart,
+						"last_message_at": createTime,
+						"last_sender_id":  r.MetaData.FromID,
+					}
+				}
+			}
+			if chatListDMsLimit > 0 && len(dms) >= chatListDMsLimit {
+				break
+			}
+		}
+
+		// Sort by recency
+		out := make([]map[string]interface{}, 0, len(dms))
+		for _, v := range dms {
+			out = append(out, v)
+		}
+		// Sort descending by last_message_at
+		for i := 0; i < len(out); i++ {
+			for j := i + 1; j < len(out); j++ {
+				if out[j]["last_message_at"].(string) > out[i]["last_message_at"].(string) {
+					out[i], out[j] = out[j], out[i]
+				}
+			}
+		}
+		if chatListDMsLimit > 0 && len(out) > chatListDMsLimit {
+			out = out[:chatListDMsLimit]
+		}
+
 		output.JSON(map[string]interface{}{
-			"open_id":      openID,
-			"name":         name,
-			"email":        email,
-			"send_command": "lark msg send --to " + openID + ` --text "..."`,
-			"hint":         "Lark auto-creates the P2P chat on first message. Use msg history --chat-id <oc_id> after sending to read DMs.",
+			"count": len(out),
+			"dms":   out,
 		})
 	},
 }
+
+var chatListDMsLimit int
 
 // resolveMembers converts emails or names to open_ids, passes through ou_* IDs unchanged.
 func resolveMembers(members []string) []string {
@@ -499,4 +633,7 @@ func init() {
 	chatCmd.AddCommand(chatLinkCmd)
 	chatCmd.AddCommand(chatDMCmd)
 	chatCmd.AddCommand(chatDeleteCmd)
+
+	chatListDMsCmd.Flags().IntVar(&chatListDMsLimit, "limit", 50, "Maximum number of DMs to return")
+	chatCmd.AddCommand(chatListDMsCmd)
 }
