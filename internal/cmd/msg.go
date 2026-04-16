@@ -335,6 +335,7 @@ var (
 	msgEditMessageID string
 	msgEditText      string
 	msgEditMsgType   string
+	msgEditAs        string
 )
 
 var msgSendCmd = &cobra.Command{
@@ -1276,8 +1277,14 @@ Examples:
 		}
 
 		client := api.NewClient()
-		if err := client.EditMessage(msgEditMessageID, msgType, content); err != nil {
-			output.Fatal("API_ERROR", err)
+		var editErr error
+		if msgEditAs == "user" {
+			editErr = client.EditMessageAsUser(msgEditMessageID, msgType, content)
+		} else {
+			editErr = client.EditMessage(msgEditMessageID, msgType, content)
+		}
+		if editErr != nil {
+			output.Fatal("API_ERROR", editErr)
 		}
 
 		output.JSON(map[string]interface{}{
@@ -1286,6 +1293,8 @@ Examples:
 		})
 	},
 }
+
+var msgRecallAs string
 
 var msgRecallCmd = &cobra.Command{
 	Use:   "recall <message-id>",
@@ -1296,14 +1305,21 @@ Messages can be recalled within 24 hours of sending.
 Group owners/admins can recall member messages within 1 year.
 
 Examples:
-  lark msg recall om_dc13264520392913993dd051dba21dcf`,
+  lark msg recall om_dc13264520392913993dd051dba21dcf
+  lark msg recall om_xxx --as user`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		messageID := args[0]
 		client := api.NewClient()
 
-		if err := client.RecallMessage(messageID); err != nil {
-			output.Fatal("API_ERROR", err)
+		var recallErr error
+		if msgRecallAs == "user" {
+			recallErr = client.RecallMessageAsUser(messageID)
+		} else {
+			recallErr = client.RecallMessage(messageID)
+		}
+		if recallErr != nil {
+			output.Fatal("API_ERROR", recallErr)
 		}
 
 		output.JSON(map[string]interface{}{
@@ -1321,7 +1337,7 @@ func init() {
 	msgHistoryCmd.Flags().StringVar(&msgHistoryEndTime, "end", "", "End time (Unix timestamp or ISO 8601)")
 	msgHistoryCmd.Flags().StringVar(&msgHistorySort, "sort", "", "Sort order: 'asc' or 'desc' (default: asc)")
 	msgHistoryCmd.Flags().IntVar(&msgHistoryLimit, "limit", 0, "Maximum number of messages to retrieve (0 = no limit)")
-	msgHistoryCmd.Flags().StringVar(&msgHistoryAs, "as", "bot", "Read as 'bot' (default) or 'user' (your identity)")
+	msgHistoryCmd.Flags().StringVar(&msgHistoryAs, "as", "user", "Read as 'user' (default, your identity) or 'bot'")
 
 	// msg resource flags
 	msgResourceCmd.Flags().StringVar(&msgResourceMessageID, "message-id", "", "Message ID containing the resource (required)")
@@ -1338,7 +1354,7 @@ func init() {
 	msgSendCmd.Flags().StringVar(&msgSendParentID, "parent-id", "", "Parent message ID to reply to (optional)")
 	msgSendCmd.Flags().StringVar(&msgSendRootID, "root-id", "", "Root message ID for thread replies (optional)")
 	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message)")
-	msgSendCmd.Flags().StringVar(&msgSendAs, "as", "bot", "Send as 'bot' (default) or 'user' (your identity)")
+	msgSendCmd.Flags().StringVar(&msgSendAs, "as", "user", "Send as 'user' (default, your identity) or 'bot'")
 
 	// msg react flags
 	msgReactCmd.Flags().StringVar(&msgReactMessageID, "message-id", "", "Message ID to react to (required)")
@@ -1358,6 +1374,8 @@ func init() {
 	msgEditCmd.Flags().StringVar(&msgEditMessageID, "message-id", "", "Message ID to edit (required)")
 	msgEditCmd.Flags().StringVar(&msgEditText, "text", "", "New message text (markdown-lite)")
 	msgEditCmd.Flags().StringVar(&msgEditMsgType, "msg-type", "post", "Message type: post (default) or text")
+	msgEditCmd.Flags().StringVar(&msgEditAs, "as", "bot", "Edit as 'bot' (default, only option supported by Lark API)")
+	msgRecallCmd.Flags().StringVar(&msgRecallAs, "as", "user", "Recall as 'user' (default, your identity) or 'bot'")
 
 	// Register subcommands
 	msgCmd.AddCommand(msgHistoryCmd)

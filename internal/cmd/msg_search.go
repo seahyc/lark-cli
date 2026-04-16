@@ -235,12 +235,12 @@ func init() {
 	msgForwardCmd.Flags().StringVar(&msgForwardMessageID, "message-id", "", "Message ID to forward (required)")
 	msgForwardCmd.Flags().StringVar(&msgForwardTo, "to", "", "Recipient ID (required)")
 	msgForwardCmd.Flags().StringVar(&msgForwardToType, "to-type", "", "Recipient ID type (auto-detected if not specified)")
-	msgForwardCmd.Flags().StringVar(&msgForwardAs, "as", "bot", "Send as 'bot' (default) or 'user'")
+	msgForwardCmd.Flags().StringVar(&msgForwardAs, "as", "bot", "Send as 'bot' (default, only option supported by forward API) or 'user'")
 
 	msgMergeForwardCmd.Flags().StringSliceVar(&msgMergeForwardMessageIDs, "message-ids", nil, "Message IDs to merge-forward (comma-separated, required)")
 	msgMergeForwardCmd.Flags().StringVar(&msgMergeForwardTo, "to", "", "Recipient ID (required)")
 	msgMergeForwardCmd.Flags().StringVar(&msgMergeForwardToType, "to-type", "", "Recipient ID type (auto-detected if not specified)")
-	msgMergeForwardCmd.Flags().StringVar(&msgMergeForwardAs, "as", "bot", "Send as 'bot' (default) or 'user'")
+	msgMergeForwardCmd.Flags().StringVar(&msgMergeForwardAs, "as", "bot", "Send as 'bot' (default, only option supported by forward API) or 'user'")
 
 	msgCmd.AddCommand(msgSearchCmd)
 	msgCmd.AddCommand(msgGetCmd)

@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"net/url"
+	"strconv"
+	"time"
 )
 
 // CreateTask creates a new task
@@ -35,21 +37,30 @@ func (c *Client) UpdateTask(taskGUID string, fields map[string]interface{}, upda
 	return resp.Data.Task, nil
 }
 
-// CompleteTask marks a task as completed
+// CompleteTask marks a task as completed via PATCH with completed_at timestamp
 func (c *Client) CompleteTask(taskGUID string) error {
-	path := fmt.Sprintf("/task/v2/tasks/%s/complete", taskGUID)
+	path := fmt.Sprintf("/task/v2/tasks/%s", taskGUID)
+	now := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	req := map[string]interface{}{
+		"task":          map[string]interface{}{"completed_at": now},
+		"update_fields": []string{"completed_at"},
+	}
 	var resp BaseResponse
-	if err := c.Post(path, nil, &resp); err != nil {
+	if err := c.Patch(path, req, &resp); err != nil {
 		return err
 	}
 	return resp.Err()
 }
 
-// ReopenTask reopens a completed task
+// ReopenTask reopens a completed task by setting completed_at to "0"
 func (c *Client) ReopenTask(taskGUID string) error {
-	path := fmt.Sprintf("/task/v2/tasks/%s/uncomplete", taskGUID)
+	path := fmt.Sprintf("/task/v2/tasks/%s", taskGUID)
+	req := map[string]interface{}{
+		"task":          map[string]interface{}{"completed_at": "0"},
+		"update_fields": []string{"completed_at"},
+	}
 	var resp BaseResponse
-	if err := c.Post(path, nil, &resp); err != nil {
+	if err := c.Patch(path, req, &resp); err != nil {
 		return err
 	}
 	return resp.Err()
