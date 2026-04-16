@@ -29,9 +29,17 @@ var Groups = map[string]ScopeGroup{
 	},
 	"documents": {
 		Name:        "documents",
-		Description: "Lark Docs and Drive access",
-		Scopes:      []string{"docx:document:readonly", "docx:document", "docx:document:create", "docs:doc:readonly", "docs:document.content:read", "docs:document.comment:read", "drive:drive:readonly", "drive:drive", "wiki:wiki:readonly", "wiki:wiki", "space:document:retrieve"},
-		Commands:    []string{"doc", "wiki"},
+		Description: "Lark Docs, Drive, and Wiki access",
+		Scopes: []string{
+			"docx:document:readonly", "docx:document", "docx:document:create",
+			"docs:doc:readonly", "docs:document.content:read", "docs:document.comment:read",
+			"drive:drive:readonly", "drive:drive",
+			"space:document:retrieve",
+			"wiki:space:read", "wiki:space:retrieve",
+			"wiki:node:read", "wiki:node:create", "wiki:node:retrieve", "wiki:node:copy",
+			"wiki:member:create", "wiki:member:update", "wiki:member:retrieve",
+		},
+		Commands: []string{"doc", "wiki"},
 	},
 	"bitable": {
 		Name:        "bitable",
@@ -49,7 +57,8 @@ var Groups = map[string]ScopeGroup{
 			"im:message.group_msg:get_as_user", "im:message.p2p_msg:get_as_user",
 			"im:message.pins:read", "im:message.pins:write_only",
 			"im:message.reactions:read", "im:message.reactions:write_only",
-			"im:chat", "im:chat:readonly",
+			"im:chat:create", "im:chat:read", "im:chat:update",
+			"im:chat.members:read", "im:chat.members:write_only",
 			"search:message",
 		},
 		Commands: []string{"msg", "chat"},
@@ -70,16 +79,20 @@ var Groups = map[string]ScopeGroup{
 		Name:        "tasks",
 		Description: "Lark Tasks management",
 		Scopes: []string{
-			"task:task", "task:task:readonly",
-			"task:tasklist", "task:tasklist:readonly",
+			"task:task:read", "task:task:write",
+			"task:tasklist:read", "task:tasklist:write",
+			"task:section:read", "task:section:write",
 		},
 		Commands: []string{"task"},
 	},
 	"meetings": {
 		Name:        "meetings",
 		Description: "Video conferencing records and notes",
-		Scopes:      []string{"vc:meeting:readonly", "vc:record:readonly"},
-		Commands:    []string{"meetings"},
+		Scopes: []string{
+			"vc:meeting.search:read", "vc:meeting.meetingevent:read",
+			"vc:note:read", "vc:record:readonly",
+		},
+		Commands: []string{"meetings"},
 	},
 }
 
