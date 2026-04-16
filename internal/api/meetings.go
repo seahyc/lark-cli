@@ -4,27 +4,40 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 )
 
-// SearchMeetings searches the user's meeting history.
-// Uses /vc/v1/meeting_list with start_time/end_time filters.
-// Note: The exact Lark VC endpoint semantics vary by tenant; fall back to
-// `lark api` for more advanced queries.
+// SearchMeetings searches the user's meeting history via POST /vc/v1/meetings/search.
+// Defaults to the last 30 days when no time range is specified.
 func (c *Client) SearchMeetings(opts *SearchMeetingsOptions) ([]Meeting, bool, string, error) {
-	params := url.Values{}
-	if opts != nil {
+	body := make(map[string]interface{})
+
+	// Default to last 30 days if no time range
+	if opts == nil || (opts.StartTime == "" && opts.EndTime == "") {
+		now := strconv.FormatInt(time.Now().Unix(), 10)
+		monthAgo := strconv.FormatInt(time.Now().AddDate(0, 0, -30).Unix(), 10)
+		body["start_time"] = monthAgo
+		body["end_time"] = now
+	} else {
 		if opts.StartTime != "" {
-			params.Set("start_time", opts.StartTime)
+			body["start_time"] = opts.StartTime
 		}
 		if opts.EndTime != "" {
-			params.Set("end_time", opts.EndTime)
+			body["end_time"] = opts.EndTime
 		}
+	}
+
+	if opts != nil {
 		if opts.MeetingNo != "" {
-			params.Set("meeting_no", opts.MeetingNo)
+			body["meeting_no"] = opts.MeetingNo
 		}
 		if opts.OrganizerID != "" {
-			params.Set("user_id", opts.OrganizerID)
+			body["user_id"] = opts.OrganizerID
 		}
+	}
+
+	params := url.Values{}
+	if opts != nil {
 		if opts.PageSize > 0 {
 			params.Set("page_size", strconv.Itoa(opts.PageSize))
 		}
@@ -32,12 +45,13 @@ func (c *Client) SearchMeetings(opts *SearchMeetingsOptions) ([]Meeting, bool, s
 			params.Set("page_token", opts.PageToken)
 		}
 	}
-	path := "/vc/v1/meeting_list"
+	path := "/vc/v1/meetings/search"
 	if encoded := params.Encode(); encoded != "" {
 		path += "?" + encoded
 	}
+
 	var resp MeetingListResponse
-	if err := c.Get(path, &resp); err != nil {
+	if err := c.Post(path, body, &resp); err != nil {
 		return nil, false, "", err
 	}
 	if err := resp.Err(); err != nil {
