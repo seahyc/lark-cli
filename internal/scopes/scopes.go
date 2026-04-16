@@ -47,7 +47,7 @@ var Groups = map[string]ScopeGroup{
 			"im:message.send_as_user", "im:resource",
 			"im:message.reactions:read", "im:message.reactions:write_only",
 			"im:chat", "im:chat:readonly",
-			"im:message:search",
+			"search:message",
 		},
 		Commands: []string{"msg", "chat"},
 	},
