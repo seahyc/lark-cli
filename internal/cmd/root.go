@@ -81,6 +81,7 @@ func init() {
 
 	rootCmd.AddCommand(apiCmd)
 	rootCmd.AddCommand(approvalCmd)
+	rootCmd.AddCommand(attendanceCmd)
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(bitableCmd)
 	rootCmd.AddCommand(calCmd)
