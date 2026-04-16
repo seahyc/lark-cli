@@ -2289,3 +2289,34 @@ type ChatLinkResponse struct {
 		ShareLink string `json:"share_link"`
 	} `json:"data"`
 }
+
+// --- Message Search Types ---
+
+// SearchMessagesResponse is the API response for message search
+type SearchMessagesResponse struct {
+	BaseResponse
+	Data *struct {
+		Items     []Message `json:"items"`
+		HasMore   bool      `json:"has_more"`
+		PageToken string    `json:"page_token"`
+	} `json:"data"`
+}
+
+// BatchGetMessagesResponse is the API response for batch message fetch
+type BatchGetMessagesResponse struct {
+	BaseResponse
+	Data *struct {
+		Items []Message `json:"items"`
+	} `json:"data"`
+}
+
+// ForwardMessageRequest represents a forward request
+type ForwardMessageRequest struct {
+	ReceiveID string `json:"receive_id"`
+}
+
+// MergeForwardRequest represents a merge-forward request
+type MergeForwardRequest struct {
+	ReceiveID  string   `json:"receive_id"`
+	MessageIDs []string `json:"message_id_list"`
+}
