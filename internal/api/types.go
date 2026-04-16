@@ -2617,3 +2617,88 @@ type MoveWikiNodeResponse struct {
 		Node *WikiNode `json:"node"`
 	} `json:"data"`
 }
+
+// --- Meetings (VC) Types ---
+
+// Meeting represents a video conferencing meeting.
+type Meeting struct {
+	ID             string             `json:"id"`
+	Topic          string             `json:"topic,omitempty"`
+	URL            string             `json:"url,omitempty"`
+	MeetingNo      string             `json:"meeting_no,omitempty"`
+	StartTime      string             `json:"start_time,omitempty"`
+	EndTime        string             `json:"end_time,omitempty"`
+	HostUser       *MeetingParticipant `json:"host_user,omitempty"`
+	Status         string             `json:"status,omitempty"`
+	ParticipantCnt int                `json:"participant_count,omitempty"`
+	Type           string             `json:"type,omitempty"`
+	OwnerID        string             `json:"owner_id,omitempty"`
+	CreateTime     string             `json:"create_time,omitempty"`
+}
+
+// MeetingParticipant represents a meeting participant.
+type MeetingParticipant struct {
+	ID     string `json:"id,omitempty"`
+	UserID string `json:"user_id,omitempty"`
+	Role   string `json:"role,omitempty"`
+}
+
+// MeetingNotes represents meeting notes content.
+type MeetingNotes struct {
+	MeetingID string `json:"meeting_id"`
+	Doc       string `json:"doc_token,omitempty"`
+	Content   string `json:"content,omitempty"`
+	URL       string `json:"url,omitempty"`
+}
+
+// MeetingRecording represents a meeting recording.
+type MeetingRecording struct {
+	MeetingID   string `json:"meeting_id"`
+	URL         string `json:"url,omitempty"`
+	Duration    int    `json:"duration,omitempty"`
+	MinuteToken string `json:"minute_token,omitempty"`
+}
+
+// SearchMeetingsOptions filter options for SearchMeetings.
+type SearchMeetingsOptions struct {
+	StartTime     string // Unix seconds
+	EndTime       string // Unix seconds
+	MeetingNo     string
+	OrganizerID   string
+	ParticipantID string
+	PageSize      int
+	PageToken     string
+}
+
+// MeetingListResponse wraps a list of meetings.
+type MeetingListResponse struct {
+	BaseResponse
+	Data struct {
+		HasMore     bool      `json:"has_more"`
+		PageToken   string    `json:"page_token,omitempty"`
+		Items       []Meeting `json:"meeting_list,omitempty"`
+		MeetingList []Meeting `json:"items,omitempty"`
+	} `json:"data"`
+}
+
+// MeetingResponse wraps a single meeting.
+type MeetingResponse struct {
+	BaseResponse
+	Data struct {
+		Meeting *Meeting `json:"meeting"`
+	} `json:"data"`
+}
+
+// MeetingNotesResponse wraps meeting notes.
+type MeetingNotesResponse struct {
+	BaseResponse
+	Data *MeetingNotes `json:"data"`
+}
+
+// MeetingRecordingResponse wraps meeting recording info.
+type MeetingRecordingResponse struct {
+	BaseResponse
+	Data struct {
+		Recording *MeetingRecording `json:"recording"`
+	} `json:"data"`
+}
