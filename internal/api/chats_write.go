@@ -179,6 +179,22 @@ func (c *Client) ListPinnedMessages(chatID string, asUser bool) ([]PinnedMessage
 	return resp.Data.Items, nil
 }
 
+// DeleteChat disbands a group chat (requires owner or admin privileges)
+func (c *Client) DeleteChat(chatID string, asUser bool) error {
+	path := fmt.Sprintf("/im/v1/chats/%s", chatID)
+	var resp BaseResponse
+	var err error
+	if asUser {
+		err = c.Delete(path, &resp)
+	} else {
+		err = c.DeleteWithTenantToken(path, &resp)
+	}
+	if err != nil {
+		return err
+	}
+	return resp.Err()
+}
+
 // GetChatLink gets a shareable link for a chat
 func (c *Client) GetChatLink(chatID string, asUser bool) (string, error) {
 	path := fmt.Sprintf("/im/v1/chats/%s/link", chatID)
