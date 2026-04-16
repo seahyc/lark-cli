@@ -75,4 +75,5 @@ func init() {
 	rootCmd.AddCommand(sheetCmd)
 	rootCmd.AddCommand(taskCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(wikiCmd)
 }
