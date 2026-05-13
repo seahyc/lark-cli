@@ -73,6 +73,10 @@ Examples:
 			return
 		}
 
+		if me, meErr := client.GetCurrentUser(); meErr == nil && me != nil && me.OpenID == user.OpenID {
+			output.Fatalf("VALIDATION_ERROR", "cannot DM yourself via this command; use the Notes chat in the Lark UI")
+		}
+
 		chatID := findP2PChatIDForUser(client, user.OpenID, user.Name)
 
 		// Optional reply first, so newly created DM chat_id becomes available.
