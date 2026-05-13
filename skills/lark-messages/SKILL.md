@@ -34,6 +34,8 @@ lark msg send --to oc_12345 --file ./report.pdf
 
 **Read / search / forward:**
 ```bash
+lark dm "Alice" --last 20
+lark dm "Alice" --reply "On it" --compact
 lark msg history --chat-id oc_12345 --limit 10
 lark msg search "incident" --chat-id oc_xxx --limit 20
 lark msg forward --message-id om_xxx --to oc_yyy
@@ -227,6 +229,18 @@ lark chat dm ou_f8735159a11237cb442c3d72aee8b073      # passes through
 ```
 
 Returns the user's `open_id`, name, and a ready-to-use `lark msg send --to <open_id>` command. Lark auto-creates the P2P chat on first message — to read DM history afterward, capture the `chat_id` from the send response and use `lark msg history --chat-id <oc_id>`.
+
+### Unified DM Read/Reply
+```bash
+lark dm "Francis Goh" --last 20
+lark dm "Francis Goh" --reply "Can you share logs?" --compact
+```
+
+Single command workflow for DM:
+- resolves person (open_id/email/exact name/fuzzy name)
+- reads recent DM history
+- optionally sends `--reply` first, then returns updated history
+- `--compact` returns parsed plain-text transcript optimized for agent consumption
 
 ### Search Chats
 
