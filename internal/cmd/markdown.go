@@ -133,8 +133,17 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 	}
 }
 
-// convertMarkdownTable extracts header and row data from a goldmark table AST node,
-// stores it in pendingMarkdownTables for 2-phase creation, and returns a table block.
+// maxMarkdownTableRows caps how many data rows go into one Lark table when
+// importing from markdown. Larger tables hit Lark's per-call payload / cell
+// limit and return "invalid param". Splitting into multiple adjacent tables
+// renders identically in the Lark UI for read purposes.
+const maxMarkdownTableRows = 6
+
+// convertMarkdownTable extracts header and row data from a goldmark table AST
+// node, stores it in pendingMarkdownTables for 2-phase creation, and returns
+// one or more placeholder table blocks. Tables with more than
+// maxMarkdownTableRows data rows are split into chunks; each chunk repeats the
+// header so the visual result matches a single big table.
 func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock {
 	var headers []string
 	var rows []string
@@ -142,7 +151,6 @@ func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock 
 	for child := table.FirstChild(); child != nil; child = child.NextSibling() {
 		switch row := child.(type) {
 		case *east.TableHeader:
-			// The header contains a single row of cells
 			for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
 				if _, ok := cell.(*east.TableCell); ok {
 					headers = append(headers, strings.TrimSpace(nodeText(cell, source)))
@@ -163,26 +171,49 @@ func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock 
 		return nil
 	}
 
-	pendingMarkdownTables = append(pendingMarkdownTables, MarkdownTableData{
-		Headers: headers,
-		Rows:    rows,
-	})
-
-	// Return a placeholder table block (block_type 31) with dimensions.
-	// The actual API creation and cell population is handled by the caller.
-	colSize := len(headers)
-	rowSize := 1 + len(rows)
-	return []api.DocumentBlock{{
-		BlockType: 31,
-		Table: &api.TableBlock{
-			Property: &api.TableProperty{
-				RowSize:     rowSize,
-				ColumnSize:  colSize,
-				ColumnWidth: calcColumnWidths(headers, rows),
-				HeaderRow:   true,
+	chunks := chunkTableRows(rows, maxMarkdownTableRows)
+	out := make([]api.DocumentBlock, 0, len(chunks))
+	for _, chunk := range chunks {
+		pendingMarkdownTables = append(pendingMarkdownTables, MarkdownTableData{
+			Headers: headers,
+			Rows:    chunk,
+		})
+		colSize := len(headers)
+		rowSize := 1 + len(chunk)
+		out = append(out, api.DocumentBlock{
+			BlockType: 31,
+			Table: &api.TableBlock{
+				Property: &api.TableProperty{
+					RowSize:     rowSize,
+					ColumnSize:  colSize,
+					ColumnWidth: calcColumnWidths(headers, chunk),
+					HeaderRow:   true,
+				},
 			},
-		},
-	}}
+		})
+	}
+	return out
+}
+
+// chunkTableRows splits a row slice into chunks of at most maxRows entries.
+// An empty input yields a single empty chunk so the header-only table is
+// still emitted.
+func chunkTableRows(rows []string, maxRows int) [][]string {
+	if maxRows <= 0 {
+		maxRows = 1
+	}
+	if len(rows) == 0 {
+		return [][]string{nil}
+	}
+	var chunks [][]string
+	for i := 0; i < len(rows); i += maxRows {
+		end := i + maxRows
+		if end > len(rows) {
+			end = len(rows)
+		}
+		chunks = append(chunks, rows[i:end])
+	}
+	return chunks
 }
 
 // nodeText extracts text content from an AST node.

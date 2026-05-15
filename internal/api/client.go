@@ -30,53 +30,106 @@ func NewClient() *Client {
 	}
 }
 
-// doRequest performs an authenticated HTTP request
+// rateLimitErrCode is the Lark API error code for rate-limited requests.
+// We retry write requests with exponential backoff when we see this code.
+const rateLimitErrCode = 99991400
+
+// writeBackoffSchedule is the backoff sequence (in seconds) for rate-limited
+// write requests. After exhausting all entries, we surface the underlying error.
+var writeBackoffSchedule = []time.Duration{
+	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+	8 * time.Second,
+	16 * time.Second,
+}
+
+// isWriteMethod returns true for HTTP methods that mutate state. We only retry
+// these on rate-limit errors (idempotent reads don't need it; non-idempotent
+// writes are safe to retry because Lark dedupes via client_token / index).
+func isWriteMethod(method string) bool {
+	switch method {
+	case "POST", "PUT", "PATCH", "DELETE":
+		return true
+	}
+	return false
+}
+
+// doRequest performs an authenticated HTTP request with automatic retry on
+// rate-limit errors for write methods.
 func (c *Client) doRequest(method, path string, body interface{}, result interface{}) error {
 	// Ensure we have a valid token
 	if err := auth.EnsureValidToken(); err != nil {
 		return err
 	}
 
-	var reqBody io.Reader
+	// Marshal once; we may retry the same payload several times.
+	var jsonBody []byte
 	if body != nil {
-		jsonBody, err := json.Marshal(body)
+		var err error
+		jsonBody, err = json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request body: %w", err)
 		}
-		reqBody = bytes.NewBuffer(jsonBody)
 	}
 
 	url := baseURL + path
-	req, err := http.NewRequest(method, url, reqBody)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	retryable := isWriteMethod(method)
+
+	attempt := func() ([]byte, int, error) {
+		var reqBody io.Reader
+		if jsonBody != nil {
+			reqBody = bytes.NewReader(jsonBody)
+		}
+		req, err := http.NewRequest(method, url, reqBody)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+		token := auth.GetTokenStore().GetAccessToken()
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, 0, fmt.Errorf("request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
+		}
+		return respBody, resp.StatusCode, nil
 	}
 
-	// Set headers
-	token := auth.GetTokenStore().GetAccessToken()
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	var respBody []byte
+	for i := 0; ; i++ {
+		body, status, err := attempt()
+		if err != nil {
+			return err
+		}
+		respBody = body
 
-	// Execute request
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		// On write methods, peek at the API error code to detect rate limiting.
+		if retryable && i < len(writeBackoffSchedule) {
+			var probe BaseResponse
+			// Ignore unmarshal errors on the probe; some endpoints return
+			// non-JSON or empty bodies on success (the real parse below catches
+			// the genuine errors).
+			_ = json.Unmarshal(respBody, &probe)
+			if probe.Code == rateLimitErrCode || status == http.StatusTooManyRequests {
+				time.Sleep(writeBackoffSchedule[i])
+				continue
+			}
+		}
+		break
 	}
-	defer resp.Body.Close()
 
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Parse response
 	if result != nil {
 		if err := json.Unmarshal(respBody, result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 	}
-
 	return nil
 }
 
@@ -110,53 +163,74 @@ func (c *Client) DeleteWithBody(path string, body interface{}, result interface{
 	return c.doRequest("DELETE", path, body, result)
 }
 
-// doRequestWithTenantToken performs an HTTP request using tenant access token
+// doRequestWithTenantToken performs an HTTP request using tenant access token,
+// with the same rate-limit retry behaviour as doRequest.
 func (c *Client) doRequestWithTenantToken(method, path string, body interface{}, result interface{}) error {
-	// Ensure we have a valid tenant token
 	if err := auth.EnsureValidTenantToken(); err != nil {
 		return err
 	}
 
-	var reqBody io.Reader
+	var jsonBody []byte
 	if body != nil {
-		jsonBody, err := json.Marshal(body)
+		var err error
+		jsonBody, err = json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request body: %w", err)
 		}
-		reqBody = bytes.NewBuffer(jsonBody)
 	}
 
 	url := baseURL + path
-	req, err := http.NewRequest(method, url, reqBody)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	retryable := isWriteMethod(method)
+
+	attempt := func() ([]byte, int, error) {
+		var reqBody io.Reader
+		if jsonBody != nil {
+			reqBody = bytes.NewReader(jsonBody)
+		}
+		req, err := http.NewRequest(method, url, reqBody)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+		token := auth.GetTenantTokenStore().GetAccessToken()
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, 0, fmt.Errorf("request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
+		}
+		return respBody, resp.StatusCode, nil
 	}
 
-	// Set headers with tenant token
-	token := auth.GetTenantTokenStore().GetAccessToken()
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-
-	// Execute request
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+	var respBody []byte
+	for i := 0; ; i++ {
+		body, status, err := attempt()
+		if err != nil {
+			return err
+		}
+		respBody = body
+		if retryable && i < len(writeBackoffSchedule) {
+			var probe BaseResponse
+			_ = json.Unmarshal(respBody, &probe)
+			if probe.Code == rateLimitErrCode || status == http.StatusTooManyRequests {
+				time.Sleep(writeBackoffSchedule[i])
+				continue
+			}
+		}
+		break
 	}
-	defer resp.Body.Close()
 
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Parse response
 	if result != nil {
 		if err := json.Unmarshal(respBody, result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 	}
-
 	return nil
 }
 
