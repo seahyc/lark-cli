@@ -1711,13 +1711,278 @@ Examples:
 
 // --- doc move ---
 
+// cloneBlockForReinsertion strips identity fields and copies all block-type-specific
+// content fields generically. Returns a block ready to be sent to CreateDocumentBlocks.
+// For container blocks (tables) the caller must re-create children separately; this
+// function only handles the leaf payload.
+func cloneBlockForReinsertion(src api.DocumentBlock) api.DocumentBlock {
+	return api.DocumentBlock{
+		BlockType: src.BlockType,
+		Page:      src.Page,
+		Text:      src.Text,
+		Heading1:  src.Heading1,
+		Heading2:  src.Heading2,
+		Heading3:  src.Heading3,
+		Heading4:  src.Heading4,
+		Heading5:  src.Heading5,
+		Heading6:  src.Heading6,
+		Heading7:  src.Heading7,
+		Heading8:  src.Heading8,
+		Heading9:  src.Heading9,
+		Bullet:    src.Bullet,
+		Ordered:   src.Ordered,
+		Code:      src.Code,
+		Quote:     src.Quote,
+		TodoBlock: src.TodoBlock,
+		Divider:   src.Divider,
+		Image:     src.Image,
+		Table:     src.Table,
+		Callout:   src.Callout,
+	}
+}
+
+// extractTableCellTexts walks a table block's cells, finds the text content of
+// each cell's first text child (most common case), and returns header + row data
+// in the format buildTableBlocks expects. Cells without text content become "".
+// Returns (headers, rows, ok). ok=false means we couldn't safely extract — the
+// caller should fall back to fail-fast behaviour.
+func extractTableCellTexts(table api.DocumentBlock, allBlocks []api.DocumentBlock) ([]string, []string, bool) {
+	if table.Table == nil || table.Table.Property == nil {
+		return nil, nil, false
+	}
+	prop := table.Table.Property
+	colSize := prop.ColumnSize
+	rowSize := prop.RowSize
+	if colSize == 0 || rowSize == 0 {
+		return nil, nil, false
+	}
+	if len(table.Table.Cells) != colSize*rowSize {
+		return nil, nil, false
+	}
+
+	blockByID := make(map[string]*api.DocumentBlock, len(allBlocks))
+	for i := range allBlocks {
+		blockByID[allBlocks[i].BlockID] = &allBlocks[i]
+	}
+
+	cellText := func(cellID string) string {
+		cell, ok := blockByID[cellID]
+		if !ok || cell == nil {
+			return ""
+		}
+		// Cell content is in children: typically a single text block (block_type 2).
+		for _, childID := range cell.Children {
+			child, ok := blockByID[childID]
+			if !ok || child == nil {
+				continue
+			}
+			tb := child.Text
+			if tb == nil {
+				switch {
+				case child.Heading1 != nil:
+					tb = child.Heading1
+				case child.Heading2 != nil:
+					tb = child.Heading2
+				case child.Heading3 != nil:
+					tb = child.Heading3
+				case child.Bullet != nil:
+					tb = child.Bullet
+				case child.Ordered != nil:
+					tb = child.Ordered
+				case child.Quote != nil:
+					tb = child.Quote
+				}
+			}
+			if tb == nil {
+				continue
+			}
+			var sb strings.Builder
+			for _, el := range tb.Elements {
+				if el.TextRun != nil {
+					sb.WriteString(el.TextRun.Content)
+				}
+			}
+			if sb.Len() > 0 {
+				return sb.String()
+			}
+		}
+		return ""
+	}
+
+	headers := make([]string, colSize)
+	for c := 0; c < colSize; c++ {
+		headers[c] = cellText(table.Table.Cells[c])
+	}
+	rows := make([]string, 0, rowSize-1)
+	for r := 1; r < rowSize; r++ {
+		cells := make([]string, colSize)
+		for c := 0; c < colSize; c++ {
+			cells[c] = cellText(table.Table.Cells[r*colSize+c])
+		}
+		rows = append(rows, strings.Join(cells, "|"))
+	}
+	return headers, rows, true
+}
+
+// populateTableCells writes text content into the cells of a freshly-created
+// table block. cellContents is laid out row-major: first colSize entries are
+// the header row, then each subsequent row.
+func populateTableCells(client *api.Client, documentID string, table api.DocumentBlock, cellContents []string) error {
+	if table.Table == nil || len(table.Table.Cells) == 0 {
+		return nil
+	}
+	for i, cellID := range table.Table.Cells {
+		if i >= len(cellContents) || cellContents[i] == "" {
+			continue
+		}
+		// Small inter-cell delay to ride under Lark's per-table-write QPS cap.
+		// The client itself retries on 99991400, but spacing requests reduces
+		// the probability of even hitting the limiter.
+		time.Sleep(150 * time.Millisecond)
+		textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
+		if _, _, err := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1); err != nil {
+			return fmt.Errorf("failed to populate table cell %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// findBlockChild scans all blocks for a child reference and returns its parent
+// id and child index. Returns ok=false if not found.
+func findBlockChild(blocks []api.DocumentBlock, childID string) (parentID string, index int, ok bool) {
+	for _, b := range blocks {
+		for i, c := range b.Children {
+			if c == childID {
+				return b.BlockID, i, true
+			}
+		}
+	}
+	return "", 0, false
+}
+
+// moveSingleBlock relocates one block within a document by delete-then-insert.
+// Returns the new block_id (different from blockID since Lark generates fresh
+// ids on insert), the new revision id, and the created top-level block.
+//
+// For tables (block_type 31), it also extracts existing cell texts and
+// re-populates them after creating the empty table at the new location, so
+// table content is preserved across the move.
+func moveSingleBlock(client *api.Client, blocks []api.DocumentBlock, documentID, blockID, destParentID string, destIndex int) (newID string, revisionID int, created api.DocumentBlock, err error) {
+	srcParentID, srcIndex, ok := findBlockChild(blocks, blockID)
+	if !ok {
+		return "", 0, api.DocumentBlock{}, fmt.Errorf("block %s not found as a child of any block", blockID)
+	}
+
+	var target *api.DocumentBlock
+	for i := range blocks {
+		if blocks[i].BlockID == blockID {
+			target = &blocks[i]
+			break
+		}
+	}
+	if target == nil {
+		return "", 0, api.DocumentBlock{}, fmt.Errorf("block %s not found", blockID)
+	}
+
+	// Pre-extract table cell content BEFORE deleting (children will be gone after delete).
+	var (
+		isTable    bool
+		tblHeaders []string
+		tblRows    []string
+	)
+	if target.BlockType == 31 {
+		h, r, ok := extractTableCellTexts(*target, blocks)
+		if !ok {
+			return "", 0, api.DocumentBlock{}, fmt.Errorf("cannot move table block %s: failed to extract cell content (try doc append --markdown to re-create)", blockID)
+		}
+		isTable = true
+		tblHeaders = h
+		tblRows = r
+	}
+
+	// Delete from current position.
+	delPath := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
+		documentID, srcParentID)
+	delReq := api.DeleteBlocksRequest{StartIndex: srcIndex, EndIndex: srcIndex + 1}
+	var delResp api.DeleteBlocksResponse
+	if err := client.DeleteWithBody(delPath, delReq, &delResp); err != nil {
+		return "", 0, api.DocumentBlock{}, fmt.Errorf("failed to delete block from current position: %w", err)
+	}
+	if err := delResp.Err(); err != nil {
+		return "", 0, api.DocumentBlock{}, err
+	}
+
+	// Adjust destination index if same parent and source preceded destination.
+	if destParentID == srcParentID && srcIndex < destIndex {
+		destIndex--
+	}
+
+	// Build a clean block for re-insertion.
+	var insertBlocks []api.DocumentBlock
+	if isTable {
+		insertBlocks = buildTableBlocks(tblHeaders, tblRows)
+		if len(insertBlocks) == 0 {
+			return "", 0, api.DocumentBlock{}, fmt.Errorf("internal error: failed to rebuild table block")
+		}
+	} else {
+		insertBlocks = []api.DocumentBlock{cloneBlockForReinsertion(*target)}
+	}
+
+	createdBlocks, newRev, err := client.CreateDocumentBlocks(documentID, destParentID, insertBlocks, destIndex)
+	if err != nil {
+		return "", 0, api.DocumentBlock{}, fmt.Errorf("deleted block but failed to insert at new position: %w", err)
+	}
+	if len(createdBlocks) == 0 {
+		return "", 0, api.DocumentBlock{}, fmt.Errorf("insert returned no blocks")
+	}
+
+	// For tables, re-populate cells now that we have new cell ids.
+	if isTable {
+		var headerCells []string
+		headerCells = append(headerCells, tblHeaders...)
+		for _, row := range tblRows {
+			cells := strings.Split(row, "|")
+			for i := 0; i < len(tblHeaders); i++ {
+				if i < len(cells) {
+					headerCells = append(headerCells, strings.TrimSpace(cells[i]))
+				} else {
+					headerCells = append(headerCells, "")
+				}
+			}
+		}
+		if err := populateTableCells(client, documentID, createdBlocks[0], headerCells); err != nil {
+			return createdBlocks[0].BlockID, newRev, createdBlocks[0], err
+		}
+	}
+
+	return createdBlocks[0].BlockID, newRev, createdBlocks[0], nil
+}
+
+// resolveDestination converts an --after / --index pair (with the source's
+// parent as fallback) into a concrete (destParentID, destIndex) pair.
+// Exactly one of hasIndex / hasAfter must be true.
+func resolveDestination(blocks []api.DocumentBlock, srcParentID string, hasIndex bool, index int, hasAfter bool, afterBlockID string) (string, int, error) {
+	if hasIndex {
+		return srcParentID, index, nil
+	}
+	parent, idx, ok := findBlockChild(blocks, afterBlockID)
+	if !ok {
+		return "", 0, fmt.Errorf("--after block %s not found as a child of any block", afterBlockID)
+	}
+	return parent, idx + 1, nil
+}
+
 var docMoveCmd = &cobra.Command{
 	Use:   "move <document_id> <block_id>",
 	Short: "Move a block to a new position",
 	Long: `Move a block to a new position in a Lark document.
 
 Relocates a block by deleting it from its current position and
-inserting it at the specified new position.
+inserting it at the specified new position. The Lark API generates
+a new block_id for the moved block; that new id is returned in the
+response so callers can chain further operations.
+
+Tables are supported: cell content is preserved across the move.
 
 Use --index to specify an absolute position, or --after to insert
 after a specific block.
@@ -1743,132 +2008,163 @@ Examples:
 		}
 
 		client := api.NewClient()
-
-		// Get all blocks to find the target block
 		blocks, err := client.GetDocumentBlocks(documentID)
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
 
-		// Find the block's current parent and index
-		var srcParentID string
-		var srcIndex int
-		srcFound := false
-		for _, b := range blocks {
-			if b.Children == nil {
-				continue
-			}
-			for idx, childID := range b.Children {
-				if childID == blockID {
-					srcParentID = b.BlockID
-					srcIndex = idx
-					srcFound = true
-					break
-				}
-			}
-			if srcFound {
-				break
-			}
-		}
-		if !srcFound {
+		srcParentID, _, ok := findBlockChild(blocks, blockID)
+		if !ok {
 			output.Fatal("NOT_FOUND", fmt.Errorf("block %s not found as a child of any block", blockID))
 		}
 
-		// Find the target block content to re-create it
-		var targetBlock *api.DocumentBlock
-		for i := range blocks {
-			if blocks[i].BlockID == blockID {
-				targetBlock = &blocks[i]
-				break
-			}
-		}
-		if targetBlock == nil {
-			output.Fatal("NOT_FOUND", fmt.Errorf("block %s not found", blockID))
-		}
-
-		// Resolve --after to a parent + index
-		destParentID := srcParentID
-		destIndex := index
-		if hasAfter {
-			found := false
-			for _, b := range blocks {
-				if b.Children == nil {
-					continue
-				}
-				for idx, childID := range b.Children {
-					if childID == afterBlockID {
-						destParentID = b.BlockID
-						destIndex = idx + 1
-						found = true
-						break
-					}
-				}
-				if found {
-					break
-				}
-			}
-			if !found {
-				output.Fatal("NOT_FOUND", fmt.Errorf("--after block %s not found as a child of any block", afterBlockID))
-			}
-		}
-
-		// Delete the block from its current position
-		delPath := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
-			srcParentID, documentID)
-		// Use the proper URL format
-		delPath = fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/children/batch_delete?document_revision_id=-1",
-			documentID, srcParentID)
-		delReq := api.DeleteBlocksRequest{
-			StartIndex: srcIndex,
-			EndIndex:   srcIndex + 1,
-		}
-		var delResp api.DeleteBlocksResponse
-		if err := client.DeleteWithBody(delPath, delReq, &delResp); err != nil {
-			output.Fatal("API_ERROR", fmt.Errorf("failed to delete block from current position: %w", err))
-		}
-		if err := delResp.Err(); err != nil {
-			output.Fatal("API_ERROR", err)
-		}
-
-		// Adjust destination index if needed (if in same parent and source was before dest)
-		if destParentID == srcParentID && srcIndex < destIndex {
-			destIndex--
-		}
-
-		// Build a clean block for re-insertion (strip block_id, parent_id, children)
-		newBlock := api.DocumentBlock{
-			BlockType: targetBlock.BlockType,
-			Page:      targetBlock.Page,
-			Text:      targetBlock.Text,
-			Heading1:  targetBlock.Heading1,
-			Heading2:  targetBlock.Heading2,
-			Heading3:  targetBlock.Heading3,
-			Heading4:  targetBlock.Heading4,
-			Heading5:  targetBlock.Heading5,
-			Heading6:  targetBlock.Heading6,
-			Heading7:  targetBlock.Heading7,
-			Heading8:  targetBlock.Heading8,
-			Heading9:  targetBlock.Heading9,
-			Bullet:    targetBlock.Bullet,
-			Ordered:   targetBlock.Ordered,
-			Code:      targetBlock.Code,
-			Quote:     targetBlock.Quote,
-			TodoBlock: targetBlock.TodoBlock,
-			Divider:   targetBlock.Divider,
-			Image:     targetBlock.Image,
-		}
-
-		// Insert at new position
-		createdBlocks, revisionID, err := client.CreateDocumentBlocks(documentID, destParentID, []api.DocumentBlock{newBlock}, destIndex)
+		destParentID, destIndex, err := resolveDestination(blocks, srcParentID, hasIndex, index, hasAfter, afterBlockID)
 		if err != nil {
-			output.Fatal("API_ERROR", fmt.Errorf("deleted block but failed to insert at new position: %w", err))
+			output.Fatal("NOT_FOUND", err)
+		}
+
+		newID, revisionID, createdBlock, err := moveSingleBlock(client, blocks, documentID, blockID, destParentID, destIndex)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
 		}
 
 		output.JSON(api.OutputDocumentMove{
 			Success:            true,
 			DocumentRevisionID: revisionID,
-			BlockID:            blockID,
-			Blocks:             createdBlocks,
+			BlockID:            newID,
+			OldBlockID:         blockID,
+			Blocks:             []api.DocumentBlock{createdBlock},
+		})
+	},
+}
+
+// --- doc move-range ---
+
+var docMoveRangeCmd = &cobra.Command{
+	Use:   "move-range <document_id> <start_block_id> <end_block_id>",
+	Short: "Move a contiguous range of sibling blocks to a new position",
+	Long: `Move a contiguous range of sibling blocks (start..end inclusive) to a
+new position in a Lark document. start and end must be siblings (same
+parent) and start must come at-or-before end in the parent's children.
+
+Internally each block is moved one at a time (the Lark API has no native
+multi-move), and the new block_ids returned by each step anchor the next
+move so the final order is correct.
+
+Rate-limit errors (99991400) are auto-retried with exponential backoff.
+
+Use --after to insert after a specific block, or --index for an absolute
+position in the destination parent.
+
+Examples:
+  lark doc move-range ABC123 doxlg111 doxlg333 --after doxlg999
+  lark doc move-range ABC123 doxlg111 doxlg333 --index 0`,
+	Args: cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		startID := args[1]
+		endID := args[2]
+		index, _ := cmd.Flags().GetInt("index")
+		afterBlockID, _ := cmd.Flags().GetString("after")
+
+		hasIndex := cmd.Flags().Changed("index")
+		hasAfter := afterBlockID != ""
+
+		if hasIndex && hasAfter {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("--index and --after are mutually exclusive"))
+		}
+		if !hasIndex && !hasAfter {
+			output.Fatal("MISSING_ARG", fmt.Errorf("either --index or --after is required"))
+		}
+
+		client := api.NewClient()
+		blocks, err := client.GetDocumentBlocks(documentID)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		startParent, startIdx, ok := findBlockChild(blocks, startID)
+		if !ok {
+			output.Fatal("NOT_FOUND", fmt.Errorf("start block %s not found as a child of any block", startID))
+		}
+		endParent, endIdx, ok := findBlockChild(blocks, endID)
+		if !ok {
+			output.Fatal("NOT_FOUND", fmt.Errorf("end block %s not found as a child of any block", endID))
+		}
+		if startParent != endParent {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("start and end blocks must share the same parent (got %s vs %s)", startParent, endParent))
+		}
+		if endIdx < startIdx {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("end block %s precedes start block %s in parent's children", endID, startID))
+		}
+
+		// Collect the contiguous slice of sibling block ids in source order.
+		var parentBlock *api.DocumentBlock
+		for i := range blocks {
+			if blocks[i].BlockID == startParent {
+				parentBlock = &blocks[i]
+				break
+			}
+		}
+		if parentBlock == nil {
+			output.Fatal("NOT_FOUND", fmt.Errorf("parent block %s not found", startParent))
+		}
+		toMove := append([]string(nil), parentBlock.Children[startIdx:endIdx+1]...)
+
+		// Resolve destination once.
+		destParentID, destIndex, err := resolveDestination(blocks, startParent, hasIndex, index, hasAfter, afterBlockID)
+		if err != nil {
+			output.Fatal("NOT_FOUND", err)
+		}
+
+		// The anchor moves with each iteration: after moving block N, the next
+		// block goes immediately after it. We refetch blocks each iteration to
+		// keep parent/index lookups accurate (cheap relative to a write).
+		var (
+			lastRevision int
+			newIDs       []string
+			anchorID     string // newly-inserted id of the previous block; used as next --after
+			currentBlocks = blocks
+		)
+
+		for i, blockID := range toMove {
+			var thisDestParent string
+			var thisDestIndex int
+			if i == 0 {
+				thisDestParent = destParentID
+				thisDestIndex = destIndex
+			} else {
+				p, idx, ok := findBlockChild(currentBlocks, anchorID)
+				if !ok {
+					output.Fatal("API_ERROR", fmt.Errorf("lost track of anchor block %s after move %d", anchorID, i))
+				}
+				thisDestParent = p
+				thisDestIndex = idx + 1
+			}
+
+			newID, rev, _, err := moveSingleBlock(client, currentBlocks, documentID, blockID, thisDestParent, thisDestIndex)
+			if err != nil {
+				output.Fatal("API_ERROR", fmt.Errorf("move %d/%d (%s) failed: %w", i+1, len(toMove), blockID, err))
+			}
+			fmt.Fprintf(os.Stderr, "moved %d/%d: %s -> %s\n", i+1, len(toMove), blockID, newID)
+			newIDs = append(newIDs, newID)
+			anchorID = newID
+			lastRevision = rev
+
+			// Refetch for next iteration (parent/child indices have shifted).
+			if i < len(toMove)-1 {
+				currentBlocks, err = client.GetDocumentBlocks(documentID)
+				if err != nil {
+					output.Fatal("API_ERROR", fmt.Errorf("failed to refetch blocks after move %d: %w", i+1, err))
+				}
+			}
+		}
+
+		output.JSON(api.OutputDocumentMoveRange{
+			Success:            true,
+			DocumentRevisionID: lastRevision,
+			Moved:              len(newIDs),
+			NewBlockIDs:        newIDs,
 		})
 	},
 }
@@ -1902,6 +2198,7 @@ func init() {
 	docCmd.AddCommand(docReplaceCmd)
 	docCmd.AddCommand(docOutlineCmd)
 	docCmd.AddCommand(docMoveCmd)
+	docCmd.AddCommand(docMoveRangeCmd)
 
 	// Flags for doc update
 	docUpdateCmd.Flags().String("text", "", "Update block with text content")
@@ -1990,4 +2287,8 @@ func init() {
 	// Flags for doc move
 	docMoveCmd.Flags().Int("index", -1, "Target position index")
 	docMoveCmd.Flags().String("after", "", "Insert after this block ID (mutually exclusive with --index)")
+
+	// Flags for doc move-range
+	docMoveRangeCmd.Flags().Int("index", -1, "Target position index in the destination parent")
+	docMoveRangeCmd.Flags().String("after", "", "Insert after this block ID (mutually exclusive with --index)")
 }

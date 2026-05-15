@@ -2178,12 +2178,25 @@ type OutputDocumentOutline struct {
 	Count      int            `json:"count"`
 }
 
-// OutputDocumentMove is the doc move response for CLI
+// OutputDocumentMove is the doc move response for CLI.
+// BlockID is the id of the freshly-inserted block (Lark assigns a new id on
+// re-insert, so chaining with --after must use this value, not OldBlockID).
 type OutputDocumentMove struct {
 	Success            bool            `json:"success"`
 	DocumentRevisionID int             `json:"document_revision_id"`
 	BlockID            string          `json:"block_id"`
+	OldBlockID         string          `json:"old_block_id,omitempty"`
 	Blocks             []DocumentBlock `json:"blocks,omitempty"`
+}
+
+// OutputDocumentMoveRange is the doc move-range response for CLI.
+// NewBlockIDs holds the freshly-assigned block ids in the same order as the
+// originally-requested range (start..end).
+type OutputDocumentMoveRange struct {
+	Success            bool     `json:"success"`
+	DocumentRevisionID int      `json:"document_revision_id"`
+	Moved              int      `json:"moved"`
+	NewBlockIDs        []string `json:"new_block_ids"`
 }
 
 // --- Chat Management Types ---
