@@ -24,7 +24,7 @@ var Groups = map[string]ScopeGroup{
 	"contacts": {
 		Name:        "contacts",
 		Description: "Company directory lookup",
-		Scopes:      []string{"contact:contact.base:readonly", "contact:department.base:readonly", "contact:department.organize:readonly", "contact:user:search"},
+		Scopes:      []string{"contact:contact.base:readonly", "contact:department.base:readonly", "contact:department.organize:readonly", "contact:user:search", "contact:user.email:readonly"},
 		Commands:    []string{"contact"},
 	},
 	"documents": {

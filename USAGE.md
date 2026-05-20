@@ -10,6 +10,7 @@ A CLI tool for interacting with Lark APIs (calendar, contacts, documents, messag
 2. Enable these permissions:
    - `calendar:calendar` (read/write calendar and events)
    - `contact:contact.base:readonly` (read contacts)
+   - `contact:user.email:readonly` (read user emails)
    - `contact:department.base:readonly` (read departments)
    - `docx:document:readonly` (read documents)
    - `docs:document.content:read` (read document content)
