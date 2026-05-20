@@ -99,7 +99,7 @@ Flags:
 - `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) — auto-detected if omitted
 - `--text`: Message text (markdown-lite). Use `{{image}}` to place images.
 - `--image`: Image file path (repeatable)
-- `--file`: File path to send (repeatable; each file sent as a separate message). Supported: pdf, doc/docx, xls/xlsx, ppt/pptx, mp4, opus, and any other file (sent as `stream`). **Cannot be combined with `--text` or `--image`.** Max 30MB.
+- `--file`: File path to send (repeatable; each file sent as a separate message). Supported: pdf, doc/docx, xls/xlsx, ppt/pptx, mp4, opus, and any other file (sent as `stream`). **Cannot be combined with `--text` or `--image`.** Max 30MB per file (Lark API limit). Images sent via `--image` are capped at 10MB each.
 - `--msg-type`: `post` (default) or `text`
 - `--as`: `bot` or `user` (default)
 - `--parent-id`: Parent message ID for threaded reply
@@ -216,8 +216,8 @@ lark msg resource --message-id om_xxx --file-key file_v3_xxx --output ./video.mp
 
 Flags: `--message-id`, `--file-key`, `--output` (all required). `--type` is inferred from the `file-key` prefix (`img_*` → image, `file_*` → file). Files covers PDFs, docs, video (mp4/mov), and audio (opus). Pass `--type image|file` only if you need to override the inferred type.
 
-Limitations:
-- Max 100MB
+Limitations (Lark API):
+- Max 100MB per download (error code 234037 if exceeded)
 - Emoji resources can't be downloaded
 - Resources from card, merged, or forwarded messages are not supported
 

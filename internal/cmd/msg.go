@@ -43,12 +43,12 @@ var msgHistoryCmd = &cobra.Command{
 	Short: "Get chat message history",
 	Long: `Retrieve message history from a chat or thread.
 
-By default, reads as the bot (requires bot to be in the group). Use --as user
-to read as yourself, which works for DMs and any group you're a member of.
+By default, reads as the user (works for DMs and any group you are a member of).
+Use --as bot to read as the bot instead, which requires the bot to be in the group.
 
 Examples:
   lark msg history --chat-id oc_xxxxx
-  lark msg history --chat-id oc_xxxxx --as user
+  lark msg history --chat-id oc_xxxxx --as bot
   lark msg history --chat-id oc_xxxxx --limit 50
   lark msg history --chat-id oc_xxxxx --start 1704067200 --end 1704153600
   lark msg history --chat-id oc_xxxxx --sort desc
