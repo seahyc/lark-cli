@@ -34,12 +34,11 @@ Output:
   "user_id": "ou_xxx",
   "open_id": "ou_xxx",
   "name": "Jane Doe",
-  "en_name": "Jane Doe",
-  "email": "jane@example.com",
-  "job_title": "Data Analyst",
-  "department": "Business Intelligence"
+  "email": "jane@example.com"
 }
 ```
+
+Email is returned only when the `contact:user.email:readonly` scope is granted (part of the `contacts` scope group as of the latest CLI). The Glints tenant does not expose `job_title` / `department` / `en_name` to this app's user token — the CLI surfaces whatever Lark returns, which is name + email for cross-department lookups.
 
 ### List Users in Department
 ```bash
@@ -61,14 +60,14 @@ Output:
   "contacts": [
     {
       "user_id": "ou_xxx",
-      "name": "Alice",
-      "job_title": "Engineer",
-      "department": "Engineering"
+      "name": "Alice"
     }
   ],
   "count": 1
 }
 ```
+
+**Tenant restriction:** the Glints workspace gates department member enumeration with admin policy. Calling `list-dept` against most department IDs returns `API_ERROR (code 40004): no dept authority error`. Root department (`0`) returns empty. If you need to find someone, prefer `lark contact search "Name"` followed by `lark contact get <open_id>`.
 
 ### Search Users by Name
 ```bash
@@ -83,13 +82,14 @@ Output:
     {
       "user_id": "ou_xxx",
       "open_id": "ou_xxx",
-      "name": "Jane Doe",
-      "department": "Engineering"
+      "name": "Jane Doe"
     }
   ],
   "count": 1
 }
 ```
+
+The `search` endpoint returns minimal identity (open_id + name). To get email, follow up with `lark contact get <open_id>`.
 
 ### Search Departments
 ```bash
@@ -115,7 +115,7 @@ Output:
 When showing calendar events with attendees, you can enrich attendee info:
 
 1. Get attendee `open_id` from calendar event
-2. Use `contact get <open_id>` to fetch job title and department
+2. Use `contact get <open_id>` to fetch name + email
 3. Present enriched attendee info to user
 
 Example workflow:
@@ -126,7 +126,7 @@ lark cal show <event_id>
 
 # Look up each attendee
 lark contact get ou_attendee_id
-# Returns name, job_title, department
+# Returns name and email
 ```
 
 ## Output Format
@@ -165,7 +165,7 @@ lark auth status
 
 ## Notes
 
-- The `search` and `search-dept` commands require user authentication (OAuth via `lark auth login`)
-- The `get` and `list-dept` commands use tenant token (no login required)
-- Department IDs typically start with `od_`
-- User open_ids typically start with `ou_`
+- All four commands (`get`, `search`, `list-dept`, `search-dept`) use the user token; run `lark auth login` (or `lark auth login --add --scopes contacts`) before use.
+- `list-dept` is heavily restricted in the Glints tenant (`no dept authority error`); prefer `search` + `get` to find people.
+- Department IDs typically start with `od_` (or `od-`).
+- User open_ids typically start with `ou_`.

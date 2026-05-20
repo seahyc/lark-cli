@@ -20,8 +20,9 @@ Full coverage for Lark chat + message operations via the `lark` CLI: send, read,
 - **Search messages across chats** (`msg search`) with filters on chat, sender, time, type
 - **Forward** or **merge-forward** messages to another recipient
 - Download resources (images/files/audio/video) from messages
-- **Group chat management**: create chats, update name/description, add/remove members, pin/unpin messages, get share links
-- Find chats by name or member (`chat search`)
+- **Group chat management**: create chats, update name/description, add/remove members, pin/unpin messages, get share links, disband chats
+- Find chats by name/member or list all visible chats (`chat search`)
+- Enumerate recent direct-message (P2P) chats (`chat list-dms`)
 
 ## 🚀 Quick Reference
 
@@ -52,7 +53,9 @@ lark msg react --message-id om_xxx --reaction SMILE
 **Group chat management:**
 ```bash
 lark chat search "project team"
+lark chat list-dms --limit 100                                         # enumerate recent P2P chats
 lark chat create --name "Launch Room" --members alice@x,bob@x
+lark chat create --name "1:1 w/ Alice" --to alice@x                    # 1:1 shortcut
 lark chat update <chat-id> --name "Launch Room 2" --description "Updated"
 lark chat member add <chat-id> --members carol@x
 lark chat member remove <chat-id> --members ou_xxx
@@ -60,6 +63,7 @@ lark chat pin <chat-id> --message-id om_xxx
 lark chat pins <chat-id>
 lark chat unpin <chat-id> --message-id om_xxx
 lark chat link <chat-id>
+lark chat delete <chat-id>                                             # disband (owner only)
 ```
 
 ## Running Commands
@@ -205,11 +209,12 @@ Fetch full content for a comma-separated list of message IDs.
 ### Download Resources
 
 ```bash
-lark msg resource --message-id om_xxx --file-key img_v3_xxx --type image --output ./image.png
-lark msg resource --message-id om_xxx --file-key file_v2_xxx --type file --output ./doc.pdf
+lark msg resource --message-id om_xxx --file-key img_v3_xxx --output ./image.png
+lark msg resource --message-id om_xxx --file-key file_v2_xxx --output ./doc.pdf
+lark msg resource --message-id om_xxx --file-key file_v3_xxx --output ./video.mp4   # video / audio files
 ```
 
-Flags: `--message-id`, `--file-key`, `--type` (`image` or `file`), `--output` — all required.
+Flags: `--message-id`, `--file-key`, `--output` (all required). `--type` is inferred from the `file-key` prefix (`img_*` → image, `file_*` → file). Files covers PDFs, docs, video (mp4/mov), and audio (opus). Pass `--type image|file` only if you need to override the inferred type.
 
 Limitations:
 - Max 100MB
@@ -234,21 +239,37 @@ Returns the user's `open_id`, name, and a ready-to-use `lark msg send --to <open
 ```bash
 lark dm "Francis Goh" --last 20
 lark dm "Francis Goh" --reply "Can you share logs?" --compact
+lark dm "Francis Goh" --reply "test" --dry-run-reply        # preview, don't send
 ```
 
 Single command workflow for DM:
 - resolves person (open_id/email/exact name/fuzzy name)
-- reads recent DM history
+- reads recent DM history (default `--last 20`)
 - optionally sends `--reply` first, then returns updated history
 - `--compact` returns parsed plain-text transcript optimized for agent consumption
+- `--dry-run-reply` resolves the recipient and previews the reply target without sending
+
+### Enumerate Recent DMs
+
+```bash
+lark chat list-dms                # last ~50 distinct DMs by recent activity
+lark chat list-dms --limit 200    # scan deeper
+```
+
+Output: `{ count, dms: [{ chat_id, counterpart, last_message_at, last_sender_id }] }`.
+
+Workaround for a Lark API limitation: `/im/v1/chats` only returns group chats, so P2P chats are not listed anywhere directly. This command scans recent messages across all visible chats and dedupes by `chat_id` where `is_p2p_chat=true`. Result count depends on how active your DMs are in the scanned window, so bump `--limit` if you expect more than a few.
 
 ### Search Chats
 
 ```bash
 lark chat search "project" --limit 10
+lark chat search "团队"            # supports internationalized names + pinyin / fuzzy match
 ```
 
 Output: `chats[] { chat_id, name, description, owner_id, external, chat_status }`, `count`, `query`.
+
+For listing direct messages, use `chat list-dms` (above) — `chat search` is geared toward group chats and requires a non-empty query in practice.
 
 ### Get Chat Details / Members
 
@@ -260,14 +281,30 @@ lark chat members <chat-id> --limit 100
 ### Create a Chat
 
 ```bash
+lark chat create --name "Launch Room"                                 # empty chat
 lark chat create --name "Launch Room" --description "Go-to-market" \
   --members alice@example.com,bob@example.com
+lark chat create --name "1:1 w/ Francis" --to "Francis Goh"           # 1:1 shortcut
 ```
 
 Flags:
 - `--name` (required)
 - `--description`
-- `--members`: Comma-separated IDs or emails
+- `--members`: Comma-separated IDs, emails, or names
+- `--to`: Shortcut for a single person (open_id, email, or name) — resolved before creation
+
+Notes:
+- Bot identity is required by the Lark API for `create`.
+- Members must have interacted with the bot at least once before they can be added. If they haven't, create the chat empty and share the join link with `lark chat link <chat-id>`.
+
+### Delete a Chat
+
+```bash
+lark chat delete <chat-id>                # default --as bot (chats created via the CLI are bot-owned)
+lark chat delete <chat-id> --as user      # for chats you personally own
+```
+
+Disbands (deletes) a group chat. Owner privileges required. Irreversible.
 
 ### Update a Chat
 

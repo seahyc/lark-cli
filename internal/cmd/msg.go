@@ -266,11 +266,12 @@ var msgResourceCmd = &cobra.Command{
 	Long: `Download resource files (images, videos, audios, files) from messages.
 
 The file_key can be found in the message content JSON returned by 'lark msg history'.
-For image messages, use --type image. For file, audio, and video messages, use --type file.
+The resource type is inferred from the file_key prefix (img_* = image, file_* = file);
+pass --type to override.
 
 Examples:
-  lark msg resource --message-id om_xxx --file-key img_v2_xxx --type image --output ./image.png
-  lark msg resource --message-id om_xxx --file-key file_v2_xxx --type file --output ./video.mp4`,
+  lark msg resource --message-id om_xxx --file-key img_v2_xxx --output ./image.png
+  lark msg resource --message-id om_xxx --file-key file_v2_xxx --output ./video.mp4`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if msgResourceMessageID == "" {
 			output.Fatalf("VALIDATION_ERROR", "message-id is required")
@@ -278,20 +279,26 @@ Examples:
 		if msgResourceFileKey == "" {
 			output.Fatalf("VALIDATION_ERROR", "file-key is required")
 		}
-		if msgResourceType == "" {
-			output.Fatalf("VALIDATION_ERROR", "type is required (image or file)")
-		}
-		if msgResourceType != "image" && msgResourceType != "file" {
-			output.Fatalf("VALIDATION_ERROR", "type must be 'image' or 'file'")
-		}
 		if msgResourceOutput == "" {
 			output.Fatalf("VALIDATION_ERROR", "output is required")
+		}
+		resourceType := msgResourceType
+		if resourceType == "" {
+			if strings.HasPrefix(msgResourceFileKey, "img_") {
+				resourceType = "image"
+			} else if strings.HasPrefix(msgResourceFileKey, "file_") {
+				resourceType = "file"
+			} else {
+				output.Fatalf("VALIDATION_ERROR", "could not infer resource type from file-key prefix; pass --type image or --type file")
+			}
+		} else if resourceType != "image" && resourceType != "file" {
+			output.Fatalf("VALIDATION_ERROR", "type must be 'image' or 'file'")
 		}
 
 		client := api.NewClient()
 
 		// Download the resource
-		body, contentType, err := client.GetMessageResource(msgResourceMessageID, msgResourceFileKey, msgResourceType)
+		body, contentType, err := client.GetMessageResource(msgResourceMessageID, msgResourceFileKey, resourceType)
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
@@ -1347,7 +1354,7 @@ func init() {
 	// msg resource flags
 	msgResourceCmd.Flags().StringVar(&msgResourceMessageID, "message-id", "", "Message ID containing the resource (required)")
 	msgResourceCmd.Flags().StringVar(&msgResourceFileKey, "file-key", "", "Resource file key from message content (required)")
-	msgResourceCmd.Flags().StringVar(&msgResourceType, "type", "", "Resource type: 'image' or 'file' (required)")
+	msgResourceCmd.Flags().StringVar(&msgResourceType, "type", "", "Resource type override: 'image' or 'file' (inferred from file-key prefix if omitted)")
 	msgResourceCmd.Flags().StringVar(&msgResourceOutput, "output", "", "Output file path (required)")
 
 	// msg send flags
