@@ -162,15 +162,20 @@ func (c *Client) ListMessageReactions(messageID string, opts *ListMessageReactio
 	return resp.Data.Items, resp.Data.HasMore, resp.Data.PageToken, nil
 }
 
-// GetMessageResource downloads a resource file (image, video, audio, file) from a message
-// resourceType must be "image" or "file" (file covers files, audio, and video)
-// Returns the response body (caller must close), content-type, and any error
-func (c *Client) GetMessageResource(messageID, fileKey, resourceType string) (io.ReadCloser, string, error) {
+// GetMessageResource downloads a resource file (image, video, audio, file) from a message.
+// resourceType must be "image" or "file" (file covers files, audio, and video).
+// When asUser is true the user access token is used (required for P2P chats the bot isn't in);
+// otherwise the tenant access token is used.
+// Returns the response body (caller must close), content-type, and any error.
+func (c *Client) GetMessageResource(messageID, fileKey, resourceType string, asUser bool) (io.ReadCloser, string, error) {
 	if resourceType != "image" && resourceType != "file" {
 		return nil, "", fmt.Errorf("invalid resource type: %s (must be 'image' or 'file')", resourceType)
 	}
 
 	path := fmt.Sprintf("/im/v1/messages/%s/resources/%s?type=%s", messageID, fileKey, resourceType)
+	if asUser {
+		return c.Download(path)
+	}
 	return c.DownloadWithTenantToken(path)
 }
 

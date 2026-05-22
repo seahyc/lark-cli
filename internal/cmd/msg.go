@@ -258,6 +258,7 @@ var (
 	msgResourceFileKey   string
 	msgResourceType      string
 	msgResourceOutput    string
+	msgResourceAs        string
 )
 
 var msgResourceCmd = &cobra.Command{
@@ -295,10 +296,14 @@ Examples:
 			output.Fatalf("VALIDATION_ERROR", "type must be 'image' or 'file'")
 		}
 
+		if msgResourceAs != "user" && msgResourceAs != "bot" {
+			output.Fatalf("VALIDATION_ERROR", "--as must be 'user' or 'bot'")
+		}
+
 		client := api.NewClient()
 
 		// Download the resource
-		body, contentType, err := client.GetMessageResource(msgResourceMessageID, msgResourceFileKey, resourceType)
+		body, contentType, err := client.GetMessageResource(msgResourceMessageID, msgResourceFileKey, resourceType, msgResourceAs == "user")
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
@@ -1356,6 +1361,7 @@ func init() {
 	msgResourceCmd.Flags().StringVar(&msgResourceFileKey, "file-key", "", "Resource file key from message content (required)")
 	msgResourceCmd.Flags().StringVar(&msgResourceType, "type", "", "Resource type override: 'image' or 'file' (inferred from file-key prefix if omitted)")
 	msgResourceCmd.Flags().StringVar(&msgResourceOutput, "output", "", "Output file path (required)")
+	msgResourceCmd.Flags().StringVar(&msgResourceAs, "as", "user", "Download as 'user' (default, your identity — required for P2P chats the bot isn't in) or 'bot'")
 
 	// msg send flags
 	msgSendCmd.Flags().StringVar(&msgSendTo, "to", "", "Recipient ID (user ID, open_id, email, or chat_id) (required)")
