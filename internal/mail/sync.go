@@ -74,13 +74,12 @@ func Sync(mailbox string, opts *SyncOptions) (*SyncResult, error) {
 		Mailbox: mailbox,
 	}
 
-	if mbox.NumMessages == 0 {
-		if err := cache.UpdateMailboxState(mailbox, mbox.UIDValidity, 0); err != nil {
-			return nil, err
-		}
-		result.Message = "mailbox is empty"
-		return result, nil
-	}
+	// Don't short-circuit on mbox.NumMessages == 0. Lark's IMAP server has
+	// been observed returning 0 from SELECT in some auth/idle states even
+	// when the server actually holds messages, which caused sync to silently
+	// no-op for days. Always go through GetAllUIDs() — if the server really
+	// has zero messages it returns an empty list and we hit the
+	// "already up to date" branch cleanly.
 
 	// Get cached UIDs
 	cachedUIDs, err := cache.GetCachedUIDs(mailbox)
