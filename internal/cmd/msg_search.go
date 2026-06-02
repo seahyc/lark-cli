@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -8,15 +10,39 @@ import (
 	"github.com/yjwong/lark-cli/internal/output"
 )
 
+// filterSearchResults applies sender / chat filters client-side. Lark's search
+// API silently ignores from_ids / chat_ids, so results come back global; we
+// match meta_data.from_id and meta_data.chat_id here. Returns the filtered slice
+// and whether any client-side filter was applied.
+func filterSearchResults(results []api.SearchMessageResult, senderID, chatID string) ([]api.SearchMessageResult, bool) {
+	if senderID == "" && chatID == "" {
+		return results, false
+	}
+	out := make([]api.SearchMessageResult, 0, len(results))
+	for _, r := range results {
+		if r.MetaData == nil {
+			continue
+		}
+		if senderID != "" && r.MetaData.FromID != senderID {
+			continue
+		}
+		if chatID != "" && r.MetaData.ChatID != chatID {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, true
+}
+
 // --- msg search ---
 
 var (
-	msgSearchChatID    string
-	msgSearchSender    string
-	msgSearchAfter     string
-	msgSearchBefore    string
-	msgSearchType      string
-	msgSearchLimit     int
+	msgSearchChatID string
+	msgSearchSender string
+	msgSearchAfter  string
+	msgSearchBefore string
+	msgSearchType   string
+	msgSearchLimit  int
 )
 
 var msgSearchCmd = &cobra.Command{
@@ -46,40 +72,55 @@ Examples:
 			opts.EndTime = parseTimeArg(msgSearchBefore)
 		}
 
+		// Lark's search API silently ignores from_ids / chat_ids, so we filter
+		// client-side on meta_data.from_id / meta_data.chat_id. Tell the user.
+		clientSideFilter := msgSearchSender != "" || msgSearchChatID != ""
+		if clientSideFilter {
+			fmt.Fprintln(os.Stderr, "note: --sender/--chat-id are filtered client-side (Lark's search API ignores them server-side)")
+		}
+
 		client := api.NewClient()
 		var allMessages []api.SearchMessageResult
 		var pageToken string
 		hasMore := true
-		remaining := msgSearchLimit
+		// Cap total pages scanned so a narrow client-side filter doesn't loop the
+		// whole mailbox when the server keeps returning non-matching global hits.
+		const maxPages = 50
+		pages := 0
 		for hasMore {
-			pageSize := 20
-			if remaining > 0 && remaining < pageSize {
-				pageSize = remaining
-			}
-			opts.PageSize = pageSize
+			opts.PageSize = 20
 			opts.PageToken = pageToken
 			messages, more, nextToken, err := client.SearchMessages(query, opts)
 			if err != nil {
 				output.Fatal("API_ERROR", err)
 			}
-			allMessages = append(allMessages, messages...)
+			filtered, _ := filterSearchResults(messages, msgSearchSender, msgSearchChatID)
+			allMessages = append(allMessages, filtered...)
 			hasMore = more
 			pageToken = nextToken
-			if msgSearchLimit > 0 {
-				remaining = msgSearchLimit - len(allMessages)
-				if remaining <= 0 {
-					break
-				}
+			pages++
+			if msgSearchLimit > 0 && len(allMessages) >= msgSearchLimit {
+				break
+			}
+			if pages >= maxPages {
+				break
 			}
 		}
 		if msgSearchLimit > 0 && len(allMessages) > msgSearchLimit {
 			allMessages = allMessages[:msgSearchLimit]
 		}
 
+		if output.Format == output.FormatText {
+			resolver := newNameResolver(client)
+			fmt.Println(transcriptForSearchResults(allMessages, resolver))
+			return
+		}
+
 		output.JSON(map[string]interface{}{
-			"query":    query,
-			"messages": allMessages,
-			"count":    len(allMessages),
+			"query":                query,
+			"messages":             allMessages,
+			"count":                len(allMessages),
+			"client_side_filtered": clientSideFilter,
 		})
 	},
 }
