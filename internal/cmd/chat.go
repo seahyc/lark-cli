@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yjwong/lark-cli/internal/api"
+	"github.com/yjwong/lark-cli/internal/config"
 	"github.com/yjwong/lark-cli/internal/output"
 )
 
@@ -423,8 +424,12 @@ Examples:
 			name = results[0].Name
 		}
 
-		// Try to find existing P2P chat_id by searching messages from this user
-		chatID := findP2PChatIDForUser(client, openID, name)
+		// Consult the local person->chat_id cache first (cheap, works for
+		// inactive DMs), then fall back to the recent-activity search scan.
+		chatID := config.LoadDMCache().GetByOpenID(openID)
+		if chatID == "" {
+			chatID = findP2PChatIDForUser(client, openID, name)
+		}
 
 		result := map[string]interface{}{
 			"open_id": openID,
@@ -432,13 +437,16 @@ Examples:
 			"email":   email,
 		}
 		if chatID != "" {
+			// Cache it so subsequent lookups don't re-scan.
+			_ = config.RememberDMChat(openID, name, chatID)
 			result["chat_id"] = chatID
 			result["read_command"] = "lark msg history --chat-id " + chatID + " --limit 20 --sort desc"
 			result["send_command"] = "lark msg send --to " + chatID + ` --text "..."`
 		} else {
 			result["chat_id"] = ""
 			result["send_command"] = "lark msg send --to " + openID + ` --text "..."`
-			result["hint"] = "No prior DM found. Send a message to create the P2P chat — the response will include chat_id."
+			result["hint"] = "No P2P chat_id known (not cached, no recent activity). Lark only returns a 1:1 chat_id when you send a message (which notifies the person). " +
+				"Send via the command above and reuse the chat_id from the response; it will then be cached for read-only access."
 		}
 		output.JSON(result)
 	},
@@ -556,6 +564,24 @@ Examples:
 		}
 		if chatListDMsLimit > 0 && len(out) > chatListDMsLimit {
 			out = out[:chatListDMsLimit]
+		}
+
+		// Persist discovered P2P chat_ids keyed by the counterpart open_id. We can
+		// only safely attribute a chat_id to a person when the last sender is an
+		// open_id (ou_); that's the counterpart for a 1:1 chat they last spoke in.
+		cache := config.LoadDMCache()
+		changed := false
+		for _, d := range out {
+			sender, _ := d["last_sender_id"].(string)
+			cid, _ := d["chat_id"].(string)
+			counterpart, _ := d["counterpart"].(string)
+			if strings.HasPrefix(sender, "ou_") && cid != "" {
+				cache.Set(sender, counterpart, cid)
+				changed = true
+			}
+		}
+		if changed {
+			_ = cache.Save()
 		}
 
 		output.JSON(map[string]interface{}{

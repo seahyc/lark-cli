@@ -129,28 +129,29 @@ Examples:
 			allMessages = allMessages[:msgHistoryLimit]
 		}
 
-		// Collect unique sender IDs for batch resolution
-		senderNames := make(map[string]string)
+		// Resolve sender + mention names once per run (batched + cached).
+		resolver := newNameResolver(client)
+		// Seed the resolver with names already present on mention objects.
 		for _, m := range allMessages {
-			if m.Sender != nil && m.Sender.ID != "" && m.Sender.SenderType == "user" {
-				senderNames[m.Sender.ID] = "" // placeholder
+			for _, mn := range m.Mentions {
+				if mn.ID != "" && mn.Name != "" {
+					resolver.preset(mn.ID, mn.Name)
+				}
 			}
 		}
 
-		// Resolve sender names (best-effort, don't fail on errors)
-		for senderID := range senderNames {
-			user, err := client.GetUser(senderID, "open_id")
-			if err == nil && user != nil && user.Name != "" {
-				senderNames[senderID] = user.Name
-			}
+		// Agent-readable transcript format: emit decoded plain text directly.
+		if output.Format == output.FormatText {
+			printTranscript(allMessages, resolver)
+			return
 		}
 
-		// Convert to output format
+		// Convert to output format, resolving sender display names.
 		outputMessages := make([]api.OutputMessage, len(allMessages))
 		for i, m := range allMessages {
 			outputMessages[i] = convertMessage(m)
-			if outputMessages[i].Sender != nil && senderNames[outputMessages[i].Sender.ID] != "" {
-				outputMessages[i].Sender.Name = senderNames[outputMessages[i].Sender.ID]
+			if outputMessages[i].Sender != nil && m.Sender != nil && m.Sender.SenderType == "user" {
+				outputMessages[i].Sender.Name = resolver.resolve(m.Sender.ID)
 			}
 		}
 
@@ -482,6 +483,7 @@ Examples:
 				if err != nil {
 					output.Fatal("API_ERROR", err)
 				}
+				rememberP2PChatFromSend(receiveIDType, msgSendTo, resp)
 				results = append(results, api.OutputSendMessage{
 					Success:    true,
 					MessageID:  resp.Data.MessageID,
@@ -556,6 +558,10 @@ Examples:
 			output.Fatal("API_ERROR", err)
 		}
 
+		// Remember the P2P chat_id when we messaged a person by open_id, so a
+		// later `lark dm`/`chat dm` can read history without re-sending.
+		rememberP2PChatFromSend(receiveIDType, msgSendTo, resp)
+
 		// Format output
 		result := api.OutputSendMessage{
 			Success:    true,
@@ -566,6 +572,18 @@ Examples:
 
 		output.JSON(result)
 	},
+}
+
+// rememberP2PChatFromSend caches the person->chat_id mapping when a send targeted
+// an open_id recipient and the response carries a chat_id. No-op otherwise.
+func rememberP2PChatFromSend(receiveIDType, receiveID string, resp *api.SendMessageResponse) {
+	if resp == nil || resp.Data.ChatID == "" {
+		return
+	}
+	if receiveIDType != "open_id" || !strings.HasPrefix(receiveID, "ou_") {
+		return
+	}
+	_ = config.RememberDMChat(receiveID, "", resp.Data.ChatID)
 }
 
 // --- msg react ---

@@ -36,10 +36,10 @@ All commands output JSON by default.`,
 		// Validate --format once per invocation.
 		if outputFormat != "" {
 			switch outputFormat {
-			case "pretty", "json", "ndjson", "table", "csv":
+			case "pretty", "json", "ndjson", "table", "csv", "text":
 				output.Format = outputFormat
 			default:
-				output.Fatalf("VALIDATION_ERROR", "invalid --format %q; want one of: pretty, json, ndjson, table, csv", outputFormat)
+				output.Fatalf("VALIDATION_ERROR", "invalid --format %q; want one of: pretty, json, ndjson, table, csv, text", outputFormat)
 			}
 		}
 	},
@@ -76,8 +76,17 @@ func Execute() {
 }
 
 func init() {
+	// Subcommand groups (msg, chat, mail, …) each define their own
+	// PersistentPreRun for scope validation. By default cobra runs only the
+	// closest hook in the chain, which would shadow the root hook that resolves
+	// the global --format flag — leaving output.Format at its "pretty" default
+	// for every grouped subcommand (so --format json/ndjson/text were silently
+	// ignored on e.g. `msg history`). Run the whole hook chain (root → child) so
+	// the global flag is honored everywhere while scope validation still runs.
+	cobra.EnableTraverseRunHooks = true
+
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "format", "pretty",
-		"Output format: pretty (default), json, ndjson, table, csv")
+		"Output format: pretty (default), json, ndjson, table, csv, text (transcript for message reads)")
 
 	rootCmd.AddCommand(apiCmd)
 	rootCmd.AddCommand(approvalCmd)
