@@ -119,6 +119,22 @@ Flags:
 - `--sort`: `asc` (default) or `desc`
 - `--limit`: Maximum messages (`0` = no limit)
 
+#### Agent-readable transcript: `--format text`
+
+```bash
+lark msg history --chat-id oc_xxxxx --limit 20 --format text
+```
+
+The global `--format text` flag (also valid on `lark dm` and `lark msg search`) emits **one fully-decoded plain-text block per message** instead of raw JSON. No JSON-walking required — content is decoded deterministically and senders/mentions are resolved to display names:
+
+```
+[2026-05-29T10:11:12Z] Alice (thread:1a2b3c4d): kickoff, see docs (https://x.io) @Bob
+[2026-05-29T10:11:18Z] ↳ bot: on it
+      second line of a multi-line message is indented
+```
+
+Decoding rules: `text`→text · `a`→`label (url)` · `at`→`@Name` · `img`/`media`/`file`→`[image|video|file <key>]` · `post`→title + paragraphs joined by newlines · `interactive` card→`[card] <title or first text>` · recalled→`[recalled]` · audio/sticker/shared→`[audio]`/`[sticker]`/`[shared chat]`. Replies are prefixed `↳` and indented; thread messages carry a `thread:<short>` tag so you can follow threading. `pretty`/`json`/`ndjson` are unchanged.
+
 ### Search Messages Across Chats
 
 ```bash
@@ -131,11 +147,14 @@ Searches all chats visible to the authenticated user. Always uses the user token
 
 Flags:
 - `<query>` (positional, required): Search text
-- `--chat-id`: Restrict to a specific chat
-- `--sender`: Restrict to messages from a sender (open_id)
+- `--chat-id`: Restrict to a specific chat (**client-side**, see note)
+- `--sender`: Restrict to messages from a sender, open_id (**client-side**, see note)
 - `--type`: Filter by message type (`text`, `image`, `file`, etc.)
 - `--after` / `--before`: Time range
 - `--limit`: Maximum results
+- `--format text`: Compact one-line-per-hit transcript (`[ts] sender @ chat: snippet`)
+
+> ⚠️ **`--sender` and `--chat-id` are filtered client-side.** Lark's search API silently ignores its `from_ids` / `chat_ids` parameters and returns global results mixing senders and chats, so the CLI applies these filters **after** fetching (matching `meta_data.from_id` / `meta_data.chat_id`) and prints a one-line note to **stderr** when it does. Because matching hits can be sparse across the global result stream, the CLI scans up to 50 pages looking for `--limit` matches before stopping. The JSON output includes `"client_side_filtered": true` when a client-side filter was applied.
 
 ### Forward Messages
 
@@ -235,6 +254,40 @@ lark chat dm ou_f8735159a11237cb442c3d72aee8b073      # passes through
 
 Returns the user's `open_id`, name, and a ready-to-use `lark msg send --to <open_id>` command. Lark auto-creates the P2P chat on first message — to read DM history afterward, capture the `chat_id` from the send response and use `lark msg history --chat-id <oc_id>`.
 
+> ⚠️ **P2P chat_id is only recoverable by sending.** `lark chat dm` returns an **empty `chat_id`** unless the DM appears in the recent-activity scan that backs `list-dms`. For an **inactive / old** DM it will say `"No prior DM found"` even though history exists. This is a hard Lark API limitation, not a CLI bug — see [Resolving an inactive DM's chat_id](#resolving-an-inactive-dms-chat_id) below.
+
+### Resolving an inactive DM's chat_id
+
+**The constraint.** Lark exposes **no read-only way** to get a 1:1 P2P `chat_id` from a person's `open_id`:
+- `GET /im/v1/chats` returns **group/topic chats only** — never P2P (verified).
+- `POST /im/v1/chats` with `chat_mode=p2p` is **not supported** — the create endpoint only accepts `chat_mode=group` (verified against the docs); there is no get-or-create-P2P call.
+- `msg search --sender <ou_>` / the raw `im/v1/messages/search` `from_ids`+`chat_type` filters are **silently ignored** by the API — they return unrelated chats, so search cannot recover a specific person's P2P chat (verified).
+- `lark chat list-dms` only finds P2P chats that have **recent messages** in the scanned window. Inactive DMs never surface.
+
+**What works:**
+
+| Goal | Reliable command | Notes |
+|---|---|---|
+| **Send** to a person (active or inactive DM) | `lark msg send --to <ou_ or email> --as user --text "…"` | Lark auto-resolves/creates the P2P chat and **reuses the existing one** if a DM history exists — same `chat_id`, no duplicate. The send **response carries `chat_id`** (`oc_…`). |
+| **Read** a known P2P chat | `lark msg history --chat-id <oc_…>` | `--chat-id` requires an `oc_` id; an `open_id` is rejected with `invalid container_id` (code 230001). |
+| **Read** an inactive DM whose `chat_id` you don't have | Send first → grab `chat_id` from the response → `lark msg history --chat-id <oc_…>` | ⚠️ Sending **notifies the user**. There is no notify-free way to obtain the id for an inactive DM. If you must not notify, you cannot read that DM's history via the API. **You only pay this once:** see the local DM cache below. |
+
+**Local person→chat_id cache (notify-free after the first time).** Once a P2P `chat_id` becomes known by any means — a `msg send` response, a `lark dm`/`chat dm` that resolved one, or a `list-dms` scan — the CLI persists it to `dm_cache.json` in the config dir, keyed by the counterpart's `open_id`. On the next `lark dm "<name>"` or `lark chat dm "<name>"`, the cache is consulted **first**, so reading an inactive DM no longer needs a fresh send (no notification). The cache is best-effort and never blocks a command on a read/write error. When a `chat_id` is still genuinely unknown (never cached, no recent activity), the command returns the counterpart's `open_id` plus an explicit message that the `chat_id` is only obtainable by sending (which notifies) — it never sends implicitly.
+
+**The full recipe (resolve → read an inactive DM):**
+```bash
+# 1. Resolve the person to an open_id (read-only, no notification)
+lark chat dm "Nadhilah Nur Talitha"        # → open_id ou_5d3f6e96...; chat_id may be empty
+
+# 2. Send a real message — this is the ONLY way to obtain the P2P chat_id for an
+#    inactive DM. The response includes chat_id (oc_...). This DOES notify them.
+lark msg send --to ou_5d3f6e9664030745fb0c00908042be43 --as user --text "Hi Nadhilah"
+
+# 3. Read history with the chat_id returned in step 2
+lark msg history --chat-id <oc_id_from_step_2> --sort desc --limit 30
+```
+For DMs that are recently active, skip the send: `lark chat list-dms` (or `lark dm "<name>"`) already yields the `chat_id`. The send-to-obtain-id path is **only** needed for inactive DMs, and only when you actually intend to message the person.
+
 ### Unified DM Read/Reply
 ```bash
 lark dm "Francis Goh" --last 20
@@ -249,6 +302,8 @@ Single command workflow for DM:
 - `--compact` returns parsed plain-text transcript optimized for agent consumption
 - `--dry-run-reply` resolves the recipient and previews the reply target without sending
 
+> ⚠️ `lark dm "<name>"` (read-only, no `--reply`) returns **"no existing DM history yet"** for an **inactive** DM even when history exists — it can only read DMs whose `chat_id` is recoverable from recent activity. To read an inactive DM you must send (which yields the `chat_id`); see [Resolving an inactive DM's chat_id](#resolving-an-inactive-dms-chat_id). Passing `--reply` does send a real message and then reads back, so `lark dm "<name>" --reply "…"` works for inactive DMs (it notifies).
+
 ### Enumerate Recent DMs
 
 ```bash
@@ -258,7 +313,7 @@ lark chat list-dms --limit 200    # scan deeper
 
 Output: `{ count, dms: [{ chat_id, counterpart, last_message_at, last_sender_id }] }`.
 
-Workaround for a Lark API limitation: `/im/v1/chats` only returns group chats, so P2P chats are not listed anywhere directly. This command scans recent messages across all visible chats and dedupes by `chat_id` where `is_p2p_chat=true`. Result count depends on how active your DMs are in the scanned window, so bump `--limit` if you expect more than a few.
+Workaround for a Lark API limitation: `/im/v1/chats` only returns group chats, so P2P chats are not listed anywhere directly. This command scans recent messages across all visible chats and dedupes by `chat_id` where `is_p2p_chat=true`. Result count depends on how active your DMs are in the scanned window, so bump `--limit` if you expect more than a few. **Inactive DMs will not appear at any `--limit`** — to reach those, see [Resolving an inactive DM's chat_id](#resolving-an-inactive-dms-chat_id).
 
 ### Search Chats
 
