@@ -7,8 +7,19 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yjwong/lark-cli/internal/api"
+	"github.com/yjwong/lark-cli/internal/config"
 	"github.com/yjwong/lark-cli/internal/output"
 )
+
+// resolveDMChatID returns a P2P chat_id for the user, consulting the local
+// person->chat_id cache first (cheap, no API calls, works for inactive DMs)
+// before falling back to the recent-activity search scan.
+func resolveDMChatID(client *api.Client, openID, name string) string {
+	if cid := config.LoadDMCache().GetByOpenID(openID); cid != "" {
+		return cid
+	}
+	return findP2PChatIDForUser(client, openID, name)
+}
 
 var (
 	dmLast    int
@@ -77,7 +88,7 @@ Examples:
 			output.Fatalf("VALIDATION_ERROR", "cannot DM yourself via this command; use the Notes chat in the Lark UI")
 		}
 
-		chatID := findP2PChatIDForUser(client, user.OpenID, user.Name)
+		chatID := resolveDMChatID(client, user.OpenID, user.Name)
 
 		// Optional reply first, so newly created DM chat_id becomes available.
 		if strings.TrimSpace(dmReply) != "" {
@@ -93,14 +104,14 @@ Examples:
 						"open_id": user.OpenID,
 						"name":    user.Name,
 					},
-					"chat_id":         chatID,
-					"send_to":         target,
-					"send_to_type":    receiveIDType,
-					"send_as":         dmAs,
-					"reply_preview":   dmReply,
-					"would_use_cmd":   "lark dm " + user.OpenID + ` --reply "` + dmReply + `"`,
-					"next_read_hint":  "lark dm " + user.OpenID + " --last " + strconv.Itoa(dmLast),
-					"message":         "dry run only; no message sent",
+					"chat_id":        chatID,
+					"send_to":        target,
+					"send_to_type":   receiveIDType,
+					"send_as":        dmAs,
+					"reply_preview":  dmReply,
+					"would_use_cmd":  "lark dm " + user.OpenID + ` --reply "` + dmReply + `"`,
+					"next_read_hint": "lark dm " + user.OpenID + " --last " + strconv.Itoa(dmLast),
+					"message":        "dry run only; no message sent",
 				})
 				return
 			}
@@ -121,6 +132,9 @@ Examples:
 			}
 			if sendResp != nil && sendResp.Data.ChatID != "" {
 				chatID = sendResp.Data.ChatID
+				// Persist the newly-known P2P chat_id so future reads skip the
+				// send-to-discover step.
+				_ = config.RememberDMChat(user.OpenID, user.Name, chatID)
 			}
 		}
 
@@ -135,14 +149,30 @@ Examples:
 					"name":    user.Name,
 				},
 				"chat_id": "",
-				"message": "no existing DM history yet; send a first message with --reply to create the chat",
+				"message": "No P2P chat_id is known for this person (not in the local DM cache, and no recent activity surfaced one). " +
+					"Lark exposes no read-only way to obtain a 1:1 chat_id from an open_id — it is only returned when you send a message (which notifies them). " +
+					"To read this DM, run with --reply to send + read in one step, or `lark msg send --to " + user.OpenID + " --as user --text \"…\"` and reuse the chat_id from the response.",
+				"open_id":      user.OpenID,
+				"send_command": "lark dm " + user.OpenID + ` --reply "…"`,
 			})
 			return
 		}
 
+		// chat_id is now known — cache it for future reads (covers the read-only
+		// path where it came from list-dms / search rather than a send).
+		_ = config.RememberDMChat(user.OpenID, user.Name, chatID)
+
 		msgs, _, _, err := listMessagesForDM(client, chatID, dmLast, dmAs == "user")
 		if err != nil {
 			output.Fatal("API_ERROR", err)
+		}
+
+		// Agent-readable transcript: decoded plain text, newest-first preserved.
+		if output.Format == output.FormatText {
+			resolver := newNameResolver(client)
+			resolver.preset(user.OpenID, user.Name)
+			printTranscript(msgs, resolver)
+			return
 		}
 
 		if dmCompact {
@@ -180,9 +210,9 @@ Examples:
 					"open_id": user.OpenID,
 					"name":    user.Name,
 				},
-				"chat_id":   chatID,
-				"count":     len(entries),
-				"messages":  entries,
+				"chat_id":    chatID,
+				"count":      len(entries),
+				"messages":   entries,
 				"reply_hint": "lark dm " + user.OpenID + ` --reply "..."`,
 			})
 			return

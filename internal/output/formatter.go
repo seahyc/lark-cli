@@ -20,11 +20,12 @@ const (
 	FormatNDJSON = "ndjson" // compact one-line JSON
 	FormatTable  = "table"  // ASCII table for arrays/object-of-arrays
 	FormatCSV    = "csv"    // CSV for arrays
+	FormatText   = "text"   // agent-readable transcript (messages only; falls back to pretty elsewhere)
 )
 
 // ValidFormats returns the supported --format values.
 func ValidFormats() []string {
-	return []string{FormatPretty, FormatJSON, FormatNDJSON, FormatTable, FormatCSV}
+	return []string{FormatPretty, FormatJSON, FormatNDJSON, FormatTable, FormatCSV, FormatText}
 }
 
 // JSON outputs data to stdout in the currently configured Format.
@@ -37,7 +38,7 @@ func JSON(v interface{}) {
 		renderTable(os.Stdout, v)
 	case FormatCSV:
 		renderCSV(os.Stdout, v)
-	default: // pretty / json
+	default: // pretty / json / text (text transcript is emitted by message commands directly)
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(v)
