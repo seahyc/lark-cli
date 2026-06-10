@@ -31,9 +31,10 @@ var Groups = map[string]ScopeGroup{
 		Name:        "documents",
 		Description: "Lark Docs, Drive, and Wiki access",
 		Scopes: []string{
-			"docx:document:readonly", "docx:document", "docx:document:create",
+			"docx:document:readonly", "docx:document", "docx:document:create", "docx:document:write_only",
 			"docs:doc:readonly", "docs:document.content:read", "docs:document.comment:read",
 			"drive:drive:readonly", "drive:drive",
+			"drive:file:upload",
 			"space:document:retrieve",
 			"wiki:space:read", "wiki:space:retrieve",
 			"wiki:node:read", "wiki:node:create", "wiki:node:retrieve", "wiki:node:copy",

@@ -604,6 +604,35 @@ Output:
 }
 ```
 
+### Rename a File or Document
+
+```bash
+lark doc rename <file-token> --title <new-title> [--type <doc-type>]
+```
+
+Renames a file or native document in Lark Drive.
+
+Options:
+- `--title`: New file or document title (required)
+- `--type`: Document type (default: `docx`). Supported: `doc`, `docx`, `sheet`, `bitable`, `folder`, `file`, `mindnote`, `slides`
+
+Examples:
+```bash
+lark doc rename ABC123xyz --title "New Document Title"
+lark doc rename ABC123xyz --type sheet --title "Updated Sheet Name"
+lark doc rename fldbcRho46N6... --type folder --title "Updated Folder Name"
+```
+
+Output:
+```json
+{
+  "success": true,
+  "file_token": "ABC123xyz",
+  "type": "docx",
+  "title": "New Document Title"
+}
+```
+
 ### Move a Block
 
 ```bash
@@ -679,6 +708,7 @@ lark doc append ABC123xyz --heading "Project Page" --level 2 --link "https://exa
 | Delete blocks from doc | `doc delete` | Remove specific blocks by ID |
 | Update a block | `doc update` | Modify existing block content (may fail, use `doc replace` instead) |
 | Trash a file/document | `doc trash` | Move to trash in Drive |
+| Rename a file/document | `doc rename` | Update the Drive display name |
 | Move a block | `doc move` | Reorder blocks within a document |
 | Get heading outline | `doc outline` | Fast structural overview (headings only) |
 | Append from markdown | `doc append --markdown` | Pipe markdown, auto-converts to blocks |

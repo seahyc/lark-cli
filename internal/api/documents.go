@@ -523,6 +523,26 @@ func (c *Client) DeleteDriveFile(fileToken, docType string) error {
 	return nil
 }
 
+// RenameDriveFile updates the display name of a file or native document in Lark Drive.
+// fileToken: the file token
+// docType: document type (e.g., "docx", "doc", "sheet", "bitable", "folder", "file")
+func (c *Client) RenameDriveFile(fileToken, docType, title string) error {
+	path := fmt.Sprintf("/drive/v1/files/%s?type=%s",
+		url.PathEscape(fileToken), url.QueryEscape(docType))
+	req := RenameDriveFileRequest{Name: title}
+
+	var resp BaseResponse
+	if err := c.Patch(path, req, &resp); err != nil {
+		return err
+	}
+
+	if err := resp.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // SearchDocuments searches for documents using the Lark Docs API
 // query: search keyword (required)
 // ownerIDs: optional filter by owner user IDs

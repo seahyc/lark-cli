@@ -1410,6 +1410,49 @@ Examples:
 	},
 }
 
+// --- doc rename ---
+
+var docRenameCmd = &cobra.Command{
+	Use:   "rename <file_token>",
+	Short: "Rename a file or document in Lark Drive",
+	Long: `Rename a file or native document in Lark Drive.
+
+The file_token is the document or file token.
+Use --type to specify the document type (default: docx).
+
+Supported types: doc, docx, sheet, bitable, folder, file, mindnote, slides
+
+Examples:
+  lark doc rename ABC123xyz --title "New Document Title"
+  lark doc rename Mbxmsn4eRha6... --type sheet --title "Updated Sheet Name"
+  lark doc rename fldbcRho46N6... --type folder --title "Updated Folder Name"`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		fileToken := args[0]
+		docType, _ := cmd.Flags().GetString("type")
+		title, _ := cmd.Flags().GetString("title")
+		if title == "" {
+			output.Fatal("MISSING_ARG", fmt.Errorf("--title is required"))
+		}
+
+		client := api.NewClient()
+
+		err := client.RenameDriveFile(fileToken, docType, title)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		result := api.OutputDriveRename{
+			Success:   true,
+			FileToken: fileToken,
+			Type:      docType,
+			Title:     title,
+		}
+
+		output.JSON(result)
+	},
+}
+
 // --- doc find ---
 
 // extractBlockText extracts the text content from a block's elements
@@ -2121,9 +2164,9 @@ Examples:
 		// block goes immediately after it. We refetch blocks each iteration to
 		// keep parent/index lookups accurate (cheap relative to a write).
 		var (
-			lastRevision int
-			newIDs       []string
-			anchorID     string // newly-inserted id of the previous block; used as next --after
+			lastRevision  int
+			newIDs        []string
+			anchorID      string // newly-inserted id of the previous block; used as next --after
 			currentBlocks = blocks
 		)
 
@@ -2194,6 +2237,7 @@ func init() {
 	docCmd.AddCommand(docDeleteCmd)
 	docCmd.AddCommand(docUpdateCmd)
 	docCmd.AddCommand(docTrashCmd)
+	docCmd.AddCommand(docRenameCmd)
 	docCmd.AddCommand(docFindCmd)
 	docCmd.AddCommand(docReplaceCmd)
 	docCmd.AddCommand(docOutlineCmd)
@@ -2265,6 +2309,10 @@ func init() {
 
 	// Flags for doc trash
 	docTrashCmd.Flags().String("type", "docx", "Document type: doc, docx, sheet, bitable, folder, file, mindnote, slides")
+
+	// Flags for doc rename
+	docRenameCmd.Flags().String("type", "docx", "Document type: doc, docx, sheet, bitable, folder, file, mindnote, slides")
+	docRenameCmd.Flags().String("title", "", "New title/name (required)")
 
 	// Flags for doc find
 	docFindCmd.Flags().Int("type", 0, "Filter by block type (e.g., 2=text, 12=bullet, 14=code)")
