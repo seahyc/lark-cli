@@ -1091,6 +1091,17 @@ type OutputDriveInfo struct {
 	URL              string `json:"url"`
 }
 
+type RenameDriveFileRequest struct {
+	Name string `json:"name"`
+}
+
+type OutputDriveRename struct {
+	Success   bool   `json:"success"`
+	FileToken string `json:"file_token"`
+	Type      string `json:"type"`
+	Title     string `json:"title"`
+}
+
 // --- Create Folder Types ---
 
 type CreateFolderRequest struct {
