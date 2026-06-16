@@ -105,6 +105,48 @@ Flags:
 - `--parent-id`: Parent message ID for threaded reply
 - `--root-id`: Root message ID for thread replies
 
+### Code blocks / rich markdown (interactive card)
+
+`lark msg send --text` (markdown-lite, `post`/`text`) does **NOT** render fenced
+code blocks — triple-backticks show up literally in Lark. To get a real
+rendered code block (line numbers + syntax highlighting), send an **interactive
+card** with a `markdown` element via the `lark api` passthrough. Works `--as user`.
+
+```bash
+# Build the card body (content must be a JSON *string*), then POST it.
+python3 - <<'PY' > /tmp/card.json
+import json
+md = """```bash
+POST /api/auth/token
+grant_type=refresh_token
+```
+
+```json
+{ "activeRole": "COMPANY", "availableRoles": ["COMPANY"] }
+```"""
+card = {"config": {"wide_screen_mode": True},
+        "elements": [{"tag": "markdown", "content": md}]}
+print(json.dumps({"receive_id": "ou_xxx_or_oc_xxx",
+                  "msg_type": "interactive",
+                  "content": json.dumps(card)}))
+PY
+
+lark api POST /open-apis/im/v1/messages \
+  --params '{"receive_id_type":"open_id"}' \
+  --data "$(cat /tmp/card.json)" --as user
+```
+
+Notes:
+- `receive_id_type` is `open_id` for a DM (the recipient's `ou_…`) or `chat_id`
+  for a group (`oc_…`); set `receive_id` to match.
+- The API echoes the card back as flattened `text` runs with literal backticks
+  — that's only Lark's internal storage form. The actual chat render is a proper
+  code block. Don't be fooled by the echo.
+- The card markdown element supports the usual fences incl. a language tag
+  (` ```json `, ` ```bash `) for highlighting. Threading: cards can't use
+  `--parent-id`; post the card to the chat directly (or as a normal reply +
+  separate card).
+
 ### Read Chat History
 
 ```bash

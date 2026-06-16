@@ -75,6 +75,14 @@ lark contact search "Jane"
 lark contact search "John Smith"
 ```
 
+**IMPORTANT — strip diacritics / use the ROMANIZED name.** Lark's directory stores
+ASCII/romanized names, and the search endpoint does NOT fold accents. Searching an
+accented form returns **0 results** even when the person exists:
+`lark contact search "Mai Thị Đỗ"` → `count: 0`, but
+`lark contact search "Mai Thi Do"` → the match. So for Vietnamese/accented names,
+search the de-accented spelling (Thị→Thi, Đỗ→Do, é→e, ñ→n). If a full-name search
+misses, retry with a single de-accented token (e.g. just `"Mai"`).
+
 Output:
 ```json
 {

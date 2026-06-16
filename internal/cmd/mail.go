@@ -821,6 +821,75 @@ Examples:
 	},
 }
 
+// --- mail update-draft ---
+
+var (
+	mailUpdateDraftMailbox     string
+	mailUpdateDraftUID         uint32
+	mailUpdateDraftBody        string
+	mailUpdateDraftBodyFile    string
+	mailUpdateDraftTo          []string
+	mailUpdateDraftCC          []string
+	mailUpdateDraftBCC         []string
+	mailUpdateDraftSubject     string
+	mailUpdateDraftKeepHeaders bool
+	mailUpdateDraftAttachments []string
+)
+
+var mailUpdateDraftCmd = &cobra.Command{
+	Use:     "update-draft",
+	Aliases: []string{"edit-draft"},
+	Short:   "Replace an existing draft's body in-place",
+	Long: `Replace an existing draft's body while preserving its To/Cc/Bcc/Subject.
+
+This fetches the existing draft by UID, appends a new draft with the same
+recipients/subject but the new body, then deletes the old draft.
+
+Note: original attachments are NOT preserved automatically; re-supply via
+--attach if needed. The new draft gets a fresh Message-ID.
+
+Examples:
+  lark mail update-draft --uid 12345 --body "Updated body text"
+  lark mail update-draft --uid 12345 --body-file new.txt
+  lark mail update-draft --uid 12345 --body "New body" --subject "New subject"`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if mailUpdateDraftUID == 0 {
+			output.Fatalf("VALIDATION_ERROR", "--uid is required")
+		}
+
+		body := mailUpdateDraftBody
+		if mailUpdateDraftBodyFile != "" {
+			data, err := os.ReadFile(mailUpdateDraftBodyFile)
+			if err != nil {
+				output.Fatal("IO_ERROR", fmt.Errorf("reading body file: %w", err))
+			}
+			body = string(data)
+		}
+		if body == "" {
+			output.Fatalf("VALIDATION_ERROR", "--body or --body-file is required")
+		}
+
+		opts := &mail.UpdateDraftOptions{
+			UID:         mailUpdateDraftUID,
+			Mailbox:     mailUpdateDraftMailbox,
+			Body:        body,
+			To:          mailUpdateDraftTo,
+			CC:          mailUpdateDraftCC,
+			BCC:         mailUpdateDraftBCC,
+			Subject:     mailUpdateDraftSubject,
+			KeepHeaders: mailUpdateDraftKeepHeaders,
+			Attachments: mailUpdateDraftAttachments,
+		}
+
+		result, err := mail.UpdateDraft(opts)
+		if err != nil {
+			output.Fatal("DRAFT_ERROR", err)
+		}
+
+		output.JSON(result)
+	},
+}
+
 func init() {
 	// mail delete flags
 	mailDeleteCmd.Flags().StringVarP(&mailDeleteMailbox, "mailbox", "m", "INBOX", "Mailbox")
@@ -897,4 +966,17 @@ func init() {
 	mailCmd.AddCommand(mailDeleteCmd)
 	mailCmd.AddCommand(mailMoveCmd)
 	mailCmd.AddCommand(mailReplyCmd)
+
+	// mail update-draft flags
+	mailUpdateDraftCmd.Flags().StringVarP(&mailUpdateDraftMailbox, "mailbox", "m", "Drafts", "Drafts mailbox name")
+	mailUpdateDraftCmd.Flags().Uint32Var(&mailUpdateDraftUID, "uid", 0, "UID of the draft to update (required)")
+	mailUpdateDraftCmd.Flags().StringVar(&mailUpdateDraftBody, "body", "", "New body text")
+	mailUpdateDraftCmd.Flags().StringVar(&mailUpdateDraftBodyFile, "body-file", "", "Read new body from file")
+	mailUpdateDraftCmd.Flags().StringSliceVar(&mailUpdateDraftTo, "to", nil, "Override To recipient(s)")
+	mailUpdateDraftCmd.Flags().StringSliceVar(&mailUpdateDraftCC, "cc", nil, "Override Cc recipient(s)")
+	mailUpdateDraftCmd.Flags().StringSliceVar(&mailUpdateDraftBCC, "bcc", nil, "Override Bcc recipient(s)")
+	mailUpdateDraftCmd.Flags().StringVar(&mailUpdateDraftSubject, "subject", "", "Override subject")
+	mailUpdateDraftCmd.Flags().BoolVar(&mailUpdateDraftKeepHeaders, "keep-headers", true, "Preserve existing To/Cc/Bcc/Subject if not overridden")
+	mailUpdateDraftCmd.Flags().StringSliceVar(&mailUpdateDraftAttachments, "attach", nil, "Attachment file path(s) for new draft (original attachments not preserved)")
+	mailCmd.AddCommand(mailUpdateDraftCmd)
 }

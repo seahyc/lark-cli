@@ -455,29 +455,58 @@ func (c *Client) ReplaceDocumentBlock(documentID, blockID string, newBlocks []Do
 		return nil, 0, fmt.Errorf("failed to get blocks: %w", err)
 	}
 
-	// Find the block's parent and its index within the parent's children
-	var parentID string
-	var childIdx int
-	found := false
-	for _, block := range blocks {
-		if block.Children == nil {
-			continue
-		}
-		for idx, childID := range block.Children {
-			if childID == blockID {
-				parentID = block.BlockID
-				childIdx = idx
-				found = true
-				break
-			}
-		}
-		if found {
+	// Build lookup maps: block_id -> block, and block_id -> children list.
+	// Using the target block's own parent_id is more robust than walking every
+	// block's children, because nested blocks (table cells, callouts, quote
+	// containers) reliably carry parent_id while paginated children arrays may
+	// be missing entries the lookup expects.
+	byID := make(map[string]*DocumentBlock, len(blocks))
+	for i := range blocks {
+		byID[blocks[i].BlockID] = &blocks[i]
+	}
+
+	target, ok := byID[blockID]
+	if !ok {
+		return nil, 0, fmt.Errorf("block %s not found in document", blockID)
+	}
+
+	parentID := target.ParentID
+	if parentID == "" {
+		// Root page has no parent; cannot be replaced.
+		return nil, 0, fmt.Errorf("block %s has no parent (is it the root page?)", blockID)
+	}
+
+	parent, ok := byID[parentID]
+	if !ok {
+		return nil, 0, fmt.Errorf("parent block %s of %s not found in document", parentID, blockID)
+	}
+
+	childIdx := -1
+	for idx, childID := range parent.Children {
+		if childID == blockID {
+			childIdx = idx
 			break
 		}
 	}
-
-	if !found {
-		return nil, 0, fmt.Errorf("block %s not found as a child of any block", blockID)
+	if childIdx == -1 {
+		// Fall back: scan every block's children list in case the parent's
+		// children array is stale (rare, but observed when the doc was edited
+		// mid-pagination).
+		for _, block := range blocks {
+			for idx, childID := range block.Children {
+				if childID == blockID {
+					parentID = block.BlockID
+					childIdx = idx
+					break
+				}
+			}
+			if childIdx != -1 {
+				break
+			}
+		}
+		if childIdx == -1 {
+			return nil, 0, fmt.Errorf("block %s not found as a child of parent %s", blockID, parentID)
+		}
 	}
 
 	// Delete the block
@@ -589,7 +618,6 @@ func (c *Client) SearchDocuments(query string, ownerIDs, chatIDs, docTypes []str
 		offset += pageSize
 	}
 }
-
 
 func (c *Client) GetDriveMeta(docToken, docType string) (*DriveMetaItem, error) {
 	req := DriveMetaRequest{

@@ -2563,11 +2563,11 @@ type BatchDeleteRecordsRequest struct {
 
 // SearchRecordsRequest searches records with filter/sort
 type SearchRecordsRequest struct {
-	ViewID       string                   `json:"view_id,omitempty"`
-	FieldNames   []string                 `json:"field_names,omitempty"`
-	Sort         []map[string]interface{} `json:"sort,omitempty"`
-	Filter       map[string]interface{}   `json:"filter,omitempty"`
-	Automatic    bool                     `json:"automatic_fields,omitempty"`
+	ViewID     string                   `json:"view_id,omitempty"`
+	FieldNames []string                 `json:"field_names,omitempty"`
+	Sort       []map[string]interface{} `json:"sort,omitempty"`
+	Filter     map[string]interface{}   `json:"filter,omitempty"`
+	Automatic  bool                     `json:"automatic_fields,omitempty"`
 }
 
 // SearchRecordsResponse wraps search results
@@ -2585,12 +2585,12 @@ type SearchRecordsResponse struct {
 
 // WikiSpace represents a wiki space.
 type WikiSpace struct {
-	SpaceID          string `json:"space_id"`
-	Name             string `json:"name"`
-	Description      string `json:"description,omitempty"`
-	SpaceType        string `json:"space_type,omitempty"`
-	Visibility       string `json:"visibility,omitempty"`
-	OpenSharing      string `json:"open_sharing,omitempty"`
+	SpaceID     string `json:"space_id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	SpaceType   string `json:"space_type,omitempty"`
+	Visibility  string `json:"visibility,omitempty"`
+	OpenSharing string `json:"open_sharing,omitempty"`
 }
 
 // WikiSpacesResponse wraps a list of wiki spaces.
@@ -2646,18 +2646,18 @@ type MoveWikiNodeResponse struct {
 
 // Meeting represents a video conferencing meeting.
 type Meeting struct {
-	ID             string             `json:"id"`
-	Topic          string             `json:"topic,omitempty"`
-	URL            string             `json:"url,omitempty"`
-	MeetingNo      string             `json:"meeting_no,omitempty"`
-	StartTime      string             `json:"start_time,omitempty"`
-	EndTime        string             `json:"end_time,omitempty"`
+	ID             string              `json:"id"`
+	Topic          string              `json:"topic,omitempty"`
+	URL            string              `json:"url,omitempty"`
+	MeetingNo      string              `json:"meeting_no,omitempty"`
+	StartTime      string              `json:"start_time,omitempty"`
+	EndTime        string              `json:"end_time,omitempty"`
 	HostUser       *MeetingParticipant `json:"host_user,omitempty"`
-	Status         string             `json:"status,omitempty"`
-	ParticipantCnt int                `json:"participant_count,omitempty"`
-	Type           string             `json:"type,omitempty"`
-	OwnerID        string             `json:"owner_id,omitempty"`
-	CreateTime     string             `json:"create_time,omitempty"`
+	Status         string              `json:"status,omitempty"`
+	ParticipantCnt int                 `json:"participant_count,omitempty"`
+	Type           string              `json:"type,omitempty"`
+	OwnerID        string              `json:"owner_id,omitempty"`
+	CreateTime     string              `json:"create_time,omitempty"`
 }
 
 // MeetingParticipant represents a meeting participant.
