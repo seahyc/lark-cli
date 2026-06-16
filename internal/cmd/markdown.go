@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"strings"
 
+	"github.com/yjwong/lark-cli/internal/api"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
-	"github.com/yjwong/lark-cli/internal/api"
 )
 
 // MarkdownTableData holds parsed table data from markdown for 2-phase table creation.
@@ -133,11 +133,17 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 	}
 }
 
-// maxMarkdownTableRows caps how many data rows go into one Lark table when
-// importing from markdown. Larger tables hit Lark's per-call payload / cell
-// limit and return "invalid param". Splitting into multiple adjacent tables
-// renders identically in the Lark UI for read purposes.
-const maxMarkdownTableRows = 6
+// maxMarkdownTableRows / maxMarkdownTableCols cap how many data rows and
+// columns can go into a single Lark table when importing from markdown.
+// Empirically Lark's docx create-blocks endpoint rejects any table whose
+// row_size or column_size exceeds 9 with code 1770001 ("invalid param");
+// we use 8 for rows (matching the previous 6+header convention) and 9 for
+// columns. Tables exceeding either limit are split into a grid of adjacent
+// sub-tables that render acceptably in the Lark UI.
+const (
+	maxMarkdownTableRows = 8
+	maxMarkdownTableCols = 9
+)
 
 // convertMarkdownTable extracts header and row data from a goldmark table AST
 // node, stores it in pendingMarkdownTables for 2-phase creation, and returns
@@ -171,26 +177,83 @@ func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock 
 		return nil
 	}
 
-	chunks := chunkTableRows(rows, maxMarkdownTableRows)
-	out := make([]api.DocumentBlock, 0, len(chunks))
-	for _, chunk := range chunks {
-		pendingMarkdownTables = append(pendingMarkdownTables, MarkdownTableData{
-			Headers: headers,
-			Rows:    chunk,
-		})
-		colSize := len(headers)
-		rowSize := 1 + len(chunk)
-		out = append(out, api.DocumentBlock{
-			BlockType: 31,
-			Table: &api.TableBlock{
-				Property: &api.TableProperty{
-					RowSize:     rowSize,
-					ColumnSize:  colSize,
-					ColumnWidth: calcColumnWidths(headers, chunk),
-					HeaderRow:   true,
+	// First chunk vertically (by rows), then within each row-chunk slice
+	// horizontally (by columns). Each (rowChunk, colChunk) pair becomes one
+	// pendingMarkdownTable + placeholder block. Order: top-to-bottom, then
+	// left-to-right within a row-chunk, so the visual reading order matches
+	// the source markdown when blocks are rendered sequentially.
+	rowChunks := chunkTableRows(rows, maxMarkdownTableRows)
+	colSlices := sliceColumns(len(headers), maxMarkdownTableCols)
+
+	out := make([]api.DocumentBlock, 0, len(rowChunks)*len(colSlices))
+	for _, rowChunk := range rowChunks {
+		for _, cs := range colSlices {
+			subHeaders := headers[cs.start:cs.end]
+			subRows := projectRowColumns(rowChunk, cs.start, cs.end, len(headers))
+			pendingMarkdownTables = append(pendingMarkdownTables, MarkdownTableData{
+				Headers: subHeaders,
+				Rows:    subRows,
+			})
+			colSize := len(subHeaders)
+			rowSize := 1 + len(subRows)
+			out = append(out, api.DocumentBlock{
+				BlockType: 31,
+				Table: &api.TableBlock{
+					Property: &api.TableProperty{
+						RowSize:     rowSize,
+						ColumnSize:  colSize,
+						ColumnWidth: calcColumnWidths(subHeaders, subRows),
+						HeaderRow:   true,
+					},
 				},
-			},
-		})
+			})
+		}
+	}
+	return out
+}
+
+// columnSlice represents a half-open column index range [start, end).
+type columnSlice struct{ start, end int }
+
+// sliceColumns partitions [0, total) into contiguous slices each at most
+// maxCols wide. total == 0 is treated as one empty slice so a header-only
+// edge case still emits a placeholder.
+func sliceColumns(total, maxCols int) []columnSlice {
+	if maxCols <= 0 {
+		maxCols = 1
+	}
+	if total <= 0 {
+		return []columnSlice{{0, 0}}
+	}
+	var out []columnSlice
+	for i := 0; i < total; i += maxCols {
+		end := i + maxCols
+		if end > total {
+			end = total
+		}
+		out = append(out, columnSlice{i, end})
+	}
+	return out
+}
+
+// projectRowColumns extracts columns [colStart, colEnd) from a slice of rows
+// encoded as "c1|c2|..." strings. Missing cells are emitted as empty.
+func projectRowColumns(rows []string, colStart, colEnd, totalCols int) []string {
+	if rows == nil {
+		return nil
+	}
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		cells := strings.SplitN(row, "|", totalCols+1)
+		sub := make([]string, 0, colEnd-colStart)
+		for i := colStart; i < colEnd; i++ {
+			if i < len(cells) {
+				sub = append(sub, strings.TrimSpace(cells[i]))
+			} else {
+				sub = append(sub, "")
+			}
+		}
+		out = append(out, strings.Join(sub, "|"))
 	}
 	return out
 }

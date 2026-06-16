@@ -49,12 +49,90 @@ var sheetCmd = &cobra.Command{
 
 var singleCellRangeRe = regexp.MustCompile(`^[A-Za-z]+[0-9]+$`)
 
+// a1NotationRe detects bare A1 notation (e.g. "A1", "A1:T10", "M:N", "A:Z").
+var a1NotationRe = regexp.MustCompile(`^[A-Za-z]+([0-9]+)?(:[A-Za-z]+([0-9]+)?)?$`)
+
 func normalizeStyleRange(rangeSpec string) string {
 	rangeSpec = strings.TrimSpace(rangeSpec)
 	if singleCellRangeRe.MatchString(rangeSpec) {
 		return rangeSpec + ":" + rangeSpec
 	}
 	return rangeSpec
+}
+
+// resolveSheetRange combines explicit --sheet / --tab / --range inputs into a
+// Lark range string of the form "<sheet_id>!<A1>" (or just "<sheet_id>" for
+// the whole sheet). It accepts --range in any of these shapes:
+//
+//	"A1:T10"                  -> bare A1; sheetID comes from --sheet/--tab/first
+//	"<sheet_id>!A1:T10"       -> explicit sheet prefix; used as-is (sheet_id verified)
+//	"<title>!A1:T10"          -> title resolved to sheet_id
+//	"<sheet_id>" / "<title>"  -> whole sheet
+//
+// resolvedSheetID is the sheet ID derived from --sheet / --tab (or "" if neither
+// was provided). If --range already carries a prefix, that prefix wins.
+func resolveSheetRange(client *api.Client, token, resolvedSheetID, rangeSpec string) (string, error) {
+	rangeSpec = strings.TrimSpace(rangeSpec)
+	// Strip surrounding quotes a user may have typed around a title.
+	rangeSpec = strings.Trim(rangeSpec, "'\"")
+
+	// Case 1: --range contains a sheet prefix ("<id-or-title>!<a1>").
+	if idx := strings.Index(rangeSpec, "!"); idx >= 0 {
+		prefix := strings.Trim(rangeSpec[:idx], "'\"")
+		a1 := rangeSpec[idx+1:]
+		sheetID, err := lookupSheetID(client, token, prefix)
+		if err != nil {
+			return "", err
+		}
+		if a1 == "" {
+			return sheetID, nil
+		}
+		return sheetID + "!" + a1, nil
+	}
+
+	// Case 2: no "!" in --range. Could be bare A1, a sheet_id, or a title.
+	if rangeSpec == "" {
+		if resolvedSheetID == "" {
+			return "", fmt.Errorf("no sheet id resolved")
+		}
+		return resolvedSheetID, nil
+	}
+
+	// If it parses as A1 notation (e.g. "A1:T10", "M:N"), combine with the
+	// resolved sheet ID from --sheet/--tab.
+	if a1NotationRe.MatchString(rangeSpec) {
+		if resolvedSheetID == "" {
+			return "", fmt.Errorf("range %q is A1 notation but no --sheet/--tab supplied", rangeSpec)
+		}
+		return resolvedSheetID + "!" + rangeSpec, nil
+	}
+
+	// Otherwise treat the whole arg as a sheet_id or title -> whole sheet.
+	sheetID, err := lookupSheetID(client, token, rangeSpec)
+	if err != nil {
+		return "", err
+	}
+	return sheetID, nil
+}
+
+// lookupSheetID returns idOrTitle unchanged if it already matches a sheet's
+// SheetID in the workbook, otherwise tries to match it against a sheet Title.
+func lookupSheetID(client *api.Client, token, idOrTitle string) (string, error) {
+	sheets, err := client.GetSpreadsheetSheets(token)
+	if err != nil {
+		return "", err
+	}
+	for _, s := range sheets {
+		if s.SheetID == idOrTitle {
+			return s.SheetID, nil
+		}
+	}
+	for _, s := range sheets {
+		if s.Title == idOrTitle {
+			return s.SheetID, nil
+		}
+	}
+	return "", fmt.Errorf("no sheet with id or title %q in spreadsheet", idOrTitle)
 }
 
 // --- sheet list ---
@@ -148,13 +226,34 @@ Examples:
 
 		client := api.NewClient()
 
-		sheetID = resolveSheetID(client, token, sheetID)
+		tabName, _ := cmd.Flags().GetString("tab")
+		if sheetID == "" && tabName != "" {
+			id, err := lookupSheetID(client, token, tabName)
+			if err != nil {
+				output.Fatal("INVALID_ARG", err)
+			}
+			sheetID = id
+		}
 
-		// Build the range string
+		// Build the range string. Use resolveSheetRange so that --range may
+		// itself carry a "<sheet_id>!<a1>" or "<title>!<a1>" prefix, or be a
+		// bare sheet_id / title / A1 notation. Only resolve the default first
+		// sheet when neither --sheet/--tab nor a prefixed --range was given.
 		var fullRange string
 		if rangeSpec != "" {
-			fullRange = sheetID + "!" + rangeSpec
+			fr, err := resolveSheetRange(client, token, sheetID, rangeSpec)
+			if err != nil {
+				output.Fatal("INVALID_ARG", err)
+			}
+			fullRange = fr
+			// Recover the sheetID actually used so the output reflects reality.
+			if idx := strings.Index(fr, "!"); idx >= 0 {
+				sheetID = fr[:idx]
+			} else {
+				sheetID = fr
+			}
 		} else {
+			sheetID = resolveSheetID(client, token, sheetID)
 			// Default: read up to 1000 rows, determined by sheet size
 			// Get sheet metadata to determine actual dimensions
 			sheet, err := client.GetSheetMetadata(token, sheetID)
@@ -903,7 +1002,8 @@ func init() {
 
 	// Flags for sheet read
 	sheetReadCmd.Flags().String("sheet", "", "Sheet ID to read from (default: first sheet)")
-	sheetReadCmd.Flags().String("range", "", "Cell range to read (e.g., A1:Z100)")
+	sheetReadCmd.Flags().String("tab", "", "Sheet tab title to read from (resolved to sheet_id; alternative to --sheet)")
+	sheetReadCmd.Flags().String("range", "", "Cell range to read (e.g., A1:Z100, KKV4d9!A1:T10, or 'My Tab'!A1:T10)")
 	sheetReadCmd.Flags().String("render", "value", "How to render cell values: value (computed, default), formula (raw =formula), formatted (display string)")
 
 	// Flags for sheet validation
