@@ -344,6 +344,7 @@ var (
 	msgSendText     string
 	msgSendImages   []string
 	msgSendFiles    []string
+	msgSendCover    string
 	msgSendRootID   string
 	msgSendParentID string
 	msgSendMsgType  string
@@ -449,12 +450,19 @@ Examples:
 			var results []api.OutputSendMessage
 			for _, filePath := range msgSendFiles {
 				fileType := inferFileType(filePath)
+				msgType := messageTypeForFileType(fileType)
+				// Lark reads video duration from the upload's duration field;
+				// the same value is echoed into the message content below.
+				durationMs := 0
+				if msgType == "media" {
+					durationMs = mp4DurationMs(filePath)
+				}
 				var fileKey string
 				var err error
 				if asUser {
-					fileKey, err = client.UploadFileAsUser(filePath, fileType)
+					fileKey, err = client.UploadFileAsUser(filePath, fileType, durationMs)
 				} else {
-					fileKey, err = client.UploadFile(filePath, fileType)
+					fileKey, err = client.UploadFile(filePath, fileType, durationMs)
 				}
 				if err != nil {
 					if errors.Is(err, os.ErrNotExist) {
@@ -462,22 +470,54 @@ Examples:
 					}
 					output.Fatal("API_ERROR", err)
 				}
-				fileContent, err := buildFileContent(fileKey, fileType)
+				var fileContent string
+				switch msgType {
+				case "media":
+					// Video: Lark needs a cover image_key alongside file_key, or
+					// the message is stored as nonsupport. Use --cover if given,
+					// otherwise a generated placeholder (Lark draws the play button).
+					coverPath := msgSendCover
+					var coverTmp string
+					if coverPath == "" {
+						coverTmp, err = generatePlaceholderCover()
+						if err != nil {
+							output.Fatal("FILE_ERROR", err)
+						}
+						coverPath = coverTmp
+					}
+					var imageKey string
+					if asUser {
+						imageKey, err = client.UploadMessageImageAsUser(coverPath)
+					} else {
+						imageKey, err = client.UploadMessageImage(coverPath)
+					}
+					if coverTmp != "" {
+						os.Remove(coverTmp)
+					}
+					if err != nil {
+						output.Fatal("API_ERROR", err)
+					}
+					fileContent, err = buildMediaContent(fileKey, imageKey, filepath.Base(filePath), durationMs)
+				case "audio":
+					fileContent, err = buildAudioContent(fileKey, 0)
+				default:
+					fileContent, err = buildFileContent(fileKey, fileType)
+				}
 				if err != nil {
 					output.Fatal("VALIDATION_ERROR", err)
 				}
 				var resp *api.SendMessageResponse
 				if msgSendParentID != "" {
 					if asUser {
-						resp, err = client.ReplyMessageAsUser(msgSendParentID, "file", fileContent, msgSendRootID, true)
+						resp, err = client.ReplyMessageAsUser(msgSendParentID, msgType, fileContent, msgSendRootID, true)
 					} else {
-						resp, err = client.ReplyMessage(msgSendParentID, "file", fileContent, msgSendRootID, true)
+						resp, err = client.ReplyMessage(msgSendParentID, msgType, fileContent, msgSendRootID, true)
 					}
 				} else {
 					if asUser {
-						resp, err = client.SendMessageAsUser(receiveIDType, msgSendTo, "file", fileContent)
+						resp, err = client.SendMessageAsUser(receiveIDType, msgSendTo, msgType, fileContent)
 					} else {
-						resp, err = client.SendMessage(receiveIDType, msgSendTo, "file", fileContent)
+						resp, err = client.SendMessage(receiveIDType, msgSendTo, msgType, fileContent)
 					}
 				}
 				if err != nil {
@@ -1238,12 +1278,28 @@ func inferFileType(filePath string) string {
 		return "xls"
 	case ".ppt", ".pptx":
 		return "ppt"
-	case ".mp4":
+	case ".mp4", ".mov", ".m4v":
 		return "mp4"
 	case ".opus":
 		return "opus"
 	default:
 		return "stream"
+	}
+}
+
+// messageTypeForFileType maps an upload file_type to the message msg_type it
+// must be sent as. Lark rejects mismatches with code 230055 ("the type of file
+// upload does not match the type of message being sent"): a video uploaded as
+// file_type=mp4 has to go out as msg_type=media, audio (opus) as msg_type=audio,
+// everything else as a plain file.
+func messageTypeForFileType(fileType string) string {
+	switch fileType {
+	case "mp4":
+		return "media"
+	case "opus":
+		return "audio"
+	default:
+		return "file"
 	}
 }
 
@@ -1389,7 +1445,8 @@ func init() {
 	msgSendCmd.Flags().StringVar(&msgSendMsgType, "msg-type", "post", "Message type: post (default) or text")
 	msgSendCmd.Flags().StringVar(&msgSendParentID, "parent-id", "", "Parent message ID to reply to (optional)")
 	msgSendCmd.Flags().StringVar(&msgSendRootID, "root-id", "", "Root message ID for thread replies (optional)")
-	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message)")
+	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message). Video (.mp4/.mov/.m4v) is sent as a playable video, audio (.opus) as a voice message, everything else as a file.")
+	msgSendCmd.Flags().StringVar(&msgSendCover, "cover", "", "Cover image for a video --file (optional; a plain cover is generated if omitted)")
 	msgSendCmd.Flags().StringVar(&msgSendAs, "as", "user", "Send as 'user' (default, your identity) or 'bot'")
 
 	// msg react flags
