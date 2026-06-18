@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/yjwong/lark-cli/internal/auth"
 )
@@ -257,7 +258,7 @@ func (c *Client) UploadMessageImageAsUser(filePath string) (string, error) {
 }
 
 // uploadFileWithToken is the shared implementation for file uploads
-func (c *Client) uploadFileWithToken(filePath, fileType, token string) (string, error) {
+func (c *Client) uploadFileWithToken(filePath, fileType, token string, durationMs int) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -271,6 +272,13 @@ func (c *Client) uploadFileWithToken(filePath, fileType, token string) (string, 
 	}
 	if err := writer.WriteField("file_name", filepath.Base(filePath)); err != nil {
 		return "", fmt.Errorf("failed to write file_name: %w", err)
+	}
+	// Lark reads media/audio duration from this upload field, not from the
+	// message content — without it the client renders the video as 00:00.
+	if durationMs > 0 {
+		if err := writer.WriteField("duration", strconv.Itoa(durationMs)); err != nil {
+			return "", fmt.Errorf("failed to write duration: %w", err)
+		}
 	}
 
 	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
@@ -322,19 +330,21 @@ func (c *Client) uploadFileWithToken(filePath, fileType, token string) (string, 
 
 // UploadFile uploads a file for message sending using bot token.
 // fileType must be one of: opus, mp4, pdf, doc, xls, ppt, stream
-func (c *Client) UploadFile(filePath, fileType string) (string, error) {
+// durationMs is the media/audio duration in milliseconds (0 to omit).
+func (c *Client) UploadFile(filePath, fileType string, durationMs int) (string, error) {
 	if err := auth.EnsureValidTenantToken(); err != nil {
 		return "", err
 	}
-	return c.uploadFileWithToken(filePath, fileType, auth.GetTenantTokenStore().GetAccessToken())
+	return c.uploadFileWithToken(filePath, fileType, auth.GetTenantTokenStore().GetAccessToken(), durationMs)
 }
 
 // UploadFileAsUser uploads a file using user token.
-func (c *Client) UploadFileAsUser(filePath, fileType string) (string, error) {
+// durationMs is the media/audio duration in milliseconds (0 to omit).
+func (c *Client) UploadFileAsUser(filePath, fileType string, durationMs int) (string, error) {
 	if err := auth.EnsureValidToken(); err != nil {
 		return "", err
 	}
-	return c.uploadFileWithToken(filePath, fileType, auth.GetTokenStore().GetAccessToken())
+	return c.uploadFileWithToken(filePath, fileType, auth.GetTokenStore().GetAccessToken(), durationMs)
 }
 
 // SendMessage sends a message to a user or chat as the bot (tenant token)
