@@ -40,27 +40,60 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		opts := auth.LoginOptions{}
 
+		var groups []string
 		if loginScopes != "" {
 			// Parse and validate scope groups
-			groups, invalid := scopes.ParseGroups(loginScopes)
+			parsed, invalid := scopes.ParseGroups(loginScopes)
 			if len(invalid) > 0 {
 				output.Fatal("VALIDATION_ERROR", fmt.Errorf("invalid scope groups: %s\nValid groups: %s",
 					strings.Join(invalid, ", "),
 					strings.Join(scopes.AllGroupNames(), ", ")))
 			}
-			if len(groups) == 0 {
+			if len(parsed) == 0 {
 				output.Fatal("VALIDATION_ERROR", fmt.Errorf("no valid scope groups specified\nValid groups: %s",
 					strings.Join(scopes.AllGroupNames(), ", ")))
 			}
-			opts.ScopeGroups = groups
+			groups = parsed
 		}
-		// If loginScopes is empty, opts.ScopeGroups remains nil, triggering default (all scopes)
+
+		// --add means incremental authorization: request the union of the
+		// currently-granted groups and the new ones, so we never silently drop
+		// existing permissions. (Lark's own incremental auth is unreliable — it
+		// has been observed dropping groups not named in the request — so we
+		// re-request everything explicitly.)
+		if loginAdd {
+			existing := auth.GetTokenStore().GetGrantedGroupsList()
+			groups = unionGroups(existing, groups)
+			if len(groups) == 0 {
+				output.Fatal("VALIDATION_ERROR", fmt.Errorf(
+					"--add has nothing to add: no existing permissions and no --scopes given"))
+			}
+		}
+
+		// Empty groups (no --scopes, no --add) leaves ScopeGroups nil, which
+		// triggers the default (all scopes) in LoginWithOptions.
+		opts.ScopeGroups = groups
 
 		if err := auth.LoginWithOptions(opts); err != nil {
 			output.Fatal("AUTH_ERROR", err)
 		}
 		output.Success("Successfully authenticated with Lark")
 	},
+}
+
+// unionGroups returns the de-duplicated union of two scope-group name slices,
+// preserving order (existing groups first, then any new ones).
+func unionGroups(existing, added []string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(existing)+len(added))
+	for _, g := range append(append([]string{}, existing...), added...) {
+		if g == "" || seen[g] {
+			continue
+		}
+		seen[g] = true
+		out = append(out, g)
+	}
+	return out
 }
 
 var logoutCmd = &cobra.Command{
