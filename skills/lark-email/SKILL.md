@@ -192,6 +192,56 @@ lark mail move --uid 12345 --dest Archive
 lark mail move --mailbox INBOX --uid 12345 --dest Trash
 ```
 
+## Filter Rules & Folders (Open API)
+
+Unlike the IMAP commands above, `mail filter` and `mail folder` use the Lark
+Open API (user token) and require the **`mailrules`** scope group
+(`mail:user_mailbox.rule:write`, `mail:user_mailbox.folder:write`):
+
+```bash
+lark auth login --add --scopes mailrules
+```
+
+### Folders
+
+```bash
+lark mail folder list
+lark mail folder create --name "3rd-party-alerts" [--parent 0]
+lark mail folder delete <folder-id>
+```
+
+### Filter rules ("auto filters")
+
+```bash
+lark mail filter list
+lark mail filter delete <rule-id>
+
+# Move matched senders to a folder
+lark mail filter create --name "3rd-party alerts" --folder "3rd-party-alerts" \
+  --from googleplay-noreply@google.com --from @email.apple.com
+
+# Forward a sender to a Lark chat and/or email
+lark mail filter create --name "WhatsApp alerts" \
+  --forward-chat 7341233491117391903 --forward-email invoice-hq@glints.com \
+  --from @business.whatsapp.com
+```
+
+`create` flags:
+- `--name` (required), `--from` (required, repeatable)
+- `--from` match operator is chosen per entry for low false positives: a full
+  address matches **exactly** (`is`), an `@domain` entry matches by **contains**.
+  Multiple `--from` are OR'd (any sender matches).
+- Actions (at least one required, combinable): `--folder <id|name>` (move),
+  `--forward-email <addr>` (repeatable), `--forward-chat <id>` (repeatable).
+- `--stop` sets `ignore_the_rest_of_rules`; `--disable` creates it disabled.
+
+**Action types** (as stored by the API): `1` archive · `2` delete · `3`
+mark-read · `4` spam · `9` flag · `10` no-notify · `11` move-to-folder · `12`
+forward-email · `13` forward-chat. The published docs claim forwarding is
+unsupported, but types 12/13 are honoured in practice. `--forward-chat` takes
+the mail-rule chat id (as seen in existing rules), which is a distinct id space
+from `im` `oc_` chat ids and is not resolvable via `lark chat get`.
+
 ## Output Formats
 
 All commands output JSON.

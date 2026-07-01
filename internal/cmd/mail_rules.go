@@ -133,6 +133,24 @@ var mailFolderCreateCmd = &cobra.Command{
 	},
 }
 
+var mailFolderDeleteCmd = &cobra.Command{
+	Use:   "delete <folder-id>",
+	Short: "Delete a mailbox folder",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		client := api.NewClient()
+		path := fmt.Sprintf("/mail/v1/user_mailboxes/%s/folders/%s", mailUserMailbox, url.PathEscape(args[0]))
+		var resp mailAPIResp
+		if err := client.Delete(path, &resp); err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+		if err := resp.Err(); err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+		output.Success(fmt.Sprintf("deleted folder %s", args[0]))
+	},
+}
+
 // --- mail filter (auto filter rules) ---
 
 var mailFilterCmd = &cobra.Command{
@@ -167,17 +185,19 @@ var mailFilterListCmd = &cobra.Command{
 }
 
 var (
-	mailFilterName   string
-	mailFilterFrom   []string
-	mailFilterFolder string
-	mailFilterStop   bool
+	mailFilterName    string
+	mailFilterFrom    []string
+	mailFilterFolder  string
+	mailFilterFwdEmail []string
+	mailFilterFwdChat []string
+	mailFilterStop    bool
 	mailFilterDisable bool
 )
 
 var mailFilterCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a move-to-folder filter rule matched by sender",
-	Long: `Create a filter rule that moves mail from the given sender(s) into a folder.
+	Short: "Create a filter rule matched by sender (move to folder and/or forward)",
+	Long: `Create a filter rule that acts on mail from the given sender(s).
 
 Each --from entry chooses its own match operator for minimal false positives:
   - an entry starting with "@" (e.g. @email.apple.com) matches by domain (contains)
@@ -185,14 +205,24 @@ Each --from entry chooses its own match operator for minimal false positives:
 
 Multiple --from entries are OR'd together (any sender matches).
 
-Example:
+Actions (at least one required, and they combine):
+  --folder <id|name>     move matched mail to a folder (action type 11)
+  --forward-email <addr> forward matched mail to an email address (type 12)
+  --forward-chat <id>    forward matched mail to a Lark chat (type 13); the id
+                         is the mail-rule chat id (as seen in existing rules /
+                         the mail web UI), not necessarily an oc_ id.
+
+Note: the published Open API docs claim forwarding is unsupported, but the
+rule engine accepts and honours forward actions (types 12/13) in practice.
+
+Examples:
+  # Move to a folder
   lark mail filter create --name "3rd-party alerts" --folder "3rd-party-alerts" \
-    --from googleplay-noreply@google.com \
-    --from @email.apple.com \
-    --from @notice.alibabacloud.com \
-    --from @business.whatsapp.com \
-    --from @business-updates.facebook.com \
-    --from @developers.facebook.com`,
+    --from googleplay-noreply@google.com --from @email.apple.com
+
+  # Forward a sender straight to a common Lark chat
+  lark mail filter create --name "WhatsApp alerts" --forward-chat 7341233491117391903 \
+    --from @business.whatsapp.com`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if mailFilterName == "" {
 			output.Error("VALIDATION_ERROR", "--name is required")
@@ -202,15 +232,34 @@ Example:
 			output.Error("VALIDATION_ERROR", "at least one --from sender is required")
 			return
 		}
-		if mailFilterFolder == "" {
-			output.Error("VALIDATION_ERROR", "--folder (destination folder id or name) is required")
+		if mailFilterFolder == "" && len(mailFilterFwdEmail) == 0 && len(mailFilterFwdChat) == 0 {
+			output.Error("VALIDATION_ERROR", "at least one action is required: --folder, --forward-email, or --forward-chat")
 			return
 		}
 
 		client := api.NewClient()
-		folderID, err := resolveFolder(client, mailFilterFolder)
-		if err != nil {
-			output.Fatal("VALIDATION_ERROR", err)
+
+		// Build action items in a stable order: move-to-folder, then email
+		// forwards, then chat forwards.
+		actions := make([]map[string]interface{}, 0, 1+len(mailFilterFwdEmail)+len(mailFilterFwdChat))
+		if mailFilterFolder != "" {
+			folderID, err := resolveFolder(client, mailFilterFolder)
+			if err != nil {
+				output.Fatal("VALIDATION_ERROR", err)
+			}
+			actions = append(actions, map[string]interface{}{"type": 11, "input": folderID})
+		}
+		for _, addr := range mailFilterFwdEmail {
+			addr = strings.TrimSpace(addr)
+			if addr != "" {
+				actions = append(actions, map[string]interface{}{"type": 12, "input": addr})
+			}
+		}
+		for _, chat := range mailFilterFwdChat {
+			chat = strings.TrimSpace(chat)
+			if chat != "" {
+				actions = append(actions, map[string]interface{}{"type": 13, "input": chat})
+			}
 		}
 
 		// Build condition items: exact-address -> operator 5 (is);
@@ -244,9 +293,7 @@ Example:
 				"items":      items,
 			},
 			"action": map[string]interface{}{
-				"items": []map[string]interface{}{
-					{"type": 11, "input": folderID}, // 11 = move to folder
-				},
+				"items": actions,
 			},
 			"ignore_the_rest_of_rules": mailFilterStop,
 			"name":                     mailFilterName,
@@ -288,10 +335,13 @@ func init() {
 	mailFolderCreateCmd.Flags().StringVar(&mailFolderCreateParent, "parent", "0", "Parent folder ID (0 = root)")
 	mailFolderCmd.AddCommand(mailFolderListCmd)
 	mailFolderCmd.AddCommand(mailFolderCreateCmd)
+	mailFolderCmd.AddCommand(mailFolderDeleteCmd)
 
 	mailFilterCreateCmd.Flags().StringVar(&mailFilterName, "name", "", "Rule name (required)")
 	mailFilterCreateCmd.Flags().StringSliceVar(&mailFilterFrom, "from", nil, "Sender to match: full address (exact) or @domain (contains). Repeatable.")
-	mailFilterCreateCmd.Flags().StringVar(&mailFilterFolder, "folder", "", "Destination folder ID or name (required)")
+	mailFilterCreateCmd.Flags().StringVar(&mailFilterFolder, "folder", "", "Destination folder ID or name (move-to-folder action)")
+	mailFilterCreateCmd.Flags().StringSliceVar(&mailFilterFwdEmail, "forward-email", nil, "Forward matched mail to an email address. Repeatable.")
+	mailFilterCreateCmd.Flags().StringSliceVar(&mailFilterFwdChat, "forward-chat", nil, "Forward matched mail to a Lark chat id. Repeatable.")
 	mailFilterCreateCmd.Flags().BoolVar(&mailFilterStop, "stop", false, "Stop processing further rules after this one matches")
 	mailFilterCreateCmd.Flags().BoolVar(&mailFilterDisable, "disable", false, "Create the rule disabled")
 	mailFilterCmd.AddCommand(mailFilterListCmd)
