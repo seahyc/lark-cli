@@ -70,6 +70,12 @@ var Groups = map[string]ScopeGroup{
 		Scopes:      []string{"mail:user_mailbox.message.address:read", "mail:user_mailbox.message.body:read", "mail:user_mailbox.message.subject:read", "mail:user_mailbox.message:readonly"},
 		Commands:    []string{"mail"},
 	},
+	"mailrules": {
+		Name:        "mailrules",
+		Description: "Mail filter rules and folders (Open API)",
+		Scopes:      []string{"mail:user_mailbox.rule:write", "mail:user_mailbox.folder:write"},
+		Commands:    []string{"mail filter", "mail folder"},
+	},
 	"minutes": {
 		Name:        "minutes",
 		Description: "Meeting recordings and transcripts",
@@ -126,7 +132,7 @@ var Groups = map[string]ScopeGroup{
 
 // AllGroupNames returns all scope group names in a consistent order
 func AllGroupNames() []string {
-	return []string{"calendar", "contacts", "documents", "bitable", "messages", "mail", "minutes", "tasks", "meetings", "approval", "slides", "attendance"}
+	return []string{"calendar", "contacts", "documents", "bitable", "messages", "mail", "mailrules", "minutes", "tasks", "meetings", "approval", "slides", "attendance"}
 }
 
 // GetScopesForGroups returns the combined scopes for the given group names

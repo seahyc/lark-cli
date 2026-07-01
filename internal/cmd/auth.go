@@ -136,7 +136,7 @@ var scopesCmd = &cobra.Command{
 }
 
 func init() {
-	loginCmd.Flags().StringVar(&loginScopes, "scopes", "", "Comma-separated scope groups (calendar,contacts,documents,messages,mail,minutes)")
+	loginCmd.Flags().StringVar(&loginScopes, "scopes", "", "Comma-separated scope groups (calendar,contacts,documents,messages,mail,mailrules,minutes)")
 	loginCmd.Flags().BoolVar(&loginAdd, "add", false, "Add to existing permissions (incremental authorization)")
 
 	authCmd.AddCommand(loginCmd)
