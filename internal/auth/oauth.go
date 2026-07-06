@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
@@ -9,8 +10,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/yjwong/lark-cli/internal/config"
@@ -18,10 +21,10 @@ import (
 )
 
 const (
-	authorizationURL     = "https://accounts.larksuite.com/open-apis/authen/v1/authorize"
-	tokenURL             = "https://open.larksuite.com/open-apis/authen/v2/oauth/token"
-	tenantTokenURL       = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal"
-	defaultTimeout       = 5 * time.Minute
+	authorizationURL = "https://accounts.larksuite.com/open-apis/authen/v1/authorize"
+	tokenURL         = "https://open.larksuite.com/open-apis/authen/v2/oauth/token"
+	tenantTokenURL   = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal"
+	defaultTimeout   = 5 * time.Minute
 )
 
 // TokenResponse represents the OAuth token response from Lark
@@ -134,6 +137,108 @@ func LoginWithOptions(opts LoginOptions) error {
 
 	fmt.Println("Authentication successful!")
 	return nil
+}
+
+// LoginManual performs the OAuth login flow without a local browser or callback
+// server. It prints the authorization URL, the human approves on any device,
+// then pastes the resulting redirect URL (or bare code) back on stdin. Designed
+// for headless machines (no xdg-open, no reachable localhost callback).
+func LoginManual(opts LoginOptions) error {
+	appID := config.GetAppID()
+	appSecret := config.GetAppSecret()
+
+	if appID == "" {
+		return fmt.Errorf("app_id not configured. Set it in .lark/config.yaml or LARK_APP_ID env var")
+	}
+	if appSecret == "" {
+		return fmt.Errorf("app_secret not configured. Set LARK_APP_SECRET env var")
+	}
+
+	var scopeString string
+	if len(opts.ScopeGroups) == 0 {
+		scopeString = scopes.GetAllScopeString()
+	} else {
+		scopeString = scopes.GetScopeString(opts.ScopeGroups)
+	}
+
+	state, err := generateState()
+	if err != nil {
+		return fmt.Errorf("failed to generate state: %w", err)
+	}
+
+	// Use the same loopback redirect URI shape the callback server would use, so
+	// it matches what's registered on the Lark app (redirect_uri must be
+	// identical between the authorize and token-exchange calls). We never
+	// actually bind this port in the manual flow.
+	redirectURI := fmt.Sprintf("http://localhost:%d/callback", config.GetRedirectPort())
+	authURL := buildAuthorizationURL(appID, redirectURI, state, scopeString)
+
+	fmt.Println("Open this URL on any device (phone is fine) and approve access:")
+	fmt.Println()
+	fmt.Println(authURL)
+	fmt.Println()
+	fmt.Printf("After approving, your browser will try to open %s?code=...&state=... — that page\n", redirectURI)
+	fmt.Println("failing to load is expected. Copy that full URL from the address bar and paste it below.")
+	fmt.Println()
+	fmt.Print("Paste redirect URL (or just the code): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to read pasted response: %w", err)
+	}
+
+	code, err := extractCode(strings.TrimSpace(line), state)
+	if err != nil {
+		return err
+	}
+
+	tokenResp, err := exchangeCodeForTokens(appID, appSecret, code, redirectURI)
+	if err != nil {
+		return fmt.Errorf("failed to exchange code: %w", err)
+	}
+
+	store := GetTokenStore()
+	if err := store.Update(
+		tokenResp.AccessToken,
+		tokenResp.RefreshToken,
+		tokenResp.ExpiresIn,
+		tokenResp.RefreshTokenExpiresIn,
+		tokenResp.Scope,
+	); err != nil {
+		return fmt.Errorf("failed to save tokens: %w", err)
+	}
+
+	fmt.Println("Authentication successful!")
+	return nil
+}
+
+// extractCode pulls the authorization code out of a pasted response, which may
+// be a full redirect URL (http://localhost:PORT/callback?code=...&state=...) or
+// a bare code. When a full URL carrying state is given, the state is verified.
+func extractCode(pasted, wantState string) (string, error) {
+	if pasted == "" {
+		return "", fmt.Errorf("empty authorization response")
+	}
+
+	if strings.HasPrefix(pasted, "http://") || strings.HasPrefix(pasted, "https://") {
+		u, err := url.Parse(pasted)
+		if err != nil {
+			return "", fmt.Errorf("could not parse pasted URL: %w", err)
+		}
+		q := u.Query()
+		code := q.Get("code")
+		if code == "" {
+			return "", fmt.Errorf("no ?code= found in pasted URL")
+		}
+		if gotState := q.Get("state"); gotState != "" && gotState != wantState {
+			return "", fmt.Errorf("state mismatch (possible CSRF): got %q", gotState)
+		}
+		return code, nil
+	}
+
+	// Bare code pasted.
+	return pasted, nil
 }
 
 // RefreshAccessToken refreshes the access token using the refresh token

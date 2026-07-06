@@ -14,6 +14,7 @@ import (
 var (
 	loginScopes string
 	loginAdd    bool
+	loginManual bool
 )
 
 var authCmd = &cobra.Command{
@@ -73,6 +74,15 @@ Examples:
 		// Empty groups (no --scopes, no --add) leaves ScopeGroups nil, which
 		// triggers the default (all scopes) in LoginWithOptions.
 		opts.ScopeGroups = groups
+
+		// --manual: headless paste-URL flow (no local browser / callback server).
+		if loginManual {
+			if err := auth.LoginManual(opts); err != nil {
+				output.Fatal("AUTH_ERROR", err)
+			}
+			output.Success("Successfully authenticated with Lark")
+			return
+		}
 
 		if err := auth.LoginWithOptions(opts); err != nil {
 			output.Fatal("AUTH_ERROR", err)
@@ -138,6 +148,33 @@ var statusCmd = &cobra.Command{
 	},
 }
 
+var refreshCmd = &cobra.Command{
+	Use:   "refresh",
+	Short: "Refresh the access token using the stored refresh token",
+	Long: `Refresh the OAuth access token without any human interaction.
+
+Intended for a keep-alive timer: Lark refresh tokens themselves expire (~30
+days), so periodically refreshing keeps the session alive indefinitely and
+avoids a full re-login. Exits non-zero if no valid refresh token is available
+(i.e. a real re-login is required).`,
+	Run: func(cmd *cobra.Command, args []string) {
+		store := auth.GetTokenStore()
+		if !store.CanRefresh() {
+			output.Fatal("AUTH_ERROR", fmt.Errorf(
+				"no valid refresh token available; run 'lark auth login --manual'"))
+		}
+		if err := auth.RefreshAccessToken(); err != nil {
+			output.Fatal("AUTH_ERROR", err)
+		}
+		output.JSON(api.OutputAuthStatus{
+			Authenticated: store.IsValid(),
+			ExpiresAt:     store.GetExpiresAt(),
+			GrantedGroups: store.GetGrantedGroupsList(),
+			ScopeGroups:   store.GetGrantedGroups(),
+		})
+	},
+}
+
 var scopesCmd = &cobra.Command{
 	Use:   "scopes",
 	Short: "List available scope groups",
@@ -171,9 +208,12 @@ var scopesCmd = &cobra.Command{
 func init() {
 	loginCmd.Flags().StringVar(&loginScopes, "scopes", "", "Comma-separated scope groups (calendar,contacts,documents,messages,mail,mailrules,minutes)")
 	loginCmd.Flags().BoolVar(&loginAdd, "add", false, "Add to existing permissions (incremental authorization)")
+	loginCmd.Flags().BoolVar(&loginManual, "manual", false, "Headless login: print the consent URL and paste the redirect back (no local browser needed)")
+	loginCmd.Flags().Lookup("manual").NoOptDefVal = "true"
 
 	authCmd.AddCommand(loginCmd)
 	authCmd.AddCommand(logoutCmd)
 	authCmd.AddCommand(statusCmd)
+	authCmd.AddCommand(refreshCmd)
 	authCmd.AddCommand(scopesCmd)
 }
