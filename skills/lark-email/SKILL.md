@@ -176,6 +176,20 @@ lark mail draft --to user@example.com --subject "Re: Thread" --body-file msg.txt
 
 Flags are the same as `send`.
 
+### Edit Draft
+Replace an existing draft by UID while preserving To/Cc/Bcc/Subject by default:
+
+```bash
+lark mail update-draft --uid 12345 --body "Updated body text"
+lark mail update-draft --uid 12345 --body-file reply.txt
+lark mail edit-draft --uid 12345 --body "Updated body" --subject "Updated subject"
+```
+
+Notes:
+- This appends a replacement draft, then deletes the old draft.
+- Original attachments are not preserved automatically; re-supply them with `--attach`.
+- The replacement draft gets a new UID and Message-ID.
+
 ### Delete Email
 Flag an email as deleted and expunge:
 
