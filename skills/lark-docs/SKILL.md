@@ -473,6 +473,41 @@ lark doc image K1TQbpmDuokIq3xq1WVl9J7ygkc --doc ABC123xyz > image.png
 
 **Workflow:** Use `doc blocks` to find image blocks (block_type 27), extract the image token from the block data, then download with this command.
 
+### Insert a Local Image into a Document
+
+```bash
+lark doc image-insert <document-id> <local-image-path> [flags]
+```
+
+Inserts a local image file as an inline image block (block_type 27) into a Lark document. Internally this creates the empty image block, uploads the file via the Lark media API bound to that block, then binds the resulting `file_token` to the block so it renders.
+
+Options:
+- `--block-id`: Parent block ID to insert into (default: document root)
+- `--index`: Insertion index among the parent's children (default: end)
+- `--after`: Insert immediately after this block ID (mutually exclusive with `--index`)
+- `--width`, `--height`: Optional image dimensions in px
+
+Examples:
+```bash
+# Append an image to the end of the document
+lark doc image-insert ABC123xyz /tmp/screenshot.png
+
+# Insert right after an existing block
+lark doc image-insert ABC123xyz /tmp/screenshot.png --after Z9kLqRstBlockId
+
+# Insert at a specific position with explicit dimensions
+lark doc image-insert ABC123xyz /tmp/screenshot.png --index 0 --width 800 --height 600
+```
+
+Output:
+```json
+{
+  "document_id": "ABC123xyz",
+  "block_id": "doxlgY4Rd74ecAbYgxhjuFGWRoY",
+  "file_token": "N0wWb6M5sodNqVx9EyRlrk3Ug5d"
+}
+```
+
 ### Delete Blocks from a Document
 
 ```bash
@@ -703,6 +738,7 @@ lark doc append ABC123xyz --heading "Project Page" --level 2 --link "https://exa
 | Count elements | `doc blocks` | Block types enumerated |
 | Read comments/feedback | `doc comments` | Get all comments and replies |
 | Download image from doc | `doc image` | Requires image token from `doc blocks` |
+| Insert a local image into doc | `doc image-insert` | Creates block + uploads + binds image in one step |
 | Find blocks by content | `doc find` | Search blocks for text, get block IDs and indices |
 | Replace a block | `doc replace` | Delete + insert in one step (preferred over `doc update`) |
 | Delete blocks from doc | `doc delete` | Remove specific blocks by ID |

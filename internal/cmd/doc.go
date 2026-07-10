@@ -570,6 +570,96 @@ Examples:
 	},
 }
 
+// --- doc image-insert ---
+
+var docImageInsertCmd = &cobra.Command{
+	Use:   "image-insert <document_id> <local_image_path>",
+	Short: "Insert a local image into a document",
+	Long: `Insert a local image file as an inline image block in a Lark document.
+
+This creates an image block (block_type 27), uploads the local file bound
+to that block via the Lark media API, and binds the resulting file_token
+to the block so the image renders.
+
+By default the image is appended to the end of the document root. Use
+--after to insert it right after an existing block, or --index / --block-id
+to target a specific position/parent explicitly.
+
+Examples:
+  lark doc image-insert ABC123xyz /tmp/screenshot.png
+  lark doc image-insert ABC123xyz /tmp/screenshot.png --after Z9kLqRstBlockId
+  lark doc image-insert ABC123xyz /tmp/screenshot.png --index 0 --width 800 --height 600`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		documentID := args[0]
+		imagePath := args[1]
+
+		blockID, _ := cmd.Flags().GetString("block-id")
+		index, _ := cmd.Flags().GetInt("index")
+		afterBlockID, _ := cmd.Flags().GetString("after")
+		width, _ := cmd.Flags().GetInt("width")
+		height, _ := cmd.Flags().GetInt("height")
+
+		if afterBlockID != "" && cmd.Flags().Changed("index") {
+			output.Fatal("VALIDATION_ERROR", fmt.Errorf("--after and --index are mutually exclusive"))
+		}
+
+		if _, err := os.Stat(imagePath); err != nil {
+			output.Fatal("FILE_ERROR", fmt.Errorf("cannot read local image %q: %w", imagePath, err))
+		}
+
+		if blockID == "" {
+			blockID = documentID
+		}
+		if !cmd.Flags().Changed("index") {
+			index = -1
+		}
+
+		client := api.NewClient()
+
+		// If --after is set, resolve the target block's parent and index,
+		// same convention as `doc append --after`.
+		if afterBlockID != "" {
+			allBlocks, err := client.GetDocumentBlocks(documentID)
+			if err != nil {
+				output.Fatal("API_ERROR", err)
+			}
+
+			found := false
+			for _, b := range allBlocks {
+				if b.Children == nil {
+					continue
+				}
+				for idx, childID := range b.Children {
+					if childID == afterBlockID {
+						blockID = b.BlockID
+						index = idx + 1
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				output.Fatal("NOT_FOUND", fmt.Errorf("block %s not found as a child of any block", afterBlockID))
+			}
+		}
+
+		newBlockID, fileToken, err := client.InsertDocumentImage(documentID, blockID, imagePath, index, width, height)
+		if err != nil {
+			output.Fatal("API_ERROR", err)
+		}
+
+		output.JSON(map[string]interface{}{
+			"document_id": documentID,
+			"block_id":    newBlockID,
+			"file_token":  fileToken,
+		})
+	},
+}
+
 // --- doc download ---
 
 var docDownloadCmd = &cobra.Command{
@@ -2227,6 +2317,7 @@ func init() {
 	docCmd.AddCommand(docCommentsCmd)
 	docCmd.AddCommand(docSearchCmd)
 	docCmd.AddCommand(docImageCmd)
+	docCmd.AddCommand(docImageInsertCmd)
 	docCmd.AddCommand(docWikiSearchCmd)
 	docCmd.AddCommand(docDownloadCmd)
 	docCmd.AddCommand(docCreateCmd)
@@ -2276,6 +2367,13 @@ func init() {
 	// Flags for doc image
 	docImageCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
 	docImageCmd.Flags().StringP("doc", "d", "", "Document ID (required for authentication)")
+
+	// Flags for doc image-insert
+	docImageInsertCmd.Flags().String("block-id", "", "Parent block ID (default: document root)")
+	docImageInsertCmd.Flags().Int("index", -1, "Insertion index among the parent's children (default: end)")
+	docImageInsertCmd.Flags().String("after", "", "Insert immediately after this block ID (mutually exclusive with --index)")
+	docImageInsertCmd.Flags().Int("width", 0, "Image width in px (optional)")
+	docImageInsertCmd.Flags().Int("height", 0, "Image height in px (optional)")
 
 	// Flags for doc download
 	docDownloadCmd.Flags().StringP("output", "o", "", "Output file path (default: original filename)")
