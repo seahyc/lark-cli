@@ -314,6 +314,56 @@ func (c *Client) UploadDriveFile(filePath, parentToken, parentType string) (stri
 	return uploadResp.Data.FileToken, nil
 }
 
+// InsertDocumentImage inserts an inline image into a docx document. It:
+//  1. creates an empty image block (block_type 27) as a child of parentBlockID
+//     (pass documentID as parentBlockID to insert at the document root),
+//  2. uploads the local image file bound to that block via the media API,
+//  3. binds the uploaded file_token to the block via a replace_image PATCH,
+//     since upload alone does not reliably update the block's rendered image.
+//
+// index is the insertion position among parentBlockID's children (-1 for end).
+// width/height are optional pixel dimensions (0 to omit / let Lark infer).
+// Returns the created block ID and the uploaded file token.
+func (c *Client) InsertDocumentImage(documentID, parentBlockID, filePath string, index, width, height int) (blockID, fileToken string, err error) {
+	imageBlock := DocumentBlock{
+		BlockType: 27,
+		Image:     &ImageBlock{},
+	}
+
+	created, _, err := c.CreateDocumentBlocks(documentID, parentBlockID, []DocumentBlock{imageBlock}, index)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create image block: %w", err)
+	}
+	if len(created) == 0 {
+		return "", "", fmt.Errorf("create image block returned no blocks")
+	}
+	blockID = created[0].BlockID
+
+	fileToken, err = c.UploadMedia(filePath, "docx_image", blockID)
+	if err != nil {
+		return blockID, "", fmt.Errorf("failed to upload image media: %w", err)
+	}
+
+	updateReq := UpdateBlockRequest{
+		ReplaceImage: &ReplaceImageRequest{
+			Token:  fileToken,
+			Width:  width,
+			Height: height,
+		},
+	}
+	path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s?document_revision_id=-1",
+		url.PathEscape(documentID), url.PathEscape(blockID))
+	var resp UpdateBlockResponse
+	if err := c.Patch(path, updateReq, &resp); err != nil {
+		return blockID, fileToken, fmt.Errorf("failed to bind uploaded image to block: %w", err)
+	}
+	if err := resp.Err(); err != nil {
+		return blockID, fileToken, fmt.Errorf("failed to bind uploaded image to block: %w", err)
+	}
+
+	return blockID, fileToken, nil
+}
+
 // DeleteDocumentBlocks deletes blocks from a document by their IDs
 // The Lark API deletes children by index range, so we need to resolve
 // block IDs to their parent and index positions first.

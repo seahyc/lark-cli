@@ -774,7 +774,17 @@ type DeleteBlocksResponse struct {
 // UpdateBlockRequest is the request body for PATCH /docx/v1/documents/{id}/blocks/{block_id}
 // The Lark API uses update_text_elements for ALL text-based block types (text, headings, bullet, etc.)
 type UpdateBlockRequest struct {
-	UpdateTextElements *TextBlock `json:"update_text_elements,omitempty"`
+	UpdateTextElements *TextBlock          `json:"update_text_elements,omitempty"`
+	ReplaceImage       *ReplaceImageRequest `json:"replace_image,omitempty"`
+}
+
+// ReplaceImageRequest binds an uploaded media file_token to an existing
+// image block (block_type 27), via PATCH .../blocks/{block_id}.
+type ReplaceImageRequest struct {
+	Token  string `json:"token"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+	Align  int    `json:"align,omitempty"`
 }
 
 // ConvertToUpdateRequest converts a DocumentBlock to an UpdateBlockRequest.
