@@ -140,6 +140,68 @@ func TestDecodeMessageContent_TagTypes(t *testing.T) {
 			want: "[card]",
 		},
 		{
+			// A card is the only way to send a rendered code block, so the
+			// decoder must return every element, not just the first.
+			name: "interactive card keeps every element",
+			msg: api.Message{
+				MsgType: "interactive",
+				Body: &api.MessageBody{Content: `{
+					"header":{"title":{"content":"Deploy"}},
+					"elements":[
+						{"tag":"markdown","content":"step one"},
+						{"tag":"markdown","content":"` + "```bash\\nkubectl get pods\\n```" + `"}
+					]
+				}`},
+			},
+			want: "[card] Deploy\nstep one\n```bash\nkubectl get pods\n```",
+		},
+		{
+			// The payload that started this: a post carrying its content in a
+			// code_block. The old decoder dropped it and rendered blank lines.
+			name: "post with code_block",
+			msg: api.Message{
+				MsgType: "post",
+				Body: &api.MessageBody{Content: `{
+					"title":"",
+					"content":[
+						[{"tag":"text","text":"Key: SOME_SECRET"}],
+						[{"tag":"code_block","language":"BASH","text":"line one\nline two"}]
+					]
+				}`},
+			},
+			want: "Key: SOME_SECRET\nline one\nline two",
+		},
+		{
+			name: "post with hr and md",
+			msg: api.Message{
+				MsgType: "post",
+				Body: &api.MessageBody{Content: `{
+					"title":"",
+					"content":[
+						[{"tag":"md","text":"**bold**"}],
+						[{"tag":"hr"}],
+						[{"tag":"text","text":"after"}]
+					]
+				}`},
+			},
+			want: "**bold**\n---\nafter",
+		},
+		{
+			// Unknown tags must be visible, never silently dropped.
+			name: "post with unknown tag surfaces it",
+			msg: api.Message{
+				MsgType: "post",
+				Body: &api.MessageBody{Content: `{
+					"title":"",
+					"content":[
+						[{"tag":"quote","text":"quoted thing"}],
+						[{"tag":"future_widget"}]
+					]
+				}`},
+			},
+			want: "[tag:quote] quoted thing\n[tag:future_widget]",
+		},
+		{
 			name: "recalled",
 			msg:  api.Message{MsgType: "text", Deleted: true, Body: &api.MessageBody{Content: `{"text":"gone"}`}},
 			want: "[recalled]",

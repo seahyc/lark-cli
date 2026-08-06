@@ -58,7 +58,29 @@ func TestExtractMessageText_PostMessage(t *testing.T) {
 		}`},
 	}
 	got := extractMessageText(m)
-	want := "T\nline 1@Alice\n[image]"
+	// extractMessageText delegates to the transcript decoder, so an img cell
+	// carries its image_key the same way `--format text` renders it.
+	want := "T\nline 1@Alice\n[image img_x]"
+	if got != want {
+		t.Fatalf("want %q, got %q", want, got)
+	}
+}
+
+// A DM whose payload lives in a code_block used to read back as blank lines:
+// dm's own decoder had no case for the tag and dropped it. Regression guard.
+func TestExtractMessageText_CodeBlock(t *testing.T) {
+	m := api.Message{
+		MsgType: "post",
+		Body: &api.MessageBody{Content: `{
+			"title":"",
+			"content":[
+				[{"tag":"text","text":"Key: SOME_SECRET"}],
+				[{"tag":"code_block","language":"BASH","text":"-----BEGIN CERTIFICATE-----\nMIIDxjCC\n-----END CERTIFICATE-----"}]
+			]
+		}`},
+	}
+	got := extractMessageText(m)
+	want := "Key: SOME_SECRET\n-----BEGIN CERTIFICATE-----\nMIIDxjCC\n-----END CERTIFICATE-----"
 	if got != want {
 		t.Fatalf("want %q, got %q", want, got)
 	}

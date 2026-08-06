@@ -17,9 +17,15 @@ import (
 //	a           -> label (url)
 //	at          -> @Name (resolved via the name resolver)
 //	img / media -> [image] / [video]  (+ file_key when present)
+//	code_block  -> the code, verbatim, newlines intact
+//	md          -> the markdown source, verbatim
+//	hr          -> ---
 //	post        -> title + paragraphs joined with newlines
-//	interactive -> [card] <title/summary>
+//	interactive -> [card] <title> + every text/markdown element
 //	recalled    -> [recalled]
+//
+// An unrecognized tag is never dropped silently: it renders as [tag:<name>]
+// plus any text it carries, so content loss is visible rather than invisible.
 //
 // Threads/replies are tagged with a short thread:<id8> marker and reply lines
 // are indented so an agent can follow the threading.
@@ -232,8 +238,38 @@ func decodePostCell(cell map[string]interface{}, mentionNames map[string]string)
 			return ":" + k + ":"
 		}
 		return ""
+	case "code_block":
+		// Lark wraps fenced code in its own tag. The text carries real
+		// newlines, so return it verbatim; the caller indents continuation
+		// lines. Dropping this loses whole payloads (keys, configs, logs).
+		code, _ := cell["text"].(string)
+		return code
+	case "md":
+		// Markdown source, already human-readable. Return as-is.
+		md, _ := cell["text"].(string)
+		return md
+	case "hr":
+		return "---"
+	case "file":
+		key, _ := cell["file_key"].(string)
+		name, _ := cell["file_name"].(string)
+		switch {
+		case name != "":
+			return fmt.Sprintf("[file %s]", name)
+		case key != "":
+			return fmt.Sprintf("[file %s]", key)
+		}
+		return "[file]"
 	default:
-		return ""
+		// Never drop an unknown tag silently. Surface the tag name and any
+		// text it carries so missing content is visible in the transcript.
+		if t, ok := cell["text"].(string); ok && t != "" {
+			return fmt.Sprintf("[tag:%s] %s", tag, t)
+		}
+		if tag == "" {
+			return ""
+		}
+		return fmt.Sprintf("[tag:%s]", tag)
 	}
 }
 
@@ -260,7 +296,10 @@ func decodeImageOrMedia(body *api.MessageBody, label string) string {
 	return label
 }
 
-// decodeCard decodes an interactive (card) message into a short summary.
+// decodeCard decodes an interactive (card) message. The header title leads, then
+// every text/markdown element in document order, one per line. Cards are the
+// only way to send a rendered code block (see the messages skill), so summarizing
+// one by its first element alone would hide the payload an agent came to read.
 func decodeCard(body *api.MessageBody) string {
 	if body == nil || strings.TrimSpace(body.Content) == "" {
 		return "[card]"
@@ -269,46 +308,59 @@ func decodeCard(body *api.MessageBody) string {
 	if err := json.Unmarshal([]byte(body.Content), &obj); err != nil {
 		return "[card]"
 	}
+
+	parts := make([]string, 0, 4)
 	// Card header title: {"header":{"title":{"content":"..."}}}
 	if header, ok := obj["header"].(map[string]interface{}); ok {
 		if title, ok := header["title"].(map[string]interface{}); ok {
 			if c, ok := title["content"].(string); ok && strings.TrimSpace(c) != "" {
-				return "[card] " + c
+				parts = append(parts, c)
 			}
 		}
 	}
-	// Fall back to the first text content found in elements.
-	if summary := firstCardText(obj["elements"]); summary != "" {
-		return "[card] " + summary
+	collectCardText(obj["elements"], &parts)
+
+	if len(parts) == 0 {
+		return "[card]"
 	}
-	return "[card]"
+	return "[card] " + strings.Join(parts, "\n")
 }
 
-// firstCardText walks card elements for the first non-empty text content.
-func firstCardText(v interface{}) string {
+// collectCardText walks card elements in document order, appending every
+// non-empty text/markdown content it finds. Duplicates are suppressed so a
+// wrapper element and its child don't both contribute the same string.
+func collectCardText(v interface{}, out *[]string) {
+	add := func(s string) {
+		if strings.TrimSpace(s) == "" {
+			return
+		}
+		if len(*out) > 0 && (*out)[len(*out)-1] == s {
+			return
+		}
+		*out = append(*out, s)
+	}
 	switch x := v.(type) {
 	case []interface{}:
 		for _, e := range x {
-			if s := firstCardText(e); s != "" {
-				return s
-			}
+			collectCardText(e, out)
 		}
 	case map[string]interface{}:
+		// {"text":{"content":"..."}} (div/note) and {"content":"..."} (markdown).
 		if text, ok := x["text"].(map[string]interface{}); ok {
-			if c, ok := text["content"].(string); ok && strings.TrimSpace(c) != "" {
-				return c
+			if c, ok := text["content"].(string); ok {
+				add(c)
 			}
 		}
-		if c, ok := x["content"].(string); ok && strings.TrimSpace(c) != "" {
-			return c
+		if c, ok := x["content"].(string); ok {
+			add(c)
 		}
-		if nested, ok := x["elements"]; ok {
-			if s := firstCardText(nested); s != "" {
-				return s
+		// Nested containers: elements, fields, actions, columns.
+		for _, key := range []string{"elements", "fields", "actions", "columns"} {
+			if nested, ok := x[key]; ok {
+				collectCardText(nested, out)
 			}
 		}
 	}
-	return ""
 }
 
 // transcriptLine renders a single message as a transcript block:

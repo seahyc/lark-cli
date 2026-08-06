@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -367,63 +366,29 @@ func allBestDMMatches(query string, users []api.SearchUserResult) []api.SearchUs
 	return nil
 }
 
+// extractMessageText renders a message body as plain text for `dm --compact`.
+//
+// This delegates to the transcript decoder rather than carrying its own tag
+// switch. It used to have one, and it handled a strict subset of the tags:
+// code_block, media, emotion and link URLs were dropped on the floor, so a DM
+// whose payload lived in a code block read back as a list of empty lines. One
+// decoder, one set of supported tags.
 func extractMessageText(m api.Message) string {
-	if m.Body == nil || strings.TrimSpace(m.Body.Content) == "" {
-		return ""
-	}
-	var obj map[string]interface{}
-	if err := json.Unmarshal([]byte(m.Body.Content), &obj); err != nil {
-		return m.Body.Content
-	}
-	if text, ok := obj["text"].(string); ok {
-		return text
-	}
-
-	// post message format: {"title":"","content":[[{...}], ...]}
-	lines := make([]string, 0)
-	if title, ok := obj["title"].(string); ok && strings.TrimSpace(title) != "" {
-		lines = append(lines, title)
-	}
-	if blocks, ok := obj["content"].([]interface{}); ok {
-		for _, b := range blocks {
-			row, ok := b.([]interface{})
-			if !ok {
-				continue
-			}
-			var rowText strings.Builder
-			for _, it := range row {
-				cell, ok := it.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				tag, _ := cell["tag"].(string)
-				switch tag {
-				case "text":
-					if t, ok := cell["text"].(string); ok {
-						rowText.WriteString(t)
-					}
-				case "a":
-					if t, ok := cell["text"].(string); ok {
-						rowText.WriteString(t)
-					}
-				case "at":
-					if uname, ok := cell["user_name"].(string); ok && uname != "" {
-						rowText.WriteString("@")
-						rowText.WriteString(uname)
-					}
-				case "img":
-					rowText.WriteString("[image]")
-				}
-			}
-			if strings.TrimSpace(rowText.String()) != "" {
-				lines = append(lines, rowText.String())
-			}
+	mentions := make(map[string]string, len(m.Mentions))
+	for _, mention := range m.Mentions {
+		if mention.Key == "" {
+			continue
 		}
+		name := mention.Name
+		if name == "" {
+			name = mention.ID
+		}
+		if name == "" {
+			continue
+		}
+		mentions[mention.Key] = "@" + name
 	}
-	if len(lines) == 0 {
-		return m.Body.Content
-	}
-	return strings.Join(lines, "\n")
+	return decodeMessageContent(m, mentions)
 }
 
 func init() {

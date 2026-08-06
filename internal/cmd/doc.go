@@ -1577,6 +1577,12 @@ func extractBlockText(block api.DocumentBlock) string {
 		textBlock = block.TodoBlock
 	case block.Code != nil:
 		textBlock = block.Code
+	case block.Quote != nil:
+		textBlock = block.Quote
+	case block.Callout != nil:
+		textBlock = block.Callout
+	case block.Page != nil:
+		textBlock = block.Page
 	}
 
 	if textBlock == nil {
@@ -1585,8 +1591,21 @@ func extractBlockText(block api.DocumentBlock) string {
 
 	var parts []string
 	for _, elem := range textBlock.Elements {
-		if elem.TextRun != nil {
+		switch {
+		case elem.TextRun != nil:
 			parts = append(parts, elem.TextRun.Content)
+		case elem.MentionDoc != nil:
+			// Prefer the human title; fall back to the URL so a search for a
+			// linked doc still has something to match on.
+			if elem.MentionDoc.Title != "" {
+				parts = append(parts, elem.MentionDoc.Title)
+			} else if elem.MentionDoc.URL != "" {
+				parts = append(parts, elem.MentionDoc.URL)
+			}
+		case elem.MentionUser != nil:
+			if elem.MentionUser.UserID != "" {
+				parts = append(parts, "@"+elem.MentionUser.UserID)
+			}
 		}
 	}
 	return strings.Join(parts, "")
