@@ -175,7 +175,12 @@ The global `--format text` flag (also valid on `lark dm` and `lark msg search`) 
       second line of a multi-line message is indented
 ```
 
-Decoding rules: `text`→text · `a`→`label (url)` · `at`→`@Name` · `img`/`media`/`file`→`[image|video|file <key>]` · `post`→title + paragraphs joined by newlines · `interactive` card→`[card] <title or first text>` · recalled→`[recalled]` · audio/sticker/shared→`[audio]`/`[sticker]`/`[shared chat]`. Replies are prefixed `↳` and indented; thread messages carry a `thread:<short>` tag so you can follow threading. `pretty`/`json`/`ndjson` are unchanged.
+Decoding rules: `text`→text · `a`→`label (url)` · `at`→`@Name` · `img`/`media`/`file`→`[image|video|file <key>]` · `code_block`→the code verbatim, newlines intact · `md`→markdown source · `hr`→`---` · `post`→title + paragraphs joined by newlines · `interactive` card→`[card] <title>` plus every text/markdown element · recalled→`[recalled]` · audio/sticker/shared→`[audio]`/`[sticker]`/`[shared chat]`. An unrecognized tag renders as `[tag:<name>] <text>` rather than being dropped, so content loss is always visible. Replies are prefixed `↳` and indented; thread messages carry a `thread:<short>` tag so you can follow threading. `pretty`/`json`/`ndjson` are unchanged.
+
+> `code_block` matters more than it looks: Lark puts anything pasted as a code
+> block (keys, configs, logs, stack traces) in that tag, and it is usually the
+> payload the message is actually about. `--format text` and `dm --compact`
+> share one decoder, so they always agree on what a message says.
 
 ### Search Messages Across Chats
 
