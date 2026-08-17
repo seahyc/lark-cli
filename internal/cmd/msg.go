@@ -440,6 +440,10 @@ Examples:
 		if receiveIDType == "" {
 			receiveIDType = detectIDType(msgSendTo)
 		}
+		receiveIDType, receiveID, targetErr := resolveMessageSendTargetForIdentity(receiveIDType, msgSendTo, asUser)
+		if targetErr != nil {
+			output.Fatal("BOT_CHAT_ID_REQUIRED", targetErr)
+		}
 
 		client := api.NewClient()
 
@@ -513,15 +517,15 @@ Examples:
 					}
 				} else {
 					if asUser {
-						resp, err = client.SendMessageAsUser(receiveIDType, msgSendTo, msgType, fileContent)
+						resp, err = client.SendMessageAsUser(receiveIDType, receiveID, msgType, fileContent)
 					} else {
-						resp, err = client.SendMessage(receiveIDType, msgSendTo, msgType, fileContent)
+						resp, err = client.SendMessage(receiveIDType, receiveID, msgType, fileContent)
 					}
 				}
 				if err != nil {
 					output.Fatal("API_ERROR", err)
 				}
-				rememberP2PChatFromSend(receiveIDType, msgSendTo, resp)
+				rememberP2PChatFromSend(receiveIDType, receiveID, resp)
 				results = append(results, api.OutputSendMessage{
 					Success:    true,
 					MessageID:  resp.Data.MessageID,
@@ -587,9 +591,9 @@ Examples:
 			}
 		} else {
 			if asUser {
-				resp, err = client.SendMessageAsUser(receiveIDType, msgSendTo, msgType, content)
+				resp, err = client.SendMessageAsUser(receiveIDType, receiveID, msgType, content)
 			} else {
-				resp, err = client.SendMessage(receiveIDType, msgSendTo, msgType, content)
+				resp, err = client.SendMessage(receiveIDType, receiveID, msgType, content)
 			}
 		}
 		if err != nil {
@@ -598,7 +602,7 @@ Examples:
 
 		// Remember the P2P chat_id when we messaged a person by open_id, so a
 		// later `lark dm`/`chat dm` can read history without re-sending.
-		rememberP2PChatFromSend(receiveIDType, msgSendTo, resp)
+		rememberP2PChatFromSend(receiveIDType, receiveID, resp)
 
 		// Format output
 		result := api.OutputSendMessage{
@@ -610,6 +614,57 @@ Examples:
 
 		output.JSON(result)
 	},
+}
+
+// resolveMessageSendTarget routes a person open_id through a previously
+// verified P2P chat_id when one is available. The verification bit is the
+// safety boundary: inferred or stale cache entries are never trusted for a
+// send, because a wrong chat_id would deliver the message to the wrong party.
+func resolveMessageSendTarget(receiveIDType, receiveID string) (string, string) {
+	if receiveIDType != "open_id" || !strings.HasPrefix(receiveID, "ou_") {
+		return receiveIDType, receiveID
+	}
+	cache := config.LoadDMCache()
+	if !cache.IsVerified(receiveID) {
+		return receiveIDType, receiveID
+	}
+	if chatID := cache.GetByOpenID(receiveID); chatID != "" {
+		return "chat_id", chatID
+	}
+	return receiveIDType, receiveID
+}
+
+// resolveMessageSendTargetE handles the explicit bot-open-id surface. Lark's
+// message API accepts user open_ids, not the open_id published by a bot app.
+// Calling the API with that identifier can never safely discover the user's
+// existing bot DM, so require a verified local mapping or stop before sending.
+func resolveMessageSendTargetE(receiveIDType, receiveID string) (string, string, error) {
+	if receiveIDType != "bot_open_id" {
+		resolvedType, resolvedID := resolveMessageSendTarget(receiveIDType, receiveID)
+		return resolvedType, resolvedID, nil
+	}
+	resolvedType, resolvedID := resolveMessageSendTarget("open_id", receiveID)
+	if resolvedType == "chat_id" {
+		return resolvedType, resolvedID, nil
+	}
+	return "", "", fmt.Errorf(
+		"bot open_id %s has no verified DM chat mapping; run `lark chat list-dms`, then retry with `lark msg send --to oc_<chat_id> --to-type chat_id ...` (bot app open_ids are not user recipients)",
+		receiveID,
+	)
+}
+
+// resolveMessageSendTargetForIdentity keeps bot-authored messages on Lark's
+// normal user-recipient path. A chat_id cached from the authenticated user's DM
+// is only valid for sends as that user; the configured bot is not a participant
+// in that conversation.
+func resolveMessageSendTargetForIdentity(receiveIDType, receiveID string, asUser bool) (string, string, error) {
+	if asUser {
+		return resolveMessageSendTargetE(receiveIDType, receiveID)
+	}
+	if receiveIDType == "bot_open_id" {
+		return "", "", fmt.Errorf("bot_open_id targets require --as user; a bot cannot address another bot through a user-owned DM")
+	}
+	return receiveIDType, receiveID, nil
 }
 
 // rememberP2PChatFromSend caches the person->chat_id mapping when a send targeted
@@ -1437,7 +1492,7 @@ func init() {
 
 	// msg send flags
 	msgSendCmd.Flags().StringVar(&msgSendTo, "to", "", "Recipient ID (user ID, open_id, email, or chat_id) (required)")
-	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient ID type: open_id, user_id, email, chat_id (auto-detected if not specified)")
+	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient ID type: open_id, bot_open_id, user_id, email, chat_id (auto-detected if not specified)")
 	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (markdown-lite). Use {{image}} to place images")
 	msgSendCmd.Flags().StringSliceVar(&msgSendImages, "image", nil, "Image file path (repeatable)")
 	msgSendCmd.Flags().StringVar(&msgSendMsgType, "msg-type", "text", "Message type: text (default) or post (auto-upgraded when markdown/mentions/images are used)")
