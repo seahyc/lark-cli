@@ -100,3 +100,56 @@ func TestLoadDMCache_MissingFileIsEmpty(t *testing.T) {
 		t.Fatalf("expected empty cache for missing file")
 	}
 }
+
+func TestDMCache_VerifiedFlag(t *testing.T) {
+	setupCacheDir(t)
+	c := LoadDMCache()
+
+	c.Set("ou_1", "Alice", "oc_1")
+	if c.IsVerified("ou_1") {
+		t.Fatal("a plain Set must not be treated as verified")
+	}
+
+	c.SetVerified("ou_1", "Alice", "oc_1")
+	if !c.IsVerified("ou_1") {
+		t.Fatal("SetVerified should mark the entry verified")
+	}
+
+	// Re-Setting the same chat_id keeps verification; pointing the person at a
+	// different chat drops it, since the new mapping is unproven.
+	c.Set("ou_1", "Alice", "oc_1")
+	if !c.IsVerified("ou_1") {
+		t.Fatal("same chat_id should retain verification")
+	}
+	c.Set("ou_1", "Alice", "oc_2")
+	if c.IsVerified("ou_1") {
+		t.Fatal("a changed chat_id must reset verification")
+	}
+}
+
+func TestDMCache_VerifiedSurvivesReload(t *testing.T) {
+	setupCacheDir(t)
+	if err := RememberVerifiedDMChat("ou_1", "Alice", "oc_1"); err != nil {
+		t.Fatalf("RememberVerifiedDMChat: %v", err)
+	}
+	if !LoadDMCache().IsVerified("ou_1") {
+		t.Fatal("verified flag should persist across reload")
+	}
+}
+
+func TestDMCache_Forget(t *testing.T) {
+	setupCacheDir(t)
+	if err := RememberVerifiedDMChat("ou_1", "Alice", "oc_1"); err != nil {
+		t.Fatalf("RememberVerifiedDMChat: %v", err)
+	}
+	if err := ForgetDMChat("ou_1"); err != nil {
+		t.Fatalf("ForgetDMChat: %v", err)
+	}
+	c := LoadDMCache()
+	if got := c.GetByOpenID("ou_1"); got != "" {
+		t.Fatalf("entry should be gone, got %q", got)
+	}
+	if c.IsVerified("ou_1") {
+		t.Fatal("forgotten entry must not report verified")
+	}
+}

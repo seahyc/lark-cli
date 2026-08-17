@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -424,12 +425,10 @@ Examples:
 			name = results[0].Name
 		}
 
-		// Consult the local person->chat_id cache first (cheap, works for
-		// inactive DMs), then fall back to the recent-activity search scan.
-		chatID := config.LoadDMCache().GetByOpenID(openID)
-		if chatID == "" {
-			chatID = findP2PChatIDForUser(client, openID, name)
-		}
+		// Shared resolution path: cache first (cheap, works for inactive DMs),
+		// then the recent-activity scan. Both are membership-verified, so the
+		// chat_id we hand back is guaranteed to be this person's 1:1 chat.
+		chatID := resolveDMChatID(client, openID, name)
 
 		result := map[string]interface{}{
 			"open_id": openID,
@@ -438,7 +437,7 @@ Examples:
 		}
 		if chatID != "" {
 			// Cache it so subsequent lookups don't re-scan.
-			_ = config.RememberDMChat(openID, name, chatID)
+			_ = config.RememberVerifiedDMChat(openID, name, chatID)
 			result["chat_id"] = chatID
 			result["read_command"] = "lark msg history --chat-id " + chatID + " --limit 20 --sort desc"
 			result["send_command"] = "lark msg send --to " + chatID + ` --text "..."`
@@ -455,15 +454,27 @@ Examples:
 // findP2PChatIDForUser searches recent messages for a P2P chat with the given user
 // and returns the chat_id. Returns empty string if no prior DM exists. Best-effort.
 //
-// Strategy: scan recent message history across multiple search queries, filter to P2P
-// chats, and find one where either the sender or recipient matches the target open_id.
-// Lark's SenderID filter on the search API isn't strictly enforced, so we filter
-// client-side instead.
+// Strategy: scan recent message history across multiple search queries, filter to
+// P2P chats, collect candidates, and confirm each against the chat's real
+// membership before returning it. Lark's SenderID filter on the search API isn't
+// enforced, so the scan is filtered client-side.
+//
+// The candidate signals (sender open_id, chat display name) are only hints and are
+// never trusted on their own. A message *we* sent inside someone else's DM carries
+// our own open_id as its sender, so a sender match returns an unrelated chat
+// whenever the person asked about is ourselves — which is exactly how a lookup for
+// "Ying Cong Seah" once resolved to the DM with Leo Yan. Membership verification is
+// what makes the answer correct rather than merely plausible.
 func findP2PChatIDForUser(client *api.Client, openID, name string) string {
 	// Use a few common short queries to surface recent activity
 	queries := []string{name, "a", "i", "the", " "}
 
 	seen := make(map[string]bool)
+	// Verification costs one API call per candidate, so cap it. Ordering matters
+	// more than depth: sender matches are checked as they appear.
+	const maxVerifications = 12
+	verifications := 0
+
 	for _, q := range queries {
 		if q == "" {
 			continue
@@ -478,16 +489,24 @@ func findP2PChatIDForUser(client *api.Client, openID, name string) string {
 			if r.MetaData == nil || !r.MetaData.IsP2PChat || r.MetaData.ChatID == "" {
 				continue
 			}
-			// Match if the message sender is the target user (most reliable signal)
-			if r.MetaData.FromID == openID {
-				return r.MetaData.ChatID
+			cid := r.MetaData.ChatID
+			if seen[cid] {
+				continue
 			}
-			// Otherwise note this P2P chat — counterpart name in display_info may match
-			if !seen[r.MetaData.ChatID] {
-				seen[r.MetaData.ChatID] = true
-				if name != "" && strings.HasPrefix(r.DisplayInfo, name) {
-					return r.MetaData.ChatID
-				}
+			// Candidate signals: a message sent by the target, or a chat whose
+			// display name starts with their name.
+			senderMatch := r.MetaData.FromID == openID
+			nameMatch := name != "" && strings.HasPrefix(r.DisplayInfo, name)
+			if !senderMatch && !nameMatch {
+				continue
+			}
+			seen[cid] = true
+			if verifications >= maxVerifications {
+				continue
+			}
+			verifications++
+			if verifyP2PChat(client, cid, openID) {
+				return cid
 			}
 		}
 	}
@@ -566,19 +585,39 @@ Examples:
 			out = out[:chatListDMsLimit]
 		}
 
-		// Persist discovered P2P chat_ids keyed by the counterpart open_id. We can
-		// only safely attribute a chat_id to a person when the last sender is an
-		// open_id (ou_); that's the counterpart for a 1:1 chat they last spoke in.
+		// Persist discovered P2P chat_ids keyed by the counterpart's open_id, read
+		// from the chat's own membership.
+		//
+		// The last sender is NOT the counterpart: in any DM where we spoke most
+		// recently it is us, so keying on it files that chat under our own open_id
+		// and a later lookup for ourselves returns a stranger's DM. One members
+		// call per chat settles it authoritatively.
+		self := selfOpenID(client)
 		cache := config.LoadDMCache()
 		changed := false
 		for _, d := range out {
-			sender, _ := d["last_sender_id"].(string)
 			cid, _ := d["chat_id"].(string)
-			counterpart, _ := d["counterpart"].(string)
-			if strings.HasPrefix(sender, "ou_") && cid != "" {
-				cache.Set(sender, counterpart, cid)
-				changed = true
+			if cid == "" {
+				continue
 			}
+			sender, _ := d["last_sender_id"].(string)
+			counterpartID, counterpartName := counterpartOfP2PChat(client, cid)
+			if counterpartID == "" {
+				continue // not a clean 1:1, or the lookup failed — don't guess
+			}
+			if counterpartName == "" {
+				// Fall back to the search display name only when it can't be
+				// mistaken for our own side of the conversation.
+				if dn, _ := d["counterpart"].(string); dn != "" && sender != self {
+					counterpartName = dn
+				}
+			}
+			d["counterpart_open_id"] = counterpartID
+			if counterpartName != "" {
+				d["counterpart"] = counterpartName
+			}
+			cache.SetVerified(counterpartID, counterpartName, cid)
+			changed = true
 		}
 		if changed {
 			_ = cache.Save()
@@ -592,6 +631,89 @@ Examples:
 }
 
 var chatListDMsLimit int
+
+// --- chat dm-cache ---
+
+var chatDMCacheVerify bool
+
+var chatDMCacheCmd = &cobra.Command{
+	Use:   "dm-cache",
+	Short: "Inspect (or verify and repair) the local person -> DM chat_id cache",
+	Long: `List the local person -> P2P chat_id cache, with each entry's verification state.
+
+The cache exists because Lark has no read-only open_id -> 1:1 chat_id lookup, so
+chat_ids are discovered from message scans and send responses. An entry is
+"verified" once it has been confirmed against the chat's real membership.
+
+--verify checks every entry against its chat's membership: entries that match are
+marked verified, entries pointing at a chat that is not that person's 1:1 chat are
+dropped. Entries are also verified lazily on first use, so this is a way to repair
+the whole cache at once rather than one lookup at a time.
+
+Examples:
+  lark chat dm-cache             # show entries and their state
+  lark chat dm-cache --verify    # verify all, drop mis-attributed entries`,
+	Run: func(cmd *cobra.Command, args []string) {
+		client := api.NewClient()
+		cache := config.LoadDMCache()
+
+		entries := make([]map[string]interface{}, 0, len(cache.Entries))
+		verifiedCount, droppedCount, alreadyCount := 0, 0, 0
+
+		for openID, e := range cache.Entries {
+			row := map[string]interface{}{
+				"open_id":  openID,
+				"name":     e.Name,
+				"chat_id":  e.ChatID,
+				"verified": e.Verified,
+			}
+			if chatDMCacheVerify {
+				switch {
+				case e.Verified:
+					row["action"] = "already_verified"
+					alreadyCount++
+				case verifyP2PChat(client, e.ChatID, openID):
+					cache.SetVerified(openID, e.Name, e.ChatID)
+					row["verified"] = true
+					row["action"] = "verified"
+					verifiedCount++
+				default:
+					cache.Forget(openID)
+					row["action"] = "dropped"
+					row["reason"] = "chat_id is not this person's 1:1 chat (or membership could not be read)"
+					droppedCount++
+				}
+			}
+			entries = append(entries, row)
+		}
+
+		sort.Slice(entries, func(i, j int) bool {
+			ni, _ := entries[i]["name"].(string)
+			nj, _ := entries[j]["name"].(string)
+			if ni == nj {
+				oi, _ := entries[i]["open_id"].(string)
+				oj, _ := entries[j]["open_id"].(string)
+				return oi < oj
+			}
+			return ni < nj
+		})
+
+		result := map[string]interface{}{
+			"path":    config.DMCacheFilePath(),
+			"count":   len(entries),
+			"entries": entries,
+		}
+		if chatDMCacheVerify {
+			if err := cache.Save(); err != nil {
+				output.Fatal("FILE_ERROR", err)
+			}
+			result["verified"] = verifiedCount
+			result["already_verified"] = alreadyCount
+			result["dropped"] = droppedCount
+		}
+		output.JSON(result)
+	},
+}
 
 // classifyMemberIdent returns one of "open_id", "email", or "name" based on the
 // shape of the argument. open_id wins on the "ou_" prefix; any string containing
@@ -673,4 +795,6 @@ func init() {
 
 	chatListDMsCmd.Flags().IntVar(&chatListDMsLimit, "limit", 50, "Maximum number of DMs to return")
 	chatCmd.AddCommand(chatListDMsCmd)
+	chatCmd.AddCommand(chatDMCacheCmd)
+	chatDMCacheCmd.Flags().BoolVar(&chatDMCacheVerify, "verify", false, "Verify every cached mapping against the chat's real membership; drop mis-attributed entries")
 }

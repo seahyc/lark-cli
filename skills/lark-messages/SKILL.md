@@ -54,6 +54,8 @@ lark msg react --message-id om_xxx --reaction SMILE
 ```bash
 lark chat search "project team"
 lark chat list-dms --limit 100                                         # enumerate recent P2P chats
+lark chat dm-cache                                                     # inspect person -> chat_id cache
+lark chat dm-cache --verify                                            # verify all entries, drop bad ones
 lark chat create --name "Launch Room" --members alice@x,bob@x
 lark chat create --name "1:1 w/ Alice" --to alice@x                    # 1:1 shortcut
 lark chat update <chat-id> --name "Launch Room 2" --description "Updated"
@@ -320,6 +322,30 @@ Returns the user's `open_id`, name, and a ready-to-use `lark msg send --to <open
 | **Read** an inactive DM whose `chat_id` you don't have | Send first → grab `chat_id` from the response → `lark msg history --chat-id <oc_…>` | ⚠️ Sending **notifies the user**. There is no notify-free way to obtain the id for an inactive DM. If you must not notify, you cannot read that DM's history via the API. **You only pay this once:** see the local DM cache below. |
 
 **Local person→chat_id cache (notify-free after the first time).** Once a P2P `chat_id` becomes known by any means — a `msg send` response, a `lark dm`/`chat dm` that resolved one, or a `list-dms` scan — the CLI persists it to `dm_cache.json` in the config dir, keyed by the counterpart's `open_id`. On the next `lark dm "<name>"` or `lark chat dm "<name>"`, the cache is consulted **first**, so reading an inactive DM no longer needs a fresh send (no notification). The cache is best-effort and never blocks a command on a read/write error. When a `chat_id` is still genuinely unknown (never cached, no recent activity), the command returns the counterpart's `open_id` plus an explicit message that the `chat_id` is only obtainable by sending (which notifies) — it never sends implicitly.
+
+**Every cached mapping is membership-verified before it is used.** A `chat_id` is
+only attributed to a person after the chat's own member list confirms it is that
+person's 1:1 chat (exactly us and them, no third party). This is not paranoia
+about a hypothetical: the discovery signals are hints, not proof. A message *we*
+sent inside someone else's DM carries **our** `open_id` as its sender, so the old
+sender-based inference filed unrelated chats under our own id — a lookup for
+"Ying Cong Seah" resolved to the DM with Leo Yan, and anything that then replied
+through that `chat_id` would have messaged Leo.
+
+Consequences worth knowing:
+
+- Entries carry a `verified` flag. Unverified ones (written before verification
+  existed) are checked on first use; any that fail are dropped and re-resolved.
+- `lark chat dm-cache` lists the cache and each entry's state;
+  `lark chat dm-cache --verify` checks every entry at once and drops
+  mis-attributed ones. Use it after any incident, or to clean a stale cache.
+- **Bot DMs can't be verified and are therefore not cached.** Lark omits bots
+  from member lists, so a bot DM and your own note-to-self chat are both exactly
+  `[self]`; `owner_id` separates them (yours is owned by you, a bot DM has no
+  owner), but nothing ties a bot DM back to a specific bot `open_id` — bot
+  messages are sent by `cli_<app_id>` and `contact/v3/users/<bot ou_>` returns
+  `41050 no user authority`. So bot `chat_id`s are re-obtained from a send
+  response each time rather than trusted from cache.
 
 **The full recipe (resolve → read an inactive DM):**
 ```bash
