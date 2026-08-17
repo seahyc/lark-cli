@@ -365,9 +365,10 @@ var msgSendCmd = &cobra.Command{
 By default, messages are sent as the bot. Use --as user to send as yourself.
 
 Message format:
-- Markdown-lite (default): Use --text with **bold**, *italic*, [text](url), and @{ou_xxx} mentions
-- Images: Use --image and place {{image}} in --text to position them
-- Message type: post (default) or text (plain)
+- Plain text (default): sent as-is, no formatting applied
+- Markdown-lite: use --text with **bold**, *italic*, [text](url), or @{ou_xxx}
+  mentions, or pass --image — any of these auto-upgrades to --msg-type post
+- Message type: text (default) or post (rich; auto-selected when needed)
 
 Examples:
 	# Send text to user (as bot)
@@ -422,10 +423,7 @@ Examples:
 		if msgSendMsgType != "post" && msgSendMsgType != "text" {
 			output.Fatalf("VALIDATION_ERROR", "--msg-type must be 'post' or 'text'")
 		}
-		if msgSendMsgType == "text" && len(msgSendImages) > 0 {
-			output.Fatalf("VALIDATION_ERROR", "--image is only supported with --msg-type post")
-		}
-		if msgSendMsgType == "text" && msgSendText == "" && len(msgSendFiles) == 0 {
+		if msgSendMsgType == "text" && msgSendText == "" && len(msgSendImages) == 0 && len(msgSendFiles) == 0 {
 			output.Fatalf("VALIDATION_ERROR", "--text is required with --msg-type text")
 		}
 		if msgSendRootID != "" && msgSendParentID == "" {
@@ -557,11 +555,11 @@ Examples:
 			imageKeys = append(imageKeys, imageKey)
 		}
 
-		// Auto-upgrade text -> post when mentions or markdown are detected
+		// Auto-upgrade text -> post when mentions, markdown, or images are present
 		msgType := msgSendMsgType
-		if msgType == "text" && (strings.Contains(msgSendText, "@{") || strings.Contains(msgSendText, "**")) {
+		if msgType == "text" && (strings.Contains(msgSendText, "@{") || strings.Contains(msgSendText, "**") || len(imageKeys) > 0) {
 			msgType = "post"
-			fmt.Fprintf(os.Stderr, "note: auto-upgraded --msg-type from text to post (mentions/markdown detected)\n")
+			fmt.Fprintf(os.Stderr, "note: auto-upgraded --msg-type from text to post (mentions/markdown/image detected)\n")
 		}
 
 		// Build message content
@@ -1442,7 +1440,7 @@ func init() {
 	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient ID type: open_id, user_id, email, chat_id (auto-detected if not specified)")
 	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (markdown-lite). Use {{image}} to place images")
 	msgSendCmd.Flags().StringSliceVar(&msgSendImages, "image", nil, "Image file path (repeatable)")
-	msgSendCmd.Flags().StringVar(&msgSendMsgType, "msg-type", "post", "Message type: post (default) or text")
+	msgSendCmd.Flags().StringVar(&msgSendMsgType, "msg-type", "text", "Message type: text (default) or post (auto-upgraded when markdown/mentions/images are used)")
 	msgSendCmd.Flags().StringVar(&msgSendParentID, "parent-id", "", "Parent message ID to reply to (optional)")
 	msgSendCmd.Flags().StringVar(&msgSendRootID, "root-id", "", "Root message ID for thread replies (optional)")
 	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message). Video (.mp4/.mov/.m4v) is sent as a playable video, audio (.opus) as a voice message, everything else as a file.")
@@ -1466,7 +1464,7 @@ func init() {
 	// msg edit flags
 	msgEditCmd.Flags().StringVar(&msgEditMessageID, "message-id", "", "Message ID to edit (required)")
 	msgEditCmd.Flags().StringVar(&msgEditText, "text", "", "New message text (markdown-lite)")
-	msgEditCmd.Flags().StringVar(&msgEditMsgType, "msg-type", "post", "Message type: post (default) or text")
+	msgEditCmd.Flags().StringVar(&msgEditMsgType, "msg-type", "text", "Message type: text (default) or post (auto-upgraded when markdown/mentions are used)")
 	msgEditCmd.Flags().StringVar(&msgEditAs, "as", "bot", "Edit as 'bot' (default, only option supported by Lark API)")
 	msgRecallCmd.Flags().StringVar(&msgRecallAs, "as", "user", "Recall as 'user' (default, your identity) or 'bot'")
 
