@@ -100,7 +100,7 @@ Flags:
 - `--text`: Message text (markdown-lite). Use `{{image}}` to place images.
 - `--image`: Image file path (repeatable)
 - `--file`: File path to send (repeatable; each file sent as a separate message). Supported: pdf, doc/docx, xls/xlsx, ppt/pptx, mp4, opus, and any other file (sent as `stream`). **Cannot be combined with `--text` or `--image`.** Max 30MB per file (Lark API limit). Images sent via `--image` are capped at 10MB each.
-- `--msg-type`: `post` (default) or `text`
+- `--msg-type`: `text` (default) or `post` — auto-upgraded to `post` when `--text` contains `**`/`@{` mentions or `--image` is used
 - `--as`: `bot` or `user` (default)
 - `--parent-id`: Parent message ID for threaded reply
 - `--root-id`: Root message ID for thread replies
