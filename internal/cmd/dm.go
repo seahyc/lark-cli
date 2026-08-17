@@ -10,12 +10,25 @@ import (
 	"github.com/yjwong/lark-cli/internal/output"
 )
 
-// resolveDMChatID returns a P2P chat_id for the user, consulting the local
-// person->chat_id cache first (cheap, no API calls, works for inactive DMs)
-// before falling back to the recent-activity search scan.
+// resolveDMChatID returns a membership-verified P2P chat_id for the user,
+// consulting the local person->chat_id cache first (cheap, works for inactive
+// DMs) before falling back to the recent-activity search scan.
+//
+// A cached entry written before verification existed is checked on first use; one
+// that turns out to point at a different chat is dropped and re-resolved. An
+// unverifiable chat_id is never returned — callers read history through it and
+// send replies to it, so a wrong answer means talking to the wrong person.
 func resolveDMChatID(client *api.Client, openID, name string) string {
-	if cid := config.LoadDMCache().GetByOpenID(openID); cid != "" {
-		return cid
+	cache := config.LoadDMCache()
+	if cid := cache.GetByOpenID(openID); cid != "" {
+		if cache.IsVerified(openID) {
+			return cid
+		}
+		if verifyP2PChat(client, cid, openID) {
+			_ = config.RememberVerifiedDMChat(openID, name, cid)
+			return cid
+		}
+		_ = config.ForgetDMChat(openID)
 	}
 	return findP2PChatIDForUser(client, openID, name)
 }
@@ -133,7 +146,7 @@ Examples:
 				chatID = sendResp.Data.ChatID
 				// Persist the newly-known P2P chat_id so future reads skip the
 				// send-to-discover step.
-				_ = config.RememberDMChat(user.OpenID, user.Name, chatID)
+				_ = config.RememberVerifiedDMChat(user.OpenID, user.Name, chatID)
 			}
 		}
 
@@ -159,7 +172,7 @@ Examples:
 
 		// chat_id is now known — cache it for future reads (covers the read-only
 		// path where it came from list-dms / search rather than a send).
-		_ = config.RememberDMChat(user.OpenID, user.Name, chatID)
+		_ = config.RememberVerifiedDMChat(user.OpenID, user.Name, chatID)
 
 		msgs, _, _, err := listMessagesForDM(client, chatID, dmLast, dmAs == "user")
 		if err != nil {

@@ -16,10 +16,17 @@ import (
 // a fresh send (which would notify the counterpart).
 
 // DMCacheEntry is one cached person -> chat_id mapping.
+//
+// Verified records whether the mapping was confirmed against the chat's actual
+// membership (a 1:1 chat containing exactly us and this person), as opposed to
+// inferred from a message-search heuristic. An unverified entry is never trusted
+// for sending: mis-attributing a chat_id would deliver a message to the wrong
+// person. Callers verify lazily on first read and drop entries that fail.
 type DMCacheEntry struct {
-	OpenID string `json:"open_id"`
-	Name   string `json:"name,omitempty"`
-	ChatID string `json:"chat_id"`
+	OpenID   string `json:"open_id"`
+	Name     string `json:"name,omitempty"`
+	ChatID   string `json:"chat_id"`
+	Verified bool   `json:"verified,omitempty"`
 }
 
 // DMCache is the on-disk structure.
@@ -89,6 +96,21 @@ func (c *DMCache) GetByOpenID(openID string) string {
 	return ""
 }
 
+// IsVerified reports whether the cached mapping for an open_id was confirmed
+// against the chat's real membership.
+func (c *DMCache) IsVerified(openID string) bool {
+	if openID == "" {
+		return false
+	}
+	e, ok := c.Entries[openID]
+	return ok && e.Verified && e.ChatID != ""
+}
+
+// Forget removes any cached mapping for an open_id (call Save to persist).
+func (c *DMCache) Forget(openID string) {
+	delete(c.Entries, openID)
+}
+
 // GetByName returns the cached chat_id and open_id for a normalized name match,
 // or ("", "") if not found. Matching is case/whitespace-insensitive.
 func (c *DMCache) GetByName(name string) (chatID, openID string) {
@@ -108,6 +130,16 @@ func (c *DMCache) GetByName(name string) (chatID, openID string) {
 // non-empty name overwrites a previously blank one; a blank name never clears an
 // existing one.
 func (c *DMCache) Set(openID, name, chatID string) {
+	c.set(openID, name, chatID, false)
+}
+
+// SetVerified records a mapping that has been confirmed against the chat's real
+// membership. Only mappings written this way are trusted for sending.
+func (c *DMCache) SetVerified(openID, name, chatID string) {
+	c.set(openID, name, chatID, true)
+}
+
+func (c *DMCache) set(openID, name, chatID string, verified bool) {
 	if openID == "" || chatID == "" {
 		return
 	}
@@ -118,7 +150,11 @@ func (c *DMCache) Set(openID, name, chatID string) {
 	if name == "" {
 		name = existing.Name
 	}
-	c.Entries[openID] = DMCacheEntry{OpenID: openID, Name: name, ChatID: chatID}
+	// A mapping that changes chat_id loses any previous verification.
+	if !verified && existing.ChatID == chatID {
+		verified = existing.Verified
+	}
+	c.Entries[openID] = DMCacheEntry{OpenID: openID, Name: name, ChatID: chatID, Verified: verified}
 }
 
 // Save persists the cache to disk (best-effort; returns any write error).
@@ -137,5 +173,32 @@ func RememberDMChat(openID, name, chatID string) error {
 	defer dmCacheMu.Unlock()
 	c := LoadDMCache()
 	c.Set(openID, name, chatID)
+	return c.Save()
+}
+
+// RememberVerifiedDMChat persists a mapping whose membership has been confirmed
+// (or which came straight from a send response, which is authoritative by
+// construction — Lark routed the message to that person itself).
+func RememberVerifiedDMChat(openID, name, chatID string) error {
+	if openID == "" || chatID == "" {
+		return nil
+	}
+	dmCacheMu.Lock()
+	defer dmCacheMu.Unlock()
+	c := LoadDMCache()
+	c.SetVerified(openID, name, chatID)
+	return c.Save()
+}
+
+// ForgetDMChat drops a cached mapping — used when verification proves an entry
+// points at the wrong chat.
+func ForgetDMChat(openID string) error {
+	if openID == "" {
+		return nil
+	}
+	dmCacheMu.Lock()
+	defer dmCacheMu.Unlock()
+	c := LoadDMCache()
+	c.Forget(openID)
 	return c.Save()
 }
