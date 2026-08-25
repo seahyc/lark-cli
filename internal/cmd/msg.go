@@ -139,10 +139,11 @@ Examples:
 				}
 			}
 		}
+		contexts := enrichMessageReadContexts(client, allMessages, historyAsUser, resolver)
 
 		// Agent-readable transcript format: emit decoded plain text directly.
 		if output.Format == output.FormatText {
-			printTranscript(allMessages, resolver)
+			printTranscriptWithContexts(allMessages, contexts, resolver)
 			return
 		}
 
@@ -150,6 +151,7 @@ Examples:
 		outputMessages := make([]api.OutputMessage, len(allMessages))
 		for i, m := range allMessages {
 			outputMessages[i] = convertMessage(m)
+			outputMessages[i].Context = contexts[m.MessageID]
 			if outputMessages[i].Sender != nil && m.Sender != nil && m.Sender.SenderType == "user" {
 				outputMessages[i].Sender.Name = resolver.resolve(m.Sender.ID)
 			}

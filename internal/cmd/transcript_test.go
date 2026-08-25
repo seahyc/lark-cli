@@ -362,6 +362,104 @@ func TestRenderTranscript_MultipleMessages(t *testing.T) {
 	}
 }
 
+func TestBuildMessageReadContext_GroupsReactionsAndPreviewsReplies(t *testing.T) {
+	r := staticResolver(map[string]string{
+		"ou_mt":    "Minh Tuan",
+		"ou_ying":  "Ying Cong",
+		"ou_yayo":  "Yayo Arellano",
+		"ou_alice": "Alice",
+	})
+
+	context := buildMessageReadContext(
+		[]api.MessageReaction{
+			{ReactionType: &api.ReactionType{EmojiType: "OK"}, Operator: &api.ReactionOperator{OperatorID: "ou_mt"}},
+			{ReactionType: &api.ReactionType{EmojiType: "OK"}, Operator: &api.ReactionOperator{OperatorID: "ou_ying"}},
+			{ReactionType: &api.ReactionType{EmojiType: "THUMBSUP"}, Operator: &api.ReactionOperator{OperatorID: "ou_alice"}},
+		},
+		[]api.Message{
+			{MsgType: "text", Sender: &api.MessageSender{ID: "ou_yayo", SenderType: "user"}, Body: &api.MessageBody{Content: `{"text":"I can take this."}`}},
+			{MsgType: "text", Sender: &api.MessageSender{ID: "ou_ying", SenderType: "user"}, Body: &api.MessageBody{Content: `{"text":"Thanks, please keep me posted."}`}},
+		},
+		r,
+	)
+
+	if context.Thread == nil || context.Thread.ReplyCount != 2 {
+		t.Fatalf("thread reply count = %#v, want 2", context.Thread)
+	}
+	if len(context.Thread.Preview) != 2 || context.Thread.Preview[1].Sender != "Ying Cong" {
+		t.Fatalf("thread preview = %#v, want decoded replies", context.Thread.Preview)
+	}
+	if got := context.Thread.Preview[1].Content; got != "Thanks, please keep me posted." {
+		t.Fatalf("latest reply preview = %q", got)
+	}
+	if len(context.Reactions) != 2 {
+		t.Fatalf("reactions = %#v, want two grouped emoji", context.Reactions)
+	}
+	if got := context.Reactions[0]; got.EmojiType != "OK" || got.Count != 2 || strings.Join(got.Operators, ", ") != "Minh Tuan, Ying Cong" {
+		t.Fatalf("OK reaction = %#v", got)
+	}
+}
+
+type fakeMessageContextClient struct {
+	reactions map[string][]api.MessageReaction
+	threads   map[string][]api.Message
+}
+
+func (f fakeMessageContextClient) ListMessageReactions(string, *api.ListMessageReactionsOptions) ([]api.MessageReaction, bool, string, error) {
+	return nil, false, "", nil
+}
+
+func (f fakeMessageContextClient) ListMessageReactionsAsUser(messageID string, _ *api.ListMessageReactionsOptions) ([]api.MessageReaction, bool, string, error) {
+	return f.reactions[messageID], false, "", nil
+}
+
+func (f fakeMessageContextClient) ListMessages(string, string, *api.ListMessagesOptions) ([]api.Message, bool, string, error) {
+	return nil, false, "", nil
+}
+
+func (f fakeMessageContextClient) ListMessagesAsUser(_ string, threadID string, _ *api.ListMessagesOptions) ([]api.Message, bool, string, error) {
+	return f.threads[threadID], false, "", nil
+}
+
+func TestEnrichMessageReadContexts_UsesUserReadPath(t *testing.T) {
+	client := fakeMessageContextClient{
+		reactions: map[string][]api.MessageReaction{
+			"om_root": {{ReactionType: &api.ReactionType{EmojiType: "OK"}, Operator: &api.ReactionOperator{OperatorID: "ou_mt"}}},
+		},
+		threads: map[string][]api.Message{
+			"omt_thread": {{MsgType: "text", Sender: &api.MessageSender{ID: "ou_ying", SenderType: "user"}, Body: &api.MessageBody{Content: `{"text":"looks good"}`}}},
+		},
+	}
+	messages := []api.Message{{MessageID: "om_root", ThreadID: "omt_thread", MsgType: "text"}}
+
+	contexts := enrichMessageReadContexts(client, messages, true, staticResolver(map[string]string{"ou_mt": "Minh Tuan", "ou_ying": "Ying Cong"}))
+	context := contexts["om_root"]
+	if context == nil || context.Thread == nil || context.Thread.ReplyCount != 1 {
+		t.Fatalf("context = %#v, want one thread reply", context)
+	}
+	if len(context.Reactions) != 1 || context.Reactions[0].Operators[0] != "Minh Tuan" {
+		t.Fatalf("reactions = %#v, want MT's OK", context.Reactions)
+	}
+}
+
+func TestTranscriptLineWithContext_ShowsReactionsAndThreadPreview(t *testing.T) {
+	r := staticResolver(map[string]string{"ou_alice": "Alice"})
+	line := transcriptLineWithContext(
+		api.Message{MsgType: "text", CreateTime: "1704067200000", Sender: &api.MessageSender{ID: "ou_alice", SenderType: "user"}, Body: &api.MessageBody{Content: `{"text":"Please review."}`}},
+		r,
+		&api.MessageReadContext{
+			Reactions: []api.MessageReactionSummary{{EmojiType: "OK", Count: 1, Operators: []string{"Minh Tuan"}}},
+			Thread:    &api.MessageThreadPreview{ReplyCount: 2, Preview: []api.MessageThreadPreviewItem{{Sender: "Ying Cong", Content: "Looks good."}}},
+		},
+	)
+	if !strings.Contains(line, "reactions: :OK: × 1 (@Minh Tuan)") {
+		t.Fatalf("missing reactions in %q", line)
+	}
+	if !strings.Contains(line, "thread: 2 replies") || !strings.Contains(line, "@Ying Cong: Looks good.") {
+		t.Fatalf("missing thread preview in %q", line)
+	}
+}
+
 func TestTranscriptForSearchResults(t *testing.T) {
 	r := staticResolver(map[string]string{"ou_s": "Sam"})
 	results := []api.SearchMessageResult{
