@@ -208,12 +208,12 @@ Multiple --from entries are OR'd together (any sender matches).
 Actions (at least one required, and they combine):
   --folder <id|name>     move matched mail to a folder (action type 11)
   --forward-email <addr> forward matched mail to an email address (type 12)
-  --forward-chat <id>    forward matched mail to a Lark chat (type 13); the id
+  --forward-chat <id>    forward matched mail to a Lark chat (type 8); the id
                          is the mail-rule chat id (as seen in existing rules /
-                         the mail web UI), not necessarily an oc_ id.
+                         the mail web UI), not an im oc_ chat id.
 
 Note: the published Open API docs claim forwarding is unsupported, but the
-rule engine accepts and honours forward actions (types 12/13) in practice.
+rule engine accepts and honours forward actions (types 12/8) in practice.
 
 Examples:
   # Move to a folder
@@ -258,7 +258,7 @@ Examples:
 		for _, chat := range mailFilterFwdChat {
 			chat = strings.TrimSpace(chat)
 			if chat != "" {
-				actions = append(actions, map[string]interface{}{"type": 13, "input": chat})
+				actions = append(actions, map[string]interface{}{"type": 8, "input": chat})
 			}
 		}
 
