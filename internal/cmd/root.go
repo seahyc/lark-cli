@@ -89,6 +89,7 @@ func init() {
 		"Output format: pretty (default), json, ndjson, table, csv, text (transcript for message reads)")
 
 	rootCmd.AddCommand(apiCmd)
+	rootCmd.AddCommand(anycrossCmd)
 	rootCmd.AddCommand(approvalCmd)
 	rootCmd.AddCommand(attendanceCmd)
 	rootCmd.AddCommand(authCmd)
