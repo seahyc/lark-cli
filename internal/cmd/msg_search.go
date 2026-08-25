@@ -157,10 +157,27 @@ Examples:
 		if err != nil {
 			output.Fatal("API_ERROR", err)
 		}
+		resolver := newNameResolver(client)
+		for _, m := range messages {
+			for _, mention := range m.Mentions {
+				if mention.ID != "" && mention.Name != "" {
+					resolver.preset(mention.ID, mention.Name)
+				}
+			}
+		}
+		contexts := enrichMessageReadContexts(client, messages, false, resolver)
+		if output.Format == output.FormatText {
+			printTranscriptWithContexts(messages, contexts, resolver)
+			return
+		}
 
 		outputMessages := make([]api.OutputMessage, len(messages))
 		for i, m := range messages {
 			outputMessages[i] = convertMessage(m)
+			outputMessages[i].Context = contexts[m.MessageID]
+			if outputMessages[i].Sender != nil && m.Sender != nil && m.Sender.SenderType == "user" {
+				outputMessages[i].Sender.Name = resolver.resolve(m.Sender.ID)
+			}
 		}
 		output.JSON(map[string]interface{}{
 			"messages": outputMessages,

@@ -155,6 +155,13 @@ Notes:
 lark msg history --chat-id oc_xxxxx --limit 50 --sort desc
 ```
 
+Normal reads emulate the surrounding context visible in Lark itself. In JSON,
+each message can include `context.reactions` (grouped emoji plus the people who
+reacted) and `context.thread` (exact reply count plus the latest three decoded
+replies). In `--format text`, the same information is rendered immediately
+below the message as `reactions:` and `thread:` lines. The primary message
+content is unchanged if either optional context endpoint is unavailable.
+
 Flags:
 - `--chat-id` (required): Chat ID or thread ID
 - `--type`: `chat` (default) or `thread`
@@ -271,6 +278,9 @@ custom_emojis:
 ```bash
 lark msg get om_a,om_b,om_c
 ```
+
+`msg get` includes the same reaction and thread context as `msg history`; add
+`--format text` for the compact, human-readable view.
 
 Fetch full content for a comma-separated list of message IDs.
 

@@ -129,6 +129,16 @@ func (c *Client) ListMessages(containerIDType, containerID string, opts *ListMes
 
 // ListMessageReactions retrieves reactions for a message
 func (c *Client) ListMessageReactions(messageID string, opts *ListMessageReactionsOptions) ([]MessageReaction, bool, string, error) {
+	return c.listMessageReactions(messageID, opts, false)
+}
+
+// ListMessageReactionsAsUser retrieves reactions using the caller's user token,
+// so normal message reads keep working in chats the bot has not joined.
+func (c *Client) ListMessageReactionsAsUser(messageID string, opts *ListMessageReactionsOptions) ([]MessageReaction, bool, string, error) {
+	return c.listMessageReactions(messageID, opts, true)
+}
+
+func (c *Client) listMessageReactions(messageID string, opts *ListMessageReactionsOptions, asUser bool) ([]MessageReaction, bool, string, error) {
 	reqSize := 0
 	if opts != nil {
 		reqSize = opts.PageSize
@@ -152,7 +162,13 @@ func (c *Client) ListMessageReactions(messageID string, opts *ListMessageReactio
 	path := fmt.Sprintf("/im/v1/messages/%s/reactions?%s", messageID, params.Encode())
 
 	var resp MessageReactionListResponse
-	if err := c.GetWithTenantToken(path, &resp); err != nil {
+	var err error
+	if asUser {
+		err = c.Get(path, &resp)
+	} else {
+		err = c.GetWithTenantToken(path, &resp)
+	}
+	if err != nil {
 		return nil, false, "", err
 	}
 
