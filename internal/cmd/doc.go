@@ -1223,7 +1223,10 @@ Examples:
 var docUploadCmd = &cobra.Command{
 	Use:   "upload <file_path>",
 	Short: "Upload a file to Lark Drive",
-	Long: `Upload a local file to Lark Drive (max 20MB).
+	Long: `Upload a local file to Lark Drive.
+
+Files up to 20MB use the simple upload API. Larger files are automatically
+chunked via Lark's multipart upload flow (prepare/upload_part/finish).
 
 Optionally specify a folder to upload into using --folder.
 
