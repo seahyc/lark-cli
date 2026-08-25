@@ -153,7 +153,7 @@ Output:
 lark doc upload <file_path> [--folder <folder_token>]
 ```
 
-Uploads a local file to Lark Drive (max 20MB). Optionally specify a folder token to upload into.
+Uploads a local file to Lark Drive. Files up to 20MB use the simple upload API; larger files are transparently chunked via Lark's multipart upload flow (prepare/upload_part/finish), so there's no practical size limit to worry about. Optionally specify a folder token to upload into.
 
 Options:
 - `--folder`: Folder token to upload into (default: root cloud space)

@@ -254,12 +254,12 @@ func (c *Client) UploadDriveFile(filePath, parentToken, parentType string) (stri
 		return "", fmt.Errorf("failed to stat file: %w", err)
 	}
 
-	if stat.Size() > 20*1024*1024 {
-		return "", fmt.Errorf("file size %d exceeds 20MB limit", stat.Size())
-	}
-
 	if parentType == "" {
 		parentType = "explorer"
+	}
+
+	if stat.Size() > 20*1024*1024 {
+		return c.uploadDriveFileMultipart(file, stat.Size(), filepath.Base(filePath), parentToken, parentType)
 	}
 
 	var body bytes.Buffer
@@ -312,6 +312,98 @@ func (c *Client) UploadDriveFile(filePath, parentToken, parentType string) (stri
 	}
 
 	return uploadResp.Data.FileToken, nil
+}
+
+// uploadDriveFileMultipart uploads a file larger than the 20MB upload_all
+// limit using Lark's prepare/upload_part/finish multipart flow.
+func (c *Client) uploadDriveFileMultipart(file *os.File, size int64, fileName, parentToken, parentType string) (string, error) {
+	if err := auth.EnsureValidToken(); err != nil {
+		return "", err
+	}
+
+	var prepResp UploadPrepareResponse
+	prepBody := map[string]interface{}{
+		"file_name":   fileName,
+		"parent_type": parentType,
+		"parent_node": parentToken,
+		"size":        size,
+	}
+	if err := c.Post("/drive/v1/files/upload_prepare", prepBody, &prepResp); err != nil {
+		return "", fmt.Errorf("upload_prepare failed: %w", err)
+	}
+	if err := prepResp.Err(); err != nil {
+		return "", fmt.Errorf("upload_prepare failed: %w", err)
+	}
+
+	uploadID := prepResp.Data.UploadID
+	blockSize := prepResp.Data.BlockSize
+	blockNum := prepResp.Data.BlockNum
+	if blockSize <= 0 {
+		blockSize = 4 * 1024 * 1024
+	}
+
+	token := auth.GetTokenStore().GetAccessToken()
+	buf := make([]byte, blockSize)
+
+	for seq := 0; seq < blockNum; seq++ {
+		n, err := io.ReadFull(file, buf)
+		if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+			return "", fmt.Errorf("failed to read block %d: %w", seq, err)
+		}
+
+		var partBody bytes.Buffer
+		writer := multipart.NewWriter(&partBody)
+		_ = writer.WriteField("upload_id", uploadID)
+		_ = writer.WriteField("seq", strconv.Itoa(seq))
+		_ = writer.WriteField("size", strconv.Itoa(n))
+		part, err := writer.CreateFormFile("file", fileName)
+		if err != nil {
+			return "", fmt.Errorf("failed to create form file for block %d: %w", seq, err)
+		}
+		if _, err := part.Write(buf[:n]); err != nil {
+			return "", fmt.Errorf("failed to write block %d: %w", seq, err)
+		}
+		writer.Close()
+
+		req, err := http.NewRequest("POST", baseURL+"/drive/v1/files/upload_part", &partBody)
+		if err != nil {
+			return "", fmt.Errorf("failed to create request for block %d: %w", seq, err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("upload_part request failed for block %d: %w", seq, err)
+		}
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return "", fmt.Errorf("failed to read upload_part response for block %d: %w", seq, err)
+		}
+
+		var partResp BaseResponse
+		if err := json.Unmarshal(respBody, &partResp); err != nil {
+			return "", fmt.Errorf("failed to parse upload_part response for block %d: %w", seq, err)
+		}
+		if err := partResp.Err(); err != nil {
+			return "", fmt.Errorf("upload_part failed for block %d: %w", seq, err)
+		}
+	}
+
+	var finishResp UploadFinishResponse
+	finishBody := map[string]interface{}{
+		"upload_id": uploadID,
+		"block_num": blockNum,
+	}
+	if err := c.Post("/drive/v1/files/upload_finish", finishBody, &finishResp); err != nil {
+		return "", fmt.Errorf("upload_finish failed: %w", err)
+	}
+	if err := finishResp.Err(); err != nil {
+		return "", fmt.Errorf("upload_finish failed: %w", err)
+	}
+
+	return finishResp.Data.FileToken, nil
 }
 
 // InsertDocumentImage inserts an inline image into a docx document. It:

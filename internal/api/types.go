@@ -2166,6 +2166,24 @@ type OutputDriveUpload struct {
 	Size      int64  `json:"size"`
 }
 
+// UploadPrepareResponse is the API response for starting a multipart upload
+type UploadPrepareResponse struct {
+	BaseResponse
+	Data struct {
+		UploadID  string `json:"upload_id"`
+		BlockSize int    `json:"block_size"`
+		BlockNum  int    `json:"block_num"`
+	} `json:"data"`
+}
+
+// UploadFinishResponse is the API response for finishing a multipart upload
+type UploadFinishResponse struct {
+	BaseResponse
+	Data struct {
+		FileToken string `json:"file_token"`
+	} `json:"data"`
+}
+
 // OutputFindMatch is a single match result from doc find
 type OutputFindMatch struct {
 	BlockID   string `json:"block_id"`
