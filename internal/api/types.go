@@ -1341,6 +1341,33 @@ type OutputMessage struct {
 	IsReply    bool                   `json:"is_reply,omitempty"`
 	ThreadID   string                 `json:"thread_id,omitempty"`
 	Deleted    bool                   `json:"deleted,omitempty"`
+	Context    *MessageReadContext    `json:"context,omitempty"`
+}
+
+// MessageReadContext mirrors the reaction and thread context shown beside a
+// message in the Lark client.
+type MessageReadContext struct {
+	Reactions []MessageReactionSummary `json:"reactions,omitempty"`
+	Thread    *MessageThreadPreview    `json:"thread,omitempty"`
+}
+
+// MessageReactionSummary groups the people who used the same emoji reaction.
+type MessageReactionSummary struct {
+	EmojiType string   `json:"emoji_type"`
+	Count     int      `json:"count"`
+	Operators []string `json:"operators,omitempty"`
+}
+
+// MessageThreadPreview contains the exact reply count and a short preview of
+// the latest replies in a thread.
+type MessageThreadPreview struct {
+	ReplyCount int                        `json:"reply_count"`
+	Preview    []MessageThreadPreviewItem `json:"preview,omitempty"`
+}
+
+type MessageThreadPreviewItem struct {
+	Sender  string `json:"sender"`
+	Content string `json:"content"`
 }
 
 // OutputMessageList is the message list response for CLI

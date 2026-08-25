@@ -428,6 +428,38 @@ func transcriptLine(m api.Message, r *nameResolver) string {
 	return sb.String()
 }
 
+// transcriptLineWithContext adds the reactions and thread activity a person
+// sees directly below a message in Lark, while keeping the main transcript
+// line compact and machine-readable.
+func transcriptLineWithContext(m api.Message, r *nameResolver, context *api.MessageReadContext) string {
+	line := transcriptLine(m, r)
+	if context == nil {
+		return line
+	}
+	var details []string
+	if len(context.Reactions) > 0 {
+		reactions := make([]string, 0, len(context.Reactions))
+		for _, reaction := range context.Reactions {
+			entry := fmt.Sprintf(":%s: × %d", reaction.EmojiType, reaction.Count)
+			if len(reaction.Operators) > 0 {
+				entry += " (@" + strings.Join(reaction.Operators, ", @") + ")"
+			}
+			reactions = append(reactions, entry)
+		}
+		details = append(details, "reactions: "+strings.Join(reactions, " · "))
+	}
+	if context.Thread != nil {
+		details = append(details, fmt.Sprintf("thread: %d replies", context.Thread.ReplyCount))
+		for _, reply := range context.Thread.Preview {
+			details = append(details, "  @"+reply.Sender+": "+reply.Content)
+		}
+	}
+	if len(details) == 0 {
+		return line
+	}
+	return line + "\n    " + strings.Join(details, "\n    ")
+}
+
 // renderTranscript renders a slice of messages (in display order) as a single
 // transcript string, one block per message separated by newlines.
 func renderTranscript(msgs []api.Message, r *nameResolver) string {
@@ -442,6 +474,14 @@ func renderTranscript(msgs []api.Message, r *nameResolver) string {
 // the JSON formatter by design — it is plain text).
 func printTranscript(msgs []api.Message, r *nameResolver) {
 	fmt.Println(renderTranscript(msgs, r))
+}
+
+func printTranscriptWithContexts(msgs []api.Message, contexts map[string]*api.MessageReadContext, r *nameResolver) {
+	lines := make([]string, 0, len(msgs))
+	for _, m := range msgs {
+		lines = append(lines, transcriptLineWithContext(m, r, contexts[m.MessageID]))
+	}
+	fmt.Println(strings.Join(lines, "\n"))
 }
 
 // transcriptForSearchResults renders search hits as a compact transcript. Search
