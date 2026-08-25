@@ -12,7 +12,7 @@ Full coverage for Lark chat + message operations via the `lark` CLI: send, read,
 - Send markdown-lite messages with links and mentions
 - **Send as user** (`--as user`, default) or as bot (`--as bot`)
 - Send images with `--image` and `{{image}}` placement
-- Send files (PDF, PPTX, DOCX, XLSX, etc.) with `--file`
+- Send files (PDF, PPTX, DOCX, XLSX, etc.) with `--file`; videos (`.mp4`/`.mov`/`.m4v`) go as playable media (auto cover + duration, or pass `--cover`), audio (`.opus`) as a voice message
 - Reply in threads with `--parent-id` / `--root-id`
 - Edit and recall sent messages
 - Add/list/remove reactions; browse the emoji catalog
@@ -31,6 +31,8 @@ Full coverage for Lark chat + message operations via the `lark` CLI: send, read,
 lark msg send --to user@example.com --text "Hello!"
 lark msg send --to oc_12345 --parent-id om_abcdef --msg-type text --text "Replying here"
 lark msg send --to oc_12345 --file ./report.pdf
+lark msg send --to oc_12345 --file ./demo.mp4                 # playable video (auto cover + duration)
+lark msg send --to oc_12345 --file ./demo.mp4 --cover ./poster.jpg
 ```
 
 **Read / search / forward:**
@@ -45,7 +47,7 @@ lark msg merge-forward --message-ids om_a,om_b,om_c --to oc_yyy
 
 **Edit / recall / react:**
 ```bash
-lark msg edit <message-id> --text "Fixed typo"
+lark msg edit --message-id <message-id> --text "Fixed typo"
 lark msg recall om_dc13264520392913993dd051dba21dcf
 lark msg react --message-id om_xxx --reaction SMILE
 ```
@@ -101,7 +103,8 @@ Flags:
 - `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) — auto-detected if omitted
 - `--text`: Message text (markdown-lite). Use `{{image}}` to place images.
 - `--image`: Image file path (repeatable)
-- `--file`: File path to send (repeatable; each file sent as a separate message). Supported: pdf, doc/docx, xls/xlsx, ppt/pptx, mp4, opus, and any other file (sent as `stream`). **Cannot be combined with `--text` or `--image`.** Max 30MB per file (Lark API limit). Images sent via `--image` are capped at 10MB each.
+- `--file`: File path to send (repeatable; each file sent as a separate message). The CLI picks the message type from the extension: **video** (`.mp4`/`.mov`/`.m4v`) is sent as a playable **media** message, **audio** (`.opus`) as a **voice** message, and everything else (pdf, doc/docx, xls/xlsx, ppt/pptx, and any other type via `stream`) as a plain file. **Cannot be combined with `--text` or `--image`.** Max 30MB per file (Lark API limit). Images sent via `--image` are capped at 10MB each.
+- `--cover`: Cover image for a video `--file` (optional). If omitted, a plain placeholder cover is generated automatically — Lark overlays its own play button. A video *must* have a cover or Lark stores it as `nonsupport` ("This message type is currently not supported"); the CLI handles this for you. Video duration is read from the mp4 and shown on the thumbnail automatically.
 - `--msg-type`: `text` (default) or `post` — auto-upgraded to `post` when `--text` contains `**`/`@{` mentions or `--image` is used
 - `--as`: `bot` or `user` (default)
 - `--parent-id`: Parent message ID for threaded reply
@@ -498,7 +501,8 @@ Thread messages have `is_reply: true` for replies (root has `is_reply: false`).
 
 ## Output Format
 
-All commands output JSON.
+The default output is `pretty`. Use the global `--format` flag for `json`,
+`ndjson`, `table`, `csv`, or agent-readable `text` where supported.
 
 ## Error Handling
 
