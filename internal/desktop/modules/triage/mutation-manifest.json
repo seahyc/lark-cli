@@ -1,0 +1,177 @@
+[
+  {
+    "name": "triage.schedule-self-text",
+    "description": "Stage and then persist one far-future plain TEXT fixture in the verified signed-in user's self P2P chat. The parent must call the local stage command, require returned cid equal to request cid, then use persistRequest(stage, prepared) with the typed legacy persist command. scheduleTime is a Unix-seconds string, as the desktop scheduled-message editor renders it with 1000 * Number(scheduleTime). A transport response is not proof; list the exact pending item then cancel it during cleanup.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native int64 ID of the verified signed-in user's self P2P chat."
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "description": "Non-empty simple TEXT fixture, at most 16 KiB UTF-8."
+      },
+      {
+        "name": "scheduleTime",
+        "type": "string",
+        "required": true,
+        "description": "Canonical Unix-seconds schedule timestamp, supplied as a native decimal string."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "messenger.asar:app-chat~1/60390bf70c.js",
+        "offset": 123826,
+        "snippet": "CreateQuasiMessage receives {channel,type,content,...cid,...scheduleTime}; if(scheduleTime), emits local QUASI_SCHEDULE_MESSAGE."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 2521950,
+        "snippet": "U(e) reads staged quasi by cid, then callApi(g.YSk,{putRequest:e,scheduleTime:i.scheduleTime,chatId:i.chatId,entityId:i.threadId||i.chatId})."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 3364369,
+        "snippet": "yd=\"900030|messages.PutScheduleMessageRequest|messages.PutScheduleMessageResponse\""
+      },
+      {
+        "file": "messenger.asar:common/49dc2094d2.js",
+        "offset": 30024,
+        "snippet": "dayjs(1e3*Number(i.scheduleTime)).isBefore(dayjs()) proves native scheduleTime is Unix seconds."
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "triage.favorite-add",
+    "description": "Save one preflight-verified native message from the signed-in user self chat as a Favorite. The native SDK request contains one typed FavoritesTarget with the message ID, FAVORITES_MESSAGE type, chat ID, and an empty merge-forward origin. Acknowledgement has no favorite ID and is not proof; list Favorites before and after, identify exactly one new entry for the message, then remove that entry during fixture cleanup.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 message ID from immediate self-chat metadata preflight."
+      },
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 self-chat ID from immediate preflight."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "pb.desc:favorite/v1/favorite.proto",
+        "offset": 0,
+        "snippet": "CreateFavoritesRequest.favs=1 repeated FavoritesTarget; target id=1,type=2,chat_id=3,origin_merge_forward_id=6."
+      },
+      {
+        "file": "pb.desc:basic/v1/entities.proto",
+        "offset": 0,
+        "snippet": "FavoritesType FAVORITES_MESSAGE=1; the fixture target type is exactly 1."
+      },
+      {
+        "file": "messenger.asar:44343/f127c4a4eb.js",
+        "offset": 7961772,
+        "snippet": "eM=\"2240|favorite.v1.CreateFavoritesRequest|favorite.v1.CreateFavoritesResponse|1|CREATE_FAVORITES\""
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "triage.favorite-delete",
+    "description": "Remove exactly one preflight-verified native Favorite. Use only the favorite ID newly created by the test; do not delete existing saved items. Acknowledgement is not proof: read Favorites after apply and require the ID to be absent.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "favoriteId",
+        "type": "string",
+        "required": true,
+        "description": "Native Favorite ID obtained from before/after Favorites readback, non-empty and at most 512 characters."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "favorite.asar:favorite-detail-viewer/d7d0d432f9.js",
+        "offset": 43374834,
+        "snippet": "async function en(e){if(e&&e.length)try{await B.C5(e),et.dispatch({type:\"DELETE_FAVORITE_ITEMS\",payload:{favoriteIds:e}})}"
+      },
+      {
+        "file": "favorite.asar:favorite/b736c5d828.js",
+        "offset": 12562774,
+        "snippet": "function s(e){const t={ids:e};return(0,r.px)(i.O2S,t)}"
+      },
+      {
+        "file": "messenger.asar:44343/f127c4a4eb.js",
+        "offset": 7966139,
+        "snippet": "_t=\"2242|favorite.v1.DeleteFavoriteRequest|favorite.v1.DeleteFavoriteResponse|1|DELETE_FAVORITES\""
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "triage.schedule-cancel-text",
+    "description": "Cancel exactly one preflight-verified pending simple TEXT scheduled fixture in the signed-in user primary self chat through the authoritative native server patch. The caller must read the item first, require its original chat ID, schedule timestamp, pending status, and fixture text, then verify its absence or DELETE status after applying. This descriptor cannot cancel posts, media, replies, or existing user schedules. The bridge must retain the primary-mailbox identity guard; acknowledgement alone is not proof.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native int64 scheduled message ID from immediate list readback."
+      },
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native int64 self chat ID from immediate list readback."
+      },
+      {
+        "name": "scheduleTime",
+        "type": "string",
+        "required": true,
+        "description": "Exact canonical native int64 schedule timestamp returned by the list readback."
+      },
+      {
+        "name": "expectedText",
+        "type": "string",
+        "required": true,
+        "description": "Exact bounded TEXT decoded from the immediate scheduled-item preflight. It is used only by the bridge equality guard and is never sent natively."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 2518724,
+        "snippet": "39008 SDK handler requires patchObject, reads its local scheduled item, and maps DELETE to b(C.qV.DELETE)."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 2519735,
+        "snippet": "b sends {patchType,messageId,chatId,scheduleTime,type,content,sendImmediately,partialReplyInfo} through callApi(g.VvJ,...)."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 3364743,
+        "snippet": "gd=\"900034|messages.PatchScheduleMessageRequest|messages.PatchScheduleMessageResponse\"; 900031 is PullChatScheduleMessages."
+      },
+      {
+        "file": "pb_server.desc:messages.proto",
+        "offset": 0,
+        "snippet": "PatchScheduleMessageRequest fields: patch_type=1,message_id=2,chat_id=3,schedule_time=20,type=21,content=22,send_immediately=23,partial_reply_info=24."
+      }
+    ],
+    "verification": "schema-verified",
+    "transport": "server"
+  }
+]

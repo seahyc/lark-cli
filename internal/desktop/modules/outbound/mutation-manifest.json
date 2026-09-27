@@ -1,0 +1,140 @@
+[
+  {
+    "name": "messaging.edit-text",
+    "description": "Replace the body of a preflight-verified own TEXT message with non-empty plain text. The caller must compare expectedText with the current native text immediately before applying to prevent stale overwrites, confirm the approved content and destination, and never retry automatically. This is an outbound mutation; the acknowledgement is not readback proof. POST, media, attachments, mentions, and other rich-text edits are excluded.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 message ID, obtained from preflight."
+      },
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 chat ID, obtained from preflight."
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "description": "Approved replacement plain text, non-empty after trimming, at most 16 KiB UTF-8."
+      },
+      {
+        "name": "expectedText",
+        "type": "string",
+        "required": true,
+        "description": "Exact current plain text from messaging.text-message, at most 16 KiB UTF-8. Used only by the caller's pre-apply equality guard and never sent natively."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "messenger.asar:common/ca9a351f13.js",
+        "offset": 127101,
+        "snippet": "(0,eH.u_)({msgId:t.id,type:d,chatId:i?.id,content:{...A,attachmentUpdate:(0,eL.Ls)(this.fileAttachmentScene)}})"
+      },
+      {
+        "file": "messenger.asar:31966/14196632fb.js",
+        "offset": 96399,
+        "snippet": "return await (0,i.px)(n.$Dn,{cid:(0,T.kk)(),...e})"
+      },
+      {
+        "file": "messenger.asar:44343/f127c4a4eb.js",
+        "offset": 31824,
+        "snippet": "4520|im.v1.EditMessageRequest|im.v1.EditMessageResponse|1|EDIT_MESSAGE"
+      },
+      {
+        "file": "main-window.asar:common/6086fd36f2.js",
+        "offset": 3519,
+        "snippet": "Type:{values:{UNKNOWN:0,POST:2,FILE:3,TEXT:4,IMAGE:5"
+      },
+      {
+        "file": "main-window.asar:common/9f3a7ebf62.js",
+        "offset": 52448,
+        "snippet": "msgId:{rule:\"required\",type:\"int64\",id:1},cid:{type:\"string\",id:2},type:{type:\"entities.Message.Type\",id:3},content:{type:\"Content\",id:4}"
+      },
+      {
+        "file": "messenger.asar:common/ac7134248d.js",
+        "offset": 38846,
+        "snippet": "return{elementIds:t,innerText:e,elements:a,imageIds:[],atIds:[],anchorIds:[],mediaIds:[],docsIds:[]}"
+      },
+      {
+        "file": "main-window.asar:common/6086fd36f2.js",
+        "offset": 3519,
+        "snippet": "fields:{id:{type:\"string\",id:1},type:{type:\"Type\",id:2},fromId:{type:\"string\",id:3},createTime:{type:\"int64\",id:4},content:{type:\"bytes\",id:5}"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.send-self-text",
+    "description": "Send non-empty plain text only to the signed-in user's preflight-confirmed native self P2P chat. On apply the bridge first creates the local quasi entity with the full composer request, requires the returned cid to equal the request cid, then sends only that cid. The bounded response messageId, when canonical, identifies the required native readback; it is not delivery proof. Resolve and compare the self-chat destination immediately before apply. Do not retry automatically.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 self P2P chat ID, resolved immediately before apply."
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "description": "Plain text, non-empty after trimming, at most 16 KiB UTF-8."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "messenger.asar:common/49b03512c6.js",
+        "offset": 179798,
+        "snippet": "b={type:u.IRZ.UNKNOWN,content:{},shouldNotify:!0,...}; ... i.content={title:s,richText:t},i.type=o?u.IRZ.TEXT:u.IRZ.POST"
+      },
+      {
+        "file": "messenger.asar:common/990fce93c7.js",
+        "offset": 5944,
+        "snippet": "t.channel=r.channel ... t.type=(0,J.w)(r)?l.IRZ.TEXT:l.IRZ.POST"
+      },
+      {
+        "file": "messenger.asar:44343/f127c4a4eb.js",
+        "offset": 147713,
+        "snippet": "Nh=\"2003|im.v1.SendMessageRequest|im.v1.SendMessageResponse|1|SEND_MESSAGE\""
+      },
+      {
+        "file": "main-window.asar:common/6086fd36f2.js",
+        "offset": 3519,
+        "snippet": "Type:{values:{UNKNOWN:0,POST:2,FILE:3,TEXT:4,IMAGE:5"
+      },
+      {
+        "file": "messenger.asar:common/ac7134248d.js",
+        "offset": 38846,
+        "snippet": "return{elementIds:t,innerText:e,elements:a,imageIds:[],atIds:[],anchorIds:[],mediaIds:[],docsIds:[]}"
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 2448580,
+        "snippet": "CreateQuasiMessageRequest start ... const[t,n]=await V({...e,cid:e.cid||(0,u.k)()}); return await(0,v.yr)(t,e.content.shareChatId,n)"
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 2387913,
+        "snippet": "CreateQuasiMessageResponse ... s.cid=e.cid; s.entity=basic.Entity; ... return s"
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 2234199,
+        "snippet": "const s=e.cid ... r=await nt(s) ... if(!r) throw new Error(\"quasi message not found\") ... We(r,...)"
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 3870157,
+        "snippet": "SendMessageResponse:{setProto:{messageId:\"\",netCost:0}}"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

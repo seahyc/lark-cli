@@ -100,6 +100,7 @@ func init() {
 	rootCmd.AddCommand(dmCmd)
 	rootCmd.AddCommand(docCmd)
 	rootCmd.AddCommand(eventsCmd)
+	rootCmd.AddCommand(findCmd)
 	rootCmd.AddCommand(mailCmd)
 	rootCmd.AddCommand(meetingsCmd)
 	rootCmd.AddCommand(minutesCmd)

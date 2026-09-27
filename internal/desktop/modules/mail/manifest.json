@@ -1,0 +1,151 @@
+[
+  {
+    "name": "mail.signatures",
+    "description": "List signature metadata and address-to-signature usage for one mailbox without returning signature HTML.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Native mail account ID."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar:common/9a1f1c38eb.js",
+        "offset": 17109,
+        "snippet": "transform:(e,t)=>({accountId:e,fromSetting:t}); response signatures, signatureUsages, optionalSignatureMap"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.blocked-sender",
+    "description": "Check whether one sender address is blocked.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "address",
+        "type": "string",
+        "required": true,
+        "description": "Sender email address."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar:common/41b8ba5175.js",
+        "offset": 3205,
+        "snippet": "transform:e=>({addresses:[e]}); response blockedAddresses?.some(e=>e===a)"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.schedule-status",
+    "description": "Read the scheduled-mail count.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "mail.asar:common/92819f09f6.js",
+        "offset": 4149,
+        "snippet": "resOptions transform:e=>Number(e.scheduleSendMessageCount??'-1')"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.account-metadata",
+    "description": "Read bounded mailbox metadata and safe settings, excluding account tokens and responder content.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "mail.asar:71559/b4a48f3d52.js",
+        "offset": 10287,
+        "snippet": "transform:e=>({fetchDb:e,fetchCurrentAccount:false}); response account is normalized"
+      },
+      {
+        "file": "mail.asar:71559/b4a48f3d52.js",
+        "offset": 14017,
+        "snippet": "account normalization includes accountToken, so projection must exclude it"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.verified-auto-transfer-emails",
+    "description": "List addresses already verified for mail auto-transfer for one mailbox.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Native mail account ID."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar:common/48be8628db.js",
+        "offset": 4292,
+        "snippet": "transform:r=>({accountId:r}); response ({emails:r=[]})=>r"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.global-forwarding",
+    "description": "Read whole-mailbox forwarding rules and their auto-transfer verification state.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Native mail account ID."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar:common/48be8628db.js",
+        "offset": 6388,
+        "snippet": "transform:r=>({version:String(2),isGlobalTransfer:true,accountId:r})"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.draft-item",
+    "description": "Read bounded metadata for a native draft tied to a thread and message, without returning its body, recipients, images, or attachments.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "threadId",
+        "type": "string",
+        "required": true,
+        "description": "Native mail thread ID."
+      },
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Native message ID."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "common/92819f09f6.js",
+        "offset": 4284,
+        "snippet": "s.b2d transform:(e,t)=>({threadId:e,messageId:t}); response transform:e=>lS(e.draft,true)"
+      },
+      {
+        "file": "71559/b4a48f3d52.js",
+        "offset": 7426,
+        "snippet": "lS draft mapper reads id, threadId, subject, timestamps, images, attachments, and bodyHtml"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

@@ -113,7 +113,21 @@ Examples:
 				fmt.Println(string(resp.Body))
 			}
 		}
+		if rawAPIResponseFailed(resp) {
+			os.Exit(1)
+		}
 	},
+}
+
+// Preserve the raw response for callers, but never report API rejection as success.
+func rawAPIResponseFailed(resp *api.RawAPIResponse) bool {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return true
+	}
+	var envelope struct {
+		Code int `json:"code"`
+	}
+	return json.Unmarshal(resp.Body, &envelope) == nil && envelope.Code != 0
 }
 
 func runAPIList(args []string) {

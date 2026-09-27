@@ -1,0 +1,157 @@
+[
+  {
+    "name": "workspacenext.navigation-layout",
+    "description": "Read the complete desktop ShellAPI navigation layout using the observed v2 record shape. Each record must have id and a bounded native type; optional key, visible, and movable values are bounded. URLs, logos, names, paths, and extras are excluded. No Shell native type is mapped to a settings enum.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "main-window.asar/userPageModal/d85698636c.js",
+        "offset": 382964,
+        "snippet": "getNavigationInfo:()=>d ... async function E(){return ShellAPI.app.navigation.getNavigationInfo()}"
+      },
+      {
+        "file": "main-window.asar/common/5cec861619.js",
+        "offset": 0,
+        "snippet": "entities.NavigationInfo fields mainNavigation repeated AppInfo and shortcutNavigation repeated AppInfo"
+      },
+      {
+        "file": "main-window.asar/common/5cec861619.js",
+        "offset": 150,
+        "snippet": "entities.AppInfo fields ID required string, appType required string, unmovable bool"
+      }
+    ],
+    "verification": "schema-verified",
+    "transport": "shell-navigation"
+  },
+  {
+    "name": "workspacenext.device-notify-preferences",
+    "description": "Read four scalar desktop device-notification preferences using the protobuf-defined force-server request. Notification sound configuration and all unrecognized fields are excluded; parent should compare the result with desktop notification settings before treating it as UI-verified.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 619975,
+        "snippet": "GetDeviceNotifySettingRequest: syncDataStrategy (basic.v1.SyncDataStrategy), default FORCE_SERVER; GetDeviceNotifySettingResponse.setting"
+      },
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 323182,
+        "snippet": "DeviceNotifySetting: disableMobileNotify, stillNotifyAt, showMessageDetail, stillNotifySpecialNotice, notificationSoundSetting"
+      },
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 95873,
+        "snippet": "basic.v1.SyncDataStrategy: LOCAL=1, TRY_LOCAL=2, FORCE_SERVER=3"
+      },
+      {
+        "file": "main-window.asar/157766/91f3b16f27.js",
+        "offset": 0,
+        "snippet": "Ro=\"1039|device.v1.GetDeviceNotifySettingRequest|device.v1.GetDeviceNotifySettingResponse|1|GET_DEVICE_NOTIFY_SETTING\""
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspacenext.navigation-apps",
+    "description": "Read up to 100 desktop navigation app identifiers, keys, type codes, and display names. The request is grounded by the bundled protobuf schema as desktop platform NAV_PC=1; parent must compare the live result with the desktop sidebar before treating it as UI-verified. URLs, logos, app extras, and platform metadata are excluded.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 1304951,
+        "snippet": "GetNavigationAppsRequest: platform field 1, enum settings.v1.NavigationPlatform; NavigationPlatform NAV_PC = 1"
+      },
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 1305041,
+        "snippet": "GetNavigationAppsResponse: repeated appInfo (.basic.v1.NavigationAppInfo); NavigationAppInfo fields id, key, appType, name, displayName"
+      },
+      {
+        "file": "main-window.asar/157766/91f3b16f27.js",
+        "offset": 174688,
+        "snippet": "Lu=\"5231|settings.v1.GetNavigationAppsRequest|settings.v1.GetNavigationAppsResponse|1|GET_NAVIGATION_APPS\""
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspacenext.custom-status-intervals",
+    "description": "Read up to 100 signed-in custom-status interval values needed to restore the precise fields changed by workspacenext.clear-custom-status. Titles, icons, sync flags, and other status fields are excluded.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 403606,
+        "snippet": "S=\"50301|contact.v1.GetUserCustomStatusRequest|contact.v1.GetUserCustomStatusResponse|1|GET_USER_CUSTOM_STATUS\""
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 134667,
+        "snippet": "Ea(e=!1){const t=await ra(Ln.Sdg,{syncDataStrategy:e?aa.lDc.FORCE_SERVER:aa.lDc.LOCAL})"
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 136754,
+        "snippet": "a.effectiveInterval&&(e<1e3*Number(a.effectiveInterval.startTime||0)||e>1e3*Number(a.effectiveInterval.endTime||0)"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspacenext.time-format-preference",
+    "description": "Read only the signed-in user's 12- or 24-hour display preference. The broad settings response is never returned.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 403633,
+        "snippet": "h=\"2196|settings.v1.GetUserSettingRequest|settings.v1.GetUserSettingResponse|1|GET_USER_SETTING\""
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 157880,
+        "snippet": "e.isQuickShow&&async function(){return ra(Ln.IbM,{})}().then((e=>{const t=ba()(e,[\"timeFormat\",\"timeFormat\"])"
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 412317,
+        "snippet": "TWELVE_HOUR:1,TWENTY_FOUR_HOUR:2"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspacenext.calendar-resource-equipments",
+    "description": "Read up to 100 calendar meeting-room equipment IDs with the localized names consumed by the shipped resource filter. This tenant-scoped catalog read excludes room availability, bookings, and raw resource graphs.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "calendar.asar/2216_e8bf809b.js",
+        "offset": 78439,
+        "snippet": "It=\"3052|calendar.v1.GetResourceEquipmentsRequest|calendar.v1.GetResourceEquipmentsResponse|1|GET_RESOURCE_EQUIPMENTS\""
+      },
+      {
+        "file": "calendar.asar/common-calendar-packages_d38e796c.js",
+        "offset": 239479,
+        "snippet": "KN:()=>Oe ... function o(e){return(t,n=i._i)=>{const r=(0,a.Nf)(e,t);return(0,i.Ay)(e,t,r,n)}} ... Oe=o(r.Wik)"
+      },
+      {
+        "file": "calendar.asar/common-calendar-packages_d38e796c.js",
+        "offset": 286345,
+        "snippet": "const m=async()=>{const e=await(0,u.KN)({}); return {equipments:e.equipmentLists,equipmentIds:e.equipmentIds}}"
+      },
+      {
+        "file": "calendar.asar/chunk_meeting-room-card_f0e9f31c.js",
+        "offset": 14399,
+        "snippet": "t.map((e=>e.i18nName)).filter((e=>e)).join(\" \u00b7 \")"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

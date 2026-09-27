@@ -160,8 +160,9 @@ var mailFilterCmd = &cobra.Command{
 
 Rules match incoming mail by sender and move it to a folder. Note: the Lark
 Open API does not support an auto-forward action (only move-to-folder, flag,
-mark-read, archive, spam). To fan a folder out to a chat, run a separate
-forwarder that watches the folder.`,
+mark-read, archive, spam). Forwarding rules can be listed, but creating or updating their forward actions
+may be rejected by the server. Use Lark Mail > Auto filters in that case;
+email recipients may need to verify the forwarding request before it takes effect.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		validateScopeGroup("mailrules")
 	},
@@ -185,13 +186,13 @@ var mailFilterListCmd = &cobra.Command{
 }
 
 var (
-	mailFilterName    string
-	mailFilterFrom    []string
-	mailFilterFolder  string
+	mailFilterName     string
+	mailFilterFrom     []string
+	mailFilterFolder   string
 	mailFilterFwdEmail []string
-	mailFilterFwdChat []string
-	mailFilterStop    bool
-	mailFilterDisable bool
+	mailFilterFwdChat  []string
+	mailFilterStop     bool
+	mailFilterDisable  bool
 )
 
 var mailFilterCreateCmd = &cobra.Command{
@@ -208,12 +209,14 @@ Multiple --from entries are OR'd together (any sender matches).
 Actions (at least one required, and they combine):
   --folder <id|name>     move matched mail to a folder (action type 11)
   --forward-email <addr> forward matched mail to an email address (type 12)
-  --forward-chat <id>    forward matched mail to a Lark chat (type 8); the id
+  --forward-chat <id>    forward matched mail to a Lark chat (type 13); the id
                          is the mail-rule chat id (as seen in existing rules /
                          the mail web UI), not an im oc_ chat id.
 
-Note: the published Open API docs claim forwarding is unsupported, but the
-rule engine accepts and honours forward actions (types 12/8) in practice.
+Forwarding uses action types 12 (email) and 13 (chat). The Open API may reject
+these with "unsupported action type", even when existing rules contain them.
+If rejected, configure forwarding in Lark Mail > Auto filters. Recipient
+verification may be required; listing an enabled rule does not prove delivery.
 
 Examples:
   # Move to a folder
@@ -258,7 +261,7 @@ Examples:
 		for _, chat := range mailFilterFwdChat {
 			chat = strings.TrimSpace(chat)
 			if chat != "" {
-				actions = append(actions, map[string]interface{}{"type": 8, "input": chat})
+				actions = append(actions, map[string]interface{}{"type": 13, "input": chat})
 			}
 		}
 

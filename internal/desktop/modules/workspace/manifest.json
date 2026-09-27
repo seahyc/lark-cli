@@ -1,0 +1,74 @@
+[
+  {
+    "name": "workspace.user-custom-status",
+    "description": "Read up to 100 custom-status cards from the signed-in desktop account using the shipped force-server status read.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file": "setting.asar/StatusSettingModal/54c3b8b32d.js", "offset": 207802, "snippet": "E=\"50301|contact.v1.GetUserCustomStatusRequest|contact.v1.GetUserCustomStatusResponse|1|GET_USER_CUSTOM_STATUS\""},
+      {"file": "setting.asar/StatusSettingModal/54c3b8b32d.js", "offset": 208687, "snippet": "const i={LOCAL:1,TRY_LOCAL:2,FORCE_SERVER:3}"},
+      {"file": "setting.asar/StatusSettingModal/54c3b8b32d.js", "offset": 116161, "snippet": "getForceServerUserCustomStatus=async()=>{try{return await Z(ee.Sdg,{syncDataStrategy:X.lDc.FORCE_SERVER})}"},
+      {"file": "setting.asar/StatusSettingModal/54c3b8b32d.js", "offset": 115717, "snippet": "setStatusSettings=e=>{this.setState({allUserStatus:e.sort(((e,t)=>e.orderWeight-t.orderWeight))});...e.type...e.syncSettings...this.StatusTypeToID[e.type]=e.id"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspace.todo-setting",
+    "description": "Read bounded personal task settings using the shipped force-server task-settings request.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file": "todo.asar/4418/7da59dcfbc.js", "offset": 2255324, "snippet": "Oc=\"90024|todo.v1.GetTodoSettingRequest|todo.v1.GetTodoSettingResponse|1|GET_TODO_SETTING\""},
+      {"file": "todo.asar/3859/cfa7295828.js", "offset": 7474, "snippet": "O={LOCAL:1,TRY_LOCAL:2,FORCE_SERVER:3}"},
+      {"file": "todo.asar/2800/62e7e57cfb.js", "offset": 84434, "snippet": "async function z(e){return(0,o.Nf)(i.dz0,e||{})}"},
+      {"file": "todo.asar/2800/62e7e57cfb.js", "offset": 87837, "snippet": "getTodoSettingsForceServer=async()=>{try{const{setting:e}=await(0,c.Bl)({strategy:d.lDc.FORCE_SERVER});this.setSetting(e)}"},
+      {"file": "todo.asar/2800/62e7e57cfb.js", "offset": 87272, "snippet": "_={dueTimeDayOffset:i.rX,dueReminderOffset:i.Wi,badgeConfig:m,anotherNameFormat:l.gP.UNKNOWN,syncFromMeego:!1,showOpenMeegoTip:!1,showSyncFromMeego:!1,enableDailyFollow:!0}"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspace.calendar-settings",
+    "description": "Read bounded calendar timezone and event-recommendation settings using the shipped calendar settings refresh request.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file": "js-worker.asar/worker_temperate.js", "offset": 1462707, "snippet": "I=\"3016|calendar.v1.GetCalendarSettingsRequest|calendar.v1.GetCalendarSettingsResponse|1|GET_CALENDAR_SETTINGS\""},
+      {"file": "js-worker.asar/worker_temperate.js", "offset": 980984, "snippet": "const[{settings:e},t]=await Promise.all([gb({}),o.time.getTimeZone()]);this.setData({...e,deviceTimezone:t})"},
+      {"file": "js-worker.asar/worker_temperate.js", "offset": 980689, "snippet": "function Mb(){return Ob.getInstance().getData().timezone||Zl()} function wb(){return Boolean(Ob.getInstance().getData().recommendEventFromChat)}"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspace.moments-tab-feed",
+    "description": "Read a bounded remote Moments tab-feed page for a caller-supplied tab ID.",
+    "readOnly": true,
+    "parameters": [
+      {"name":"tabId","type":"string","required":true,"description":"Moments tab ID from the desktop UI or a future typed tab-list read."},
+      {"name":"count","type":"integer","required":true,"description":"Requested page size, limited to 1 through 100."},
+      {"name":"pageToken","type":"string","required":false,"description":"Opaque token from the preceding bounded result."},
+      {"name":"feedOrder","type":"integer","required":false,"description":"One of 0 UNSPECIFIED, 1 LAST_REPLIED, 2 LAST_PUBLISH, 3 RECOMMEND, 4 RECOMMEND_V2."}
+    ],
+    "evidence": [
+      {"file":"moments.asar/moments/42732361ce.js","offset":852456,"snippet":"ft=\"290037|moments.v1.GetTabFeedRequest|moments.v1.GetTabFeedResponse|1|MOMENTS_GET_TAB_FEED\""},
+      {"file":"moments.asar/moments/42732361ce.js","offset":558394,"snippet":"U=e=>(0,s.px)(r.EeL,e)"},
+      {"file":"moments.asar/moments/42732361ce.js","offset":103126,"snippet":"await(0,Pt._D)({tabId:a,pageToken:m.nextPageToken,useLocal:!1,count:$e.G,feedOrder:i,manageMode:u,clientPinnedPostIds:y})"},
+      {"file":"moments.asar/moments/42732361ce.js","offset":104659,"snippet":"const{entities:t={},entryList:s=[],pinnedPostIds:l=[],nextPageToken:d,isRecommend:p,lastNewRecommendPostId:m=\"\"}=await(0,Pt._D)"},
+      {"file":"moments.asar/2408/9414fe693c.js","offset":3499,"snippet":"Y={UNSPECIFIED:0,LAST_REPLIED:1,LAST_PUBLISH:2,RECOMMEND:3,RECOMMEND_V2:4}"}
+    ],
+    "verification":"schema-verified"
+  },
+  {
+    "name": "workspace.moments-tabs",
+    "description": "Read up to 100 Moments tab IDs, suitable as typed inputs to the tab-feed read.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file":"moments.asar/moments/42732361ce.js","offset":853431,"snippet":"Ct=\"290038|moments.v1.ListTabsRequest|moments.v1.ListTabsResponse|1|MOMENTS_LIST_TABS\""},
+      {"file":"moments.asar/moments/42732361ce.js","offset":558425,"snippet":"F=e=>(0,s.px)(r.eWD,e)"},
+      {"file":"moments.asar/moments/42732361ce.js","offset":91906,"snippet":"listAllTabs:(0,b.PQ)((async(e,t)=>{try{const{tabs:n}=await(0,Pt.bl)(t);e.updateAllTabs(n)}"},
+      {"file":"moments.asar/moments/42732361ce.js","offset":552024,"snippet":"i({}),m({forceRemote:!0}),N({init:!0})"},
+      {"file":"moments.asar/moments/42732361ce.js","offset":91253,"snippet":"getTabById:(0,b.EW)((e=>t=>{let n=e.myTabs.filter((e=>e.id===t))[0];return n||(n=e.allTabs.filter((e=>e.id===t))[0]),n}))"}
+    ],
+    "verification":"schema-verified"
+  }
+]

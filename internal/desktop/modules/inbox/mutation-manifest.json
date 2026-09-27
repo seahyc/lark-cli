@@ -1,0 +1,52 @@
+[
+  {
+    "name": "inbox.set-self-chat-mute",
+    "description": "Set the mute state of one preflighted self-chat by changing only ChatSetting.IS_REMIND. expectedMuted is a stale-state guard for the parent bridge and is never sent. Parent must confirm self-chat identity, force-read before and after, roll back to the exact prior state after a fixture check, and never retry a write automatically.",
+    "readOnly": false,
+    "effect": "settings",
+    "transport": "server",
+    "parameters": [
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native chat ID from inbox.chat-mute-state after self-chat identity preflight."
+      },
+      {
+        "name": "muted",
+        "type": "integer",
+        "required": true,
+        "description": "Requested state: 1 mutes and 0 restores reminders."
+      },
+      {
+        "name": "expectedMuted",
+        "type": "integer",
+        "required": true,
+        "description": "Current 0 or 1 state read immediately before apply; bridge compares it to prevent a stale write."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 658418,
+        "snippet": "Generated chats.PatchChatSettingRequest: required chatId, chatSetting, repeated updateChatSettingField; no broad Chat payload."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 718191,
+        "snippet": "Generated entities.ChatSetting fields include isRemind id=1; Field.IS_REMIND=1."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 1810200,
+        "snippet": "Desktop updateChatSetting builds PatchChatSettingRequest with chatSetting.isRemind and updateChatSettingField.push(IS_REMIND), then calls native command."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 3354728,
+        "snippet": "Native command table maps 60 to chats.PatchChatSettingRequest and chats.PatchChatSettingResponse."
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

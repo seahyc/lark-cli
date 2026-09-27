@@ -1,0 +1,20 @@
+[
+  {
+    "name": "messaging.recall-self-text",
+    "description": "Recall one preflight-verified, signed-in user's plain TEXT message from the verified self P2P chat. expectedText and chatId are bridge-only equality and destination guards; the native desktop recall wire request is exactly {id: messageId}. Acknowledgement is not proof: read the same message until its recalled state is confirmed. No retry after a failed request.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {"name": "messageId", "type": "string", "required": true, "description": "Canonical native int64 message ID from immediate own-message preflight."},
+      {"name": "chatId", "type": "string", "required": true, "description": "Canonical native int64 ID of the signed-in user's verified self P2P chat."},
+      {"name": "expectedText", "type": "string", "required": true, "description": "Exact plain text decoded from immediate preflight; bridge-only, never sent on the native wire."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:topicCreateModal~4/51ac83bbf1.js", "offset": 54257, "snippet": "async function et(e,t){... await y.default.recallMessage({id:e}) ...}"},
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 283157, "snippet": "recallMessage:function({id:e}){return(0,c.px)(v.WUe,{id:e})}"},
+      {"file": "jssdk/jssdk_worklet_messenger.js", "offset": 4414550, "snippet": "recallMessage ... }(e.id); ... RecallMessageResponse; s.message=\"ok\""},
+      {"file": "jssdk/jssdk_worklet_messenger.js", "offset": 3237600, "snippet": "qs=\"2079|im.v1.RecallMessageRequest|im.v1.RecallMessageResponse|1|RECALL_MESSAGE\""}
+    ],
+    "verification": "schema-verified"
+  }
+]

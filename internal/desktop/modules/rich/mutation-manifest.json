@@ -1,0 +1,108 @@
+[
+  {
+    "name": "messaging.send-self-post",
+    "description": "Styled text POST with title, paragraphs, bold/italic/underline. Media, mentions, links, lists and code excluded. Native bridge enforces self destination for send and owner+stale snapshot for edits.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Native chat ID"
+      },
+      {
+        "name": "post",
+        "type": "string",
+        "required": true,
+        "description": "JSON {title,paragraphs:[[{text,bold?,italic?,underline?}]]}; max100paragraphs500runs16KiBtext."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "messenger.asar:common/ca9a351f13.js",
+        "offset": 127101,
+        "snippet": "EDIT_MESSAGE content {title:l,richText:o} with computed TEXT/POST type"
+      },
+      {
+        "file": "main-window.asar:common/14990bd503.js",
+        "offset": 1551,
+        "snippet": "Paragraph tag P, property.paragraph, childIds, style; TEXT builder at5034 copies stylesParser(op)"
+      },
+      {
+        "file": "messenger.asar:62148/81b0288138.js",
+        "offset": 28897,
+        "snippet": "RichText tag TEXT1,P3; message POST2 schema"
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "snippet": "CREATE_QUASI_MESSAGE persists cid; SEND_MESSAGE resolves same cid"
+      },
+      {
+        "file": "messenger.asar:21042/281097d66d.js",
+        "offset": 137160,
+        "snippet": "rich text style conversion: BOLD fontWeight bold, ITALIC fontStyle italic, UNDERLINE -lark-textDecoration underline"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.edit-post",
+    "description": "Styled text POST with title, paragraphs, bold/italic/underline. Media, mentions, links, lists and code excluded. Native bridge enforces self destination for send and owner+stale snapshot for edits.",
+    "readOnly": false,
+    "effect": "outbound",
+    "parameters": [
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Native chat ID"
+      },
+      {
+        "name": "post",
+        "type": "string",
+        "required": true,
+        "description": "JSON {title,paragraphs:[[{text,bold?,italic?,underline?}]]}; max100paragraphs500runs16KiBtext."
+      },
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Native own POST ID"
+      },
+      {
+        "name": "expectedPost",
+        "type": "string",
+        "required": true,
+        "description": "Exact current normalized JSON from post-message"
+      }
+    ],
+    "evidence": [
+      {
+        "file": "messenger.asar:common/ca9a351f13.js",
+        "offset": 127101,
+        "snippet": "EDIT_MESSAGE content {title:l,richText:o} with computed TEXT/POST type"
+      },
+      {
+        "file": "main-window.asar:common/14990bd503.js",
+        "offset": 1551,
+        "snippet": "Paragraph tag P, property.paragraph, childIds, style; TEXT builder at5034 copies stylesParser(op)"
+      },
+      {
+        "file": "messenger.asar:62148/81b0288138.js",
+        "offset": 28897,
+        "snippet": "RichText tag TEXT1,P3; message POST2 schema"
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "snippet": "CREATE_QUASI_MESSAGE persists cid; SEND_MESSAGE resolves same cid"
+      },
+      {
+        "file": "messenger.asar:21042/281097d66d.js",
+        "offset": 137160,
+        "snippet": "rich text style conversion: BOLD fontWeight bold, ITALIC fontStyle italic, UNDERLINE -lark-textDecoration underline"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

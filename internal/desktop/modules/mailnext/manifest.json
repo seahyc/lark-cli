@@ -1,0 +1,28 @@
+[
+  {
+    "name": "mailnext.draft-fixture-metadata",
+    "description": "Read bounded metadata for a known fixture draft by its native draft ID, including complete subject up to 512 characters and complete body HTML up to 16 KiB, plus attachment names, sizes, and types; never returns partial subject/body snapshots, sender fields, recipients, or tokens.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "draftId",
+        "type": "string",
+        "required": true,
+        "description": "Native draft ID returned by MAIL_CREATE_DRAFT."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/92819f09f6.js",
+        "offset": 2901,
+        "snippet": "s.RYy (MAIL_GET_DRAFT_ITEM) transform:e=>({draftId:e}); response lS(e.draft)"
+      },
+      {
+        "file": "mail.asar/71559/b4a48f3d52.js",
+        "offset": 7426,
+        "snippet": "lS maps draft id, threadId, replyMessageId, attachments, and images"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

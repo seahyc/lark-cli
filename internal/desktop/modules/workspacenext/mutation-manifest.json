@@ -1,0 +1,138 @@
+[
+  {
+    "name": "workspacenext.modify-navigation-order",
+    "description": "Replace the full preflight-verified desktop main and shortcut navigation orders. The caller must obtain both lists from the dedicated ShellAPI navigation snapshot, preserve exact membership and app types, make only the approved reorder, force-read back, then restore the original snapshot and compare again. No automatic retry.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "mainNavigationJson",
+        "type": "string",
+        "required": true,
+        "description": "Canonical JSON array of up to 100 {id,appType} records from the full ShellAPI main-navigation snapshot."
+      },
+      {
+        "name": "shortcutNavigationJson",
+        "type": "string",
+        "required": true,
+        "description": "Canonical JSON array of up to 100 {id,appType} records from the full ShellAPI shortcut-navigation snapshot."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 1298247,
+        "snippet": "ModifyNavigationOrderRequest: repeated mainNavigation NavigationUniqueId, repeated shortcutNavigation NavigationUniqueId, platform NavigationPlatform, isNewTabContainer"
+      },
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 339700,
+        "snippet": "NavigationUniqueId: required id string and required appType basic.v1.NavigationAppType"
+      },
+      {
+        "file": "Libraries/pb.desc",
+        "offset": 1297434,
+        "snippet": "NavigationPlatform NAV_PC = 1"
+      },
+      {
+        "file": "main-window.asar/157766/91f3b16f27.js",
+        "offset": 0,
+        "snippet": "pu=\"5221|settings.v1.ModifyNavigationOrderRequest|settings.v1.ModifyNavigationOrderResponse|1|MODIFY_NAVIGATION_ORDER\""
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspacenext.restore-custom-status-interval",
+    "description": "Restore only the effective interval and custom end time captured from workspacenext.custom-status-intervals for the same signed-in status ID. Apply once after an approved clear-status fixture and force-server read back; no automatic retry. Other status fields are deliberately preserved.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "statusId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 ID from the pre-change status interval read."
+      },
+      {
+        "name": "startTime",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 string captured before clear."
+      },
+      {
+        "name": "endTime",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 string captured before clear."
+      },
+      {
+        "name": "isShowEndTime",
+        "type": "integer",
+        "required": true,
+        "description": "0 or 1 representation of the Boolean flag captured before clear."
+      },
+      {
+        "name": "lastCustomizedEndTime",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 string captured before clear."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 401879,
+        "snippet": "F5s:()=>L ... L=\"50302|contact.v1.UpdateUserCustomStatusRequest|contact.v1.UpdateUserCustomStatusResponse|1|UPDATE_USER_CUSTOM_STATUS\""
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 136370,
+        "snippet": "ra(Ln.F5s,{updateStatus:[{id:e.id,effectiveInterval:{startTime:String(r),endTime:String(a),isShowEndTime:!0},lastCustomizedEndTime:String(a),fields:[Cr.pn.EFFECTIVE_INTERVAL,Cr.pn.LAST_CUSTOMIZED_END_TIME]}]})"
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 412029,
+        "snippet": "EFFECTIVE_INTERVAL:4,LAST_SELECTED_DEFAULT_DURATION:5,LAST_CUSTOMIZED_END_TIME:6"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "workspacenext.clear-custom-status",
+    "description": "Clear the active interval of one status selected from workspace.user-custom-status. The caller must preflight that the ID belongs to the signed-in user, obtain explicit approval, then force-server read back the status. The acknowledgement is not readback proof and no automatic retry is allowed. This mutation cannot restore arbitrary status fields.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "statusId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native non-negative int64 ID from the signed-in user's custom-status read."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 401879,
+        "snippet": "F5s:()=>L ... L=\"50302|contact.v1.UpdateUserCustomStatusRequest|contact.v1.UpdateUserCustomStatusResponse|1|UPDATE_USER_CUSTOM_STATUS\""
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 135080,
+        "snippet": "ra(Ln.F5s,{updateStatus:[{id:e.id,effectiveInterval:{startTime:\"0\",endTime:\"0\",isShowEndTime:!0},lastCustomizedEndTime:\"0\",fields:[Cr.pn.EFFECTIVE_INTERVAL,Cr.pn.LAST_CUSTOMIZED_END_TIME]}]})"
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 412029,
+        "snippet": "pn:()=>i ... i={UNKNOWN:0,TITLE:1,ICON_KEY:2,IS_NOT_DISTURB_MODE:3,EFFECTIVE_INTERVAL:4,LAST_SELECTED_DEFAULT_DURATION:5,LAST_CUSTOMIZED_END_TIME:6"
+      },
+      {
+        "file": "main-window.asar/customStatusModal/41d68de6bf.js",
+        "offset": 157588,
+        "snippet": "onClick:()=>{const r=n.id!==t; ... pa(n,r).then((async t=>{e.closeModal(!0,t.status?Aa(await it.time.getNTPTime({noException:!0}),Object.values(t.status)):void 0)}))}"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

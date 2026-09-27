@@ -1,0 +1,17 @@
+[
+  {
+    "name": "messaging.text-message",
+    "description": "Read one native message's chat, sender, numeric type, and bounded rendered plain text for edit preflight or readback. It does not decode raw protobuf bytes or return attachments, rich-text entities, or other message metadata.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "messageId", "type": "string", "required": true, "description": "Canonical native non-negative int64 message ID; public om_ aliases are not accepted."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 282783, "snippet": "mGetMessages:function(e){return(0,N.kT)(c.px,v.R8F,{messageIds:e})}"},
+      {"file": "main-window.asar:common/6086fd36f2.js", "offset": 3519, "snippet": "fields:{id:{type:\"string\",id:1},type:{type:\"Type\",id:2},fromId:{type:\"string\",id:3},createTime:{type:\"int64\",id:4},content:{type:\"bytes\",id:5}"},
+      {"file": "messenger.asar:43865/01157626a7.js", "offset": 67372, "snippet": "if(t.content?.richText){... n.message_length=t.content.richText.innerText.length"},
+      {"file": "messenger.asar:59983/5e8d22c147.js", "offset": 95966, "snippet": "let{entity:a}=await w.default.mGetMessages([e]),r=a?.messages?.[e]"}
+    ],
+    "verification": "schema-verified"
+  }
+]

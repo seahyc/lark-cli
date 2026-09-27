@@ -1,0 +1,185 @@
+[
+  {
+    "name": "mailnext.draft-fixture-create",
+    "description": "Create one blank unsent fixture draft with no recipients, body, attachments, or signature. Delete it using IDs returned by the same call.",
+    "readOnly": false,
+    "effect": "draft",
+    "parameters": [],
+    "evidence": [
+      {
+        "file": "mail.asar/common/29fe6e09b2.js",
+        "offset": 5322,
+        "snippet": "u.cB({threadId:'',originMessageId:'',action:m.bG.COMPOSE,needSignature:a,timeText:'',feedCardId:t})"
+      },
+      {
+        "file": "mail.asar/common/92819f09f6.js",
+        "offset": 3106,
+        "snippet": "s.V5V transform:e=>({...e,isFromLarkPlaintext:false}); response lS(e.draft,e.isNew)"
+      },
+      {
+        "file": "mail.asar/chunk-common/835b3b6848.js",
+        "offset": 15873,
+        "snippet": "bG enum {COMPOSE:0,REPLY:1,REPLY_ALL:2,FORWARD:3}"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mailnext.draft-fixture-delete",
+    "description": "Delete one blank fixture draft only after a fresh native snapshot exactly matches its draft ID, thread ID, expected subject/body, and empty recipient/image/attachment state.",
+    "readOnly": false,
+    "effect": "draft",
+    "parameters": [
+      {
+        "name": "threadId",
+        "type": "string",
+        "required": true,
+        "description": "Exact native thread ID from the fresh fixture snapshot."
+      },
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Exact native draft ID from the fresh fixture snapshot; this is the MAIL_DELETE_DRAFT messageId."
+      },
+      {
+        "name": "expectedSubject",
+        "type": "string",
+        "required": true,
+        "description": "Exact complete current fixture subject required before deletion."
+      },
+      {
+        "name": "expectedBodyHtml",
+        "type": "string",
+        "required": true,
+        "description": "Exact complete current fixture body HTML required before deletion."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/92819f09f6.js",
+        "offset": 2901,
+        "snippet": "s.GUf transform:(e,t,a)=>({threadId:e,messageId:t,feedCardId:a})"
+      },
+      {
+        "file": "mail.asar/common/220298db94.js",
+        "offset": 40458,
+        "snippet": "editor discard calls deleteDraft(threadId,draft.id,feedCardId)"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mailnext.draft-fixture-update",
+    "description": "Save restricted HTML to a freshly created blank fixture draft only. The parent supplies a fresh raw native snapshot to requestFromSnapshot; it verifies identity and expected prior body before preserving the complete safe fixture shape.",
+    "readOnly": false,
+    "effect": "draft",
+    "parameters": [
+      {
+        "name": "draftId",
+        "type": "string",
+        "required": true,
+        "description": "Exact ID returned by fixture creation."
+      },
+      {
+        "name": "threadId",
+        "type": "string",
+        "required": true,
+        "description": "Exact thread ID returned by fixture creation."
+      },
+      {
+        "name": "replyMessageId",
+        "type": "string",
+        "required": true,
+        "description": "Exact reply-message ID returned by fixture creation; may be empty for compose."
+      },
+      {
+        "name": "subject",
+        "type": "string",
+        "required": true,
+        "description": "New fixture subject, up to 512 characters."
+      },
+      {
+        "name": "bodyHtml",
+        "type": "string",
+        "required": true,
+        "description": "Restricted p/br/strong/em/u HTML, no attributes or resources, up to 16 KiB."
+      },
+      {
+        "name": "expectedSubject",
+        "type": "string",
+        "required": true,
+        "description": "Fresh snapshot subject required before mutation."
+      },
+      {
+        "name": "expectedBodyHtml",
+        "type": "string",
+        "required": true,
+        "description": "Fresh snapshot body required before mutation."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/92819f09f6.js",
+        "offset": 3601,
+        "snippet": "s.Ovw transform:(e,t,a)=>({draftId:e.id,payload:r.H5(e),isDelay:t,feedCardId:a,onlySaveLocal:e.isImageAndAttachmentOverLimit||e.isOverSize})"
+      },
+      {
+        "file": "mail.asar/71559/b4a48f3d52.js",
+        "offset": 7426,
+        "snippet": "H5 serializes from/to/cc/bcc, bodyHtml, subject, images, attachments, docsPermissions, threadId, flags, and bodySummary"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mailnext.signature-fixture-update-text",
+    "description": "Replace text in one session-created signature fixture only. The parent supplies a fresh raw MAIL_GET_SIGNATURE snapshot to requestFromSnapshot, which requires an exact expected HTML match and preserves every other native signature field, including template JSON and images.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Selected primary mailbox account ID."
+      },
+      {
+        "name": "signatureId",
+        "type": "string",
+        "required": true,
+        "description": "Exact session-created fixture signature ID."
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "description": "Non-empty text up to 20,000 characters; encoded as inert div HTML."
+      },
+      {
+        "name": "expectedTemplateHtml",
+        "type": "string",
+        "required": true,
+        "description": "Exact complete HTML from the fresh fixture snapshot, up to 120,000 characters."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/9a1f1c38eb.js",
+        "offset": 9090,
+        "snippet": "m=(e,t)=>async a=>{await (0,o.Q_)(e,t);a(s.o.setConfigChange())}"
+      },
+      {
+        "file": "mail.asar/common/9a1f1c38eb.js",
+        "offset": 18543,
+        "snippet": "p=(0,r.Vy)(n.Z9i,{reqOptions:{transform:(e,t)=>({accountId:e,signature:t})},resOptions:{transform:e=>e}})"
+      },
+      {
+        "file": "mail.asar/18918/b2ed03e9bb.js",
+        "offset": 42886,
+        "snippet": "EH=\"3725|email.client.v1.MailUpdateSignatureRequest|email.client.v1.MailUpdateSignatureResponse|1|MAIL_UPDATE_SIGNATURE\""
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

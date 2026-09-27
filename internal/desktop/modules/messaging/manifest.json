@@ -1,0 +1,200 @@
+[
+  {
+    "name": "messaging.drafts",
+    "description": "List cloud chat-composer drafts visible to the signed-in desktop account.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 76426, "snippet": "getAllDrafts:async function e(){let{entity:e}=await (0,a.px)(u.aQb);return e}"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.chat-draft",
+    "description": "Read cloud drafts matching a native chat or thread. Uses the authoritative all-drafts entity and filters it locally before bounding output.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": false, "description": "Native desktop chat identifier; the wrapper does not establish a public oc_ format."},
+      {"name": "threadId", "type": "string", "required": false, "description": "Native desktop thread identifier; no format is inferred."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 76426, "snippet": "getAllDrafts:async function e(){let{entity:e}=await (0,a.px)(u.aQb);return e}"},
+      {"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 71014, "snippet": "FETCH_CHAT_INPUT_DRAFT cache uses entity.drafts and draft chatId/threadId metadata"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.reply-draft",
+    "description": "Read cloud drafts matching a native reply message. Uses the authoritative all-drafts entity and filters it locally before bounding output.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "messageId", "type": "string", "required": true, "description": "Native desktop message identifier; the wrapper does not establish a public om_ format."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 76426, "snippet": "getAllDrafts:async function e(){let{entity:e}=await (0,a.px)(u.aQb);return e}"},
+      {"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 76681, "snippet": "FETCH_MESSAGE_REPLY_DRAFT consumes draft/entity.drafts keyed by messageId"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.message-metadata",
+    "description": "Read one message's native identifier, chat/thread linkage, and sender identifier without projecting message body content.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "messageId", "type": "string", "required": true, "description": "Native desktop message identifier; no public-ID format is inferred."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 282783, "snippet": "mGetMessages:function(e){return(0,N.kT)(c.px,v.R8F,{messageIds:e})}"},
+      {"file": "messenger.asar:45633/b313b33393.js", "offset": 30835, "snippet": "loadMessagesByIds:async function e(e){return(await s.default.mGetMessages(e)).entity.messages}"},
+      {"file": "messenger.asar:73695/7cff13bcb7.js", "offset": 94920, "snippet": "t.senderId=s.fromId ... t.senderId=e.author?.id"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.chat-metadata",
+    "description": "Read one native chat's identity, type, name, owner, and member count without projecting messages or membership records.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": true, "description": "Native desktop chat identifier; no public-ID format is inferred."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:2533/74110713a5.js", "offset": 7645, "snippet": "async function c(e,r=!0,t=_.DD.UNKNOWN){let{entity:o}=await ... {chatIds:e,shouldAuth:r,source:t}"},
+      {"file": "messenger.asar:2533/74110713a5.js", "offset": 7645, "snippet": "let r=o?.chats?.[e]; return r ..."},
+      {"file": "messenger.asar:2533/74110713a5.js", "offset": 519, "snippet": "_={UNKNOWN:1,CHAT_WINDOW:2}"},
+      {"file": "messenger.asar:29456/7f7df35566.js", "offset": 53805, "snippet": "e.ownerId ... e.userCount"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.inbox-chats",
+    "description": "List recent inbox chat cards as native chat IDs, names, types, and unread counts. The first-page cursor follows the desktop feed reducer; count is required because its UI derives it from viewport height. No preview snippets or message content are returned.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "count", "type": "integer", "required": true, "description": "Positive number of feed cards to request; the desktop UI derives this from its viewport height."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:common/7d5f20dbb7.js", "offset": 28749352, "snippet": "function w(e,t){return(0,_.px)(a.xrd,{...e},{parentContextId:t})}"},
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 5963044, "snippet": "t5=\"2480|feed.v1.GetFeedCardsV4Request|feed.v1.GetFeedCardsV4Response|1|GET_FEED_CARDS_V4\""},
+      {"file": "messenger.asar:messenger~4/b84e4ef239.js", "offset": 58607765, "snippet": "g.C$({feedCursor:c,filter:t,count:m,secondaryFilter:y||void 0,boxId:r,isPreload:a},e.traceId)"},
+      {"file": "messenger.asar:messenger~4/b84e4ef239.js", "offset": 58632069, "snippet": "list:{items:[],feedCursor:{id:\"0\",rankTime:s.ab}}"},
+      {"file": "messenger.asar:messenger~7/6b9fbb075f.js", "offset": 58818784, "snippet": "function m(){return Math.max(Math.ceil(window.innerHeight/a.Q1)+1,a.Mi+2)}"},
+      {"file": "messenger.asar:messenger~4/b84e4ef239.js", "offset": 58572725, "snippet": "let t=h.find(t=>!!e[t])||\"\" ... chatData:r.U4w.CHAT ... {id:e.feedId,type:i} ... Object.assign(...,n)"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.p2p-chat",
+    "description": "Resolve the native P2P chat ID already associated with one native desktop user identifier. This is read-only and does not create a chat.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "userId", "type": "string", "required": true, "description": "Native desktop user identifier; no public-ID format is inferred."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:common/aafb67268f.js", "offset": 34649414, "snippet": "let e=await (0,c.px)(d.Vgt,{chatterIds:[s]}); a=e?.chatterId2chat?.[s]?.id"},
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 5976207, "snippet": "Tz=\"1046|im.v1.GetP2PChatsByChatterIdsRequest|im.v1.GetP2PChatsByChatterIdsResponse|1|GET_P2P_CHATS_BY_CHATTER_IDS\""}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.recent-message-match",
+    "description": "Search the most recent native chat page for one exact text from one native sender, returning matching native message IDs only. Unrelated message bodies are not projected.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": true, "description": "Native desktop chat identifier."},
+      {"name": "senderId", "type": "string", "required": true, "description": "Native desktop sender identifier."},
+      {"name": "text", "type": "string", "required": true, "description": "Exact message text to match; it is used only for local filtering and is never returned."},
+      {"name": "count", "type": "integer", "required": false, "description": "Recent page size, default 20 as in the shipped history wrapper."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 5956250, "snippet": "E5=\"1020|im.v1.GetChatMessagesRequest|im.v1.GetChatMessagesResponse|1|GET_CHAT_MESSAGES\""},
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 6177089, "snippet": "async function Y({chatId:e,scene:_,redundancyCount:E=0,position:t,count:s=20,needResponse:T=!0,...strategy:i=R.RgN.SYNC_SERVER_DATA,...subscribChatEvent:O=!1})"},
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 6177089, "snippet": "U={chatId:e,scene:_,count:s,position:t,strategy:i,redundancyCount:E,subscribChatEvent:O,needResponse:T,...}; G=await px(v.zSv,U)"},
+      {"file": "messenger.asar:62148/81b0288138.js", "offset": 7978575, "snippet": "FIRST_SCREEN:1 ... SYNC_SERVER_DATA:3"},
+      {"file": "messenger.asar:44343/f127c4a4eb.js", "offset": 6177089, "snippet": "P=T.map(e=>{let _=... ? O[e.itemId]:v[e.itemId]; return _?(l.push(e.itemId),_.position):...}); return {entity:C,orderedMessageIds:l}"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.favorites",
+    "description": "List Favorites from the desktop client's Favorites view using its cursor pagination schema.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "count", "type": "integer", "required": false, "description": "Number of Favorites requested; the traced UI defaults to 15."},
+      {"name": "time", "type": "integer", "required": false, "description": "Native Favorites pagination cursor; the traced initial UI request uses 0."}
+    ],
+    "evidence": [
+      {"file": "favorite.asar:favorite/b736c5d828.js", "offset": 4569823, "snippet": "function a({time:e,count:t}){const n={time:String(e),count:t};return(0,r.px)(i.PXc,n)}"},
+      {"file": "favorite.asar:favorite/b736c5d828.js", "offset": 5702386, "snippet": "const{favoritesIds:n,entity:r,hasMore:i,minTime:a}=await Zr.rs({count:e,time:t})"},
+      {"file": "favorite.asar:favorite/b736c5d828.js", "offset": 5703800, "snippet": "loadInitialFavorites:async function(){...await si(15,0)...}"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.favorite-detail",
+    "description": "Read one Favorite record by its native desktop identifier.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "favoriteId", "type": "string", "required": true, "description": "Native desktop Favorite identifier; no public-ID format is inferred."}
+    ],
+    "evidence": [
+      {"file": "favorite.asar:favorite/b736c5d828.js", "offset": 4569823, "snippet": "function o(e){const t={favoriteIds:e};return(0,r.px)(i.DfN,t)}"},
+      {"file": "favorite.asar:favorite/b736c5d828.js", "offset": 5703800, "snippet": "const t=[e]; ... const{entity:e}=await Zr.R1(t); return n=ti({entities:e,favoritesIds:t,...})"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.shortcuts",
+    "description": "List desktop feed shortcut structural metadata using the UI's local-cache request strategy. A shortcut channel is not assumed to be a chat.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file": "messenger.asar:common/23039c4f62.js", "offset": 241081, "snippet": "async function g(e={syncDataStrategy:l.lDc.LOCAL},t){let s=await (0,r.px)(o.xVQ,e,{parentContextId:t}); return ... s.shortcuts ...}"},
+      {"file": "messenger.asar:messenger~15/feef05be77.js", "offset": 1588, "snippet": "R={LOCAL:1,TRY_LOCAL:2,FORCE_SERVER:3}"},
+      {"file": "messenger.asar:common/23039c4f62.js", "offset": 241081, "snippet": "let{entityPreview:t}=e ... shortcuts:n ... previews:s"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.feed-folder",
+    "description": "Read the desktop feed-folder setting and its used folder identifiers.",
+    "readOnly": true,
+    "parameters": [],
+    "evidence": [
+      {"file": "messenger.asar:common/7d5f20dbb7.js", "offset": 15281, "snippet": "async function y(){return(0,_.px)(a.x6R)}"},
+      {"file": "favorite.asar:favorite-sunset/1155b6e072.js", "offset": 58848, "snippet": "const{feedFolderSettings:t}=await ... R(C.x6R); return(t?.usedFolderIds||[]).includes(String(e))"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.scheduled-chat",
+    "description": "Read the scheduled-message item for a chat or chat thread. The default force-server strategy follows the UI's authoritative second refresh; strategy 1 preserves its local-cache first pass.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": true, "description": "Native desktop chat identifier."},
+      {"name": "rootId", "type": "string", "required": false, "description": "Native root-message identifier for a chat thread."},
+      {"name": "strategy", "type": "integer", "required": false, "description": "Native sync strategy: 1 local cache or 3 force-server; defaults to 3."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:common/144afddcd1.js", "offset": 107600, "snippet": "getScheduleMessageItem({chatId:e,rootId:t,syncDataStrategy:i.lDc.LOCAL,scene:a}); let a=t?n.RI.CHAT_THREAD:n.RI.CHAT_ONLY"},
+      {"file": "main-window.asar:22921/c5d080dc3d.js", "offset": 263833, "snippet": "getScheduleMessagesRequestScene:{UNKNOWN:0,CHAT_ONLY:1,REPLY_IN_THREAD:2,CHAT_THREAD:3}"},
+      {"file": "messenger.asar:common/144afddcd1.js", "offset": 108000, "snippet": "let s=a.messageItems,i=s?.[0]; let e=a.entity ... scheduleMessage ... quasiScheduleMessage ... scheduleTime ... status"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.scheduled-thread",
+    "description": "Read the scheduled-message item for a reply thread. The default force-server strategy follows the UI's authoritative second refresh; strategy 1 preserves its local-cache first pass.",
+    "readOnly": true,
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": true, "description": "Native desktop chat identifier."},
+      {"name": "threadId", "type": "string", "required": true, "description": "Native desktop thread identifier."},
+      {"name": "strategy", "type": "integer", "required": false, "description": "Native sync strategy: 1 local cache or 3 force-server; defaults to 3."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:common/144afddcd1.js", "offset": 65000, "snippet": "getScheduleMessageItem({chatId:t,threadId:e,syncDataStrategy:o.lDc.LOCAL}); ... {chatId:e,threadId:t,syncDataStrategy:a,scene:R.RI.REPLY_IN_THREAD}"},
+      {"file": "main-window.asar:22921/c5d080dc3d.js", "offset": 263833, "snippet": "getScheduleMessagesRequestScene:{UNKNOWN:0,CHAT_ONLY:1,REPLY_IN_THREAD:2,CHAT_THREAD:3}"},
+      {"file": "messenger.asar:common/144afddcd1.js", "offset": 66000, "snippet": "let e=s.entity,t=i.itemId,a=e?.scheduleMessage?.[t] ... o=e?.quasiScheduleMessage?.[t] ... scheduleTime ... status"}
+    ],
+    "verification": "schema-verified"
+  }
+]

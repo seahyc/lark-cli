@@ -1,0 +1,41 @@
+[
+  {
+    "name": "messaging.delete-draft",
+    "description": "Delete a cloud draft. This permanently changes the signed-in account's draft state; native acknowledgement is not readback proof.",
+    "readOnly": false,
+    "effect": "draft",
+    "parameters": [{"name": "draftId", "type": "string", "required": true, "description": "Native desktop draft identifier."}],
+    "evidence": [{"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 75899, "snippet": "await (0,a.px)(u.Muo,{draftId:e})"}],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.create-text-draft",
+    "description": "Create a non-empty plain-text cloud draft in a native chat. This changes signed-in draft state; native acknowledgement is not readback proof.",
+    "readOnly": false,
+    "effect": "draft",
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": true, "description": "Native desktop chat identifier, not a public oc_ alias."},
+      {"name": "text", "type": "string", "required": true, "description": "Plain text, non-empty after trimming, at most 16 KiB UTF-8."}
+    ],
+    "evidence": [
+      {"file": "messenger.asar:23985/a3c37f9fe1.js", "offset": 74930, "snippet": "await (0,a.px)(u.TZ_,{draft:r})"},
+      {"file": "messenger.asar:43865/01157626a7.js", "offset": 112286, "snippet": "{chatId:e,content:t,type:r,partialReplyInfo:T,attachmentSnapshot:A}"},
+      {"file": "messenger.asar:common/ac7134248d.js", "offset": 38846, "snippet": "return{elementIds:t,innerText:e,elements:a,imageIds:[],atIds:[],anchorIds:[],mediaIds:[],docsIds:[]}"},
+      {"file": "messenger.asar:45633/b313b33393.js", "offset": 1628, "snippet": "n[6]=15&n[6]|64,n[8]=63&n[8]|128"}
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "messaging.set-chat-last-read",
+    "description": "Change the signed-in account's read position for a chat; native acknowledgement is not readback proof.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {"name": "chatId", "type": "string", "required": true, "description": "Native desktop chat identifier."},
+      {"name": "position", "type": "integer", "required": false, "description": "Message position; the UI defaults to -1."},
+      {"name": "offset", "type": "integer", "required": false, "description": "Offset rounded and sent as a string; the UI defaults to 0."}
+    ],
+    "evidence": [{"file": "messenger.asar:7192/43700f2240.js", "offset": 10947, "snippet": "createChatLastReadPosition:function({chatId:t,position:e=-1,offset:r=0}){return (0,E.px)(y.Apn,{chatId:t,position:e,offset:Math.round(r).toString()})}"}],
+    "verification": "schema-verified"
+  }
+]

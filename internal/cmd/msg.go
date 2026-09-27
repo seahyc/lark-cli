@@ -1388,7 +1388,10 @@ var msgEditCmd = &cobra.Command{
 	Short: "Edit a sent message",
 	Long: `Edit a previously sent message in-place.
 
-Only the bot's own messages can be edited.
+By default this uses the authenticated user's OAuth token and can edit that
+user's eligible messages. Use --as bot only for messages sent by the app bot.
+Native numeric desktop message IDs are not public API message IDs; use the
+desktop bridge for those.
 
 Examples:
   lark msg edit --message-id om_xxx --text "Updated text"
@@ -1402,6 +1405,9 @@ Examples:
 		}
 		if msgEditMsgType != "post" && msgEditMsgType != "text" {
 			output.Fatalf("VALIDATION_ERROR", "--msg-type must be 'post' or 'text'")
+		}
+		if msgEditAs != "user" && msgEditAs != "bot" {
+			output.Fatalf("VALIDATION_ERROR", "--as must be 'user' or 'bot'")
 		}
 
 		// Auto-upgrade text -> post when mentions or markdown are detected
@@ -1522,7 +1528,7 @@ func init() {
 	msgEditCmd.Flags().StringVar(&msgEditMessageID, "message-id", "", "Message ID to edit (required)")
 	msgEditCmd.Flags().StringVar(&msgEditText, "text", "", "New message text (markdown-lite)")
 	msgEditCmd.Flags().StringVar(&msgEditMsgType, "msg-type", "text", "Message type: text (default) or post (auto-upgraded when markdown/mentions are used)")
-	msgEditCmd.Flags().StringVar(&msgEditAs, "as", "bot", "Edit as 'bot' (default, only option supported by Lark API)")
+	msgEditCmd.Flags().StringVar(&msgEditAs, "as", "user", "Edit as 'user' (default, your identity) or 'bot'")
 	msgRecallCmd.Flags().StringVar(&msgRecallAs, "as", "user", "Recall as 'user' (default, your identity) or 'bot'")
 
 	// Register subcommands

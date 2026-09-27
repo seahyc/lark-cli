@@ -1,0 +1,39 @@
+[
+  {
+    "name": "inbox.chat-mute-state",
+    "description": "Read the reminder/mute state of exactly one native chat. The request contains one chat ID only; the projection returns only that ID and muted as 0 or 1. Parent must verify the chat is the signed-in user's approved self-chat before using this state for a mutation.",
+    "readOnly": true,
+    "transport": "server",
+    "parameters": [
+      {
+        "name": "chatId",
+        "type": "string",
+        "required": true,
+        "description": "Canonical native chat ID for the one preflighted self-chat."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 659402,
+        "snippet": "Generated chats.PullChatSettingsRequest declares repeated chatIds; PullChatsByIds likewise declares repeated chatIds and is used here with exactly one ID."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 532754,
+        "snippet": "Generated chats.PullChatsByIdsResponse has chats map keyed by chat ID with entities.Chat values."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 718191,
+        "snippet": "Generated entities.ChatSetting.isRemind is Boolean and defaults true; false is the native muted state."
+      },
+      {
+        "file": "jssdk/jssdk_worklet_messenger.js",
+        "offset": 3354728,
+        "snippet": "Native command table maps 64 to chats.PullChatsByIdsRequest and chats.PullChatsByIdsResponse."
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "name": "mail.sender-list",
+    "description": "Legacy server search schema retained for research only. A direct live call returned ErrCacheEmpty; it is not registered or runnable. The cause is unresolved.",
+    "readOnly": true,
+    "transport": "server",
+    "parameters": [
+      {
+        "name": "reqType",
+        "type": "integer",
+        "required": true,
+        "description": "1 allow records, 2 block records, or 3 both."
+      },
+      {
+        "name": "lastTimestamp",
+        "type": "string",
+        "required": false,
+        "description": "Nonnegative int64 decimal pagination value; defaults to 0."
+      },
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false,
+        "description": "Nonnegative int64 decimal pagination value; defaults to 0."
+      },
+      {
+        "name": "size",
+        "type": "integer",
+        "required": false,
+        "description": "Page size from 1 to 100; defaults to 100."
+      },
+      {
+        "name": "searchQuery",
+        "type": "string",
+        "required": false,
+        "description": "Address search string, at most 254 characters."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/bc90fef3a3.js",
+        "offset": 1887,
+        "snippet": "m.LyB transform sends reqType,lastTimestamp,cursor,size,query; response selects allows/blocks and nextTimestamp by reqType."
+      },
+      {
+        "file": "mail.asar/71559/b4a48f3d52.js",
+        "offset": 414,
+        "snippet": "allow/block/all enum is {allow:1,block:2,all:3}."
+      },
+      {
+        "file": "mail.asar/chunk-common/835b3b6848.js",
+        "offset": 144641,
+        "snippet": "server Eq calls transport.callServerApi with the exact three-part wire command."
+      }
+    ],
+    "verification": "not-ready"
+  },
+  {
+    "name": "mail.sender-remove",
+    "description": "Legacy server removal schema retained for research only. It is not registered or runnable because the paired list/search call returned ErrCacheEmpty; the cause is unresolved.",
+    "readOnly": false,
+    "effect": "settings",
+    "transport": "server",
+    "parameters": [
+      {
+        "name": "address",
+        "type": "string",
+        "required": true,
+        "description": "Validated sender email address, at most 254 characters."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/bc90fef3a3.js",
+        "offset": 850,
+        "snippet": "m.a7j transform {multiFrom:fromList,isAllow:!isBlockSender}; block deletion uses isAllow:false."
+      },
+      {
+        "file": "mail.asar/chunk-common/835b3b6848.js",
+        "offset": 144641,
+        "snippet": "server Eq calls transport.callServerApi with the exact three-part wire command."
+      }
+    ],
+    "verification": "not-ready"
+  }
+]

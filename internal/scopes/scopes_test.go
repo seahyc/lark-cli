@@ -22,6 +22,19 @@ func TestGetScopesForGroups_SingleGroup(t *testing.T) {
 	}
 }
 
+func TestMailSendScopesUseDraftModifyAndSendPermissions(t *testing.T) {
+	got := GetScopesForGroups([]string{"mailsend"})
+	if !contains(got, "mail:user_mailbox.message:modify") {
+		t.Fatalf("mailsend scopes missing draft-modify permission: %v", got)
+	}
+	if !contains(got, "mail:user_mailbox.message:send") {
+		t.Fatalf("mailsend scopes missing send permission: %v", got)
+	}
+	if contains(got, "mail:user_mailbox.messages:write") {
+		t.Fatalf("mailsend scopes contain unsupported messages:write permission: %v", got)
+	}
+}
+
 func TestGetScopesForGroups_DeduplicatesAcrossGroups(t *testing.T) {
 	// documents and slides both include drive:drive.
 	got := GetScopesForGroups([]string{"documents", "slides"})

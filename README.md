@@ -22,6 +22,7 @@ The result: AI assistants can interact with Lark using fewer tokens, leaving mor
 - **Messages** - Retrieve chat history, download attachments, send messages, add/list/remove reactions
 - **Mail** - Read and search emails via IMAP with local caching
 - **Minutes** - Get meeting recording metadata, export transcripts, download media
+- **Unified search** - Search messages, documents, people, and chats in one public-API command
 
 ## Quick Start
 
@@ -32,6 +33,17 @@ The result: AI assistants can interact with Lark using fewer tokens, leaving mor
 5. Start using: `./lark cal list --week`
 
 See [USAGE.md](USAGE.md) for full documentation.
+
+For native desktop-only operations, see the [experimental desktop bridge](docs/desktop-bridge.md) and its workflow verification limits.
+
+```bash
+# Public APIs only; Lark Desktop does not need to be running.
+lark find "quarterly planning"
+lark find "incident" --type messages,docs --limit 10
+```
+
+Each search surface reports its own error, so a missing scope for one surface
+does not discard successful results from the others.
 
 ## Building
 

@@ -1,0 +1,224 @@
+[
+  {
+    "name": "mail.rule-enable",
+    "description": "Enable or disable one existing mail rule. Requires current selected mailbox identity and a prior rule-list readback.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "ruleIdString",
+        "type": "string",
+        "required": true,
+        "description": "Existing rule ID from a fresh read."
+      },
+      {
+        "name": "isEnable",
+        "type": "boolean",
+        "required": true,
+        "description": "Desired enabled state."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/48be8628db.js",
+        "offset": 3366,
+        "snippet": "n.$uT transform:(r,t)=>({ruleIdString:r,isEnable:t}); response !!r.isEnable"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.rule-reorder",
+    "description": "Set the complete desired order for up to 100 existing mail rules. Requires a fresh full rule readback; does not infer missing rules.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "ruleIds",
+        "type": "string[]",
+        "required": true,
+        "description": "Ordered rule IDs."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/48be8628db.js",
+        "offset": 4461,
+        "snippet": "n.Iz_ transform:r=>({ruleOrder:r.map(r=>({...r,order:String(r.order)}))})"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.signature-usage-update",
+    "description": "Choose existing new-mail and reply signature IDs for one address. Requires a fresh signatures readback for the same account.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Mailbox account ID."
+      },
+      {
+        "name": "address",
+        "type": "string",
+        "required": true,
+        "description": "Address covered by the selected usage row."
+      },
+      {
+        "name": "newMailSignatureId",
+        "type": "string",
+        "required": true,
+        "description": "Existing signature ID."
+      },
+      {
+        "name": "replyMailSignatureId",
+        "type": "string",
+        "required": true,
+        "description": "Existing signature ID."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "common/9a1f1c38eb.js",
+        "offset": 18723,
+        "snippet": "n.rKc transform:(e,t)=>({accountId:e,signatureUsage:t})"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.signature-create-text",
+    "description": "Create a disposable text-only signature. The parent must read signatures before/after and delete exactly the returned fixture ID.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Mailbox account ID."
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "description": "Fixture signature name."
+      },
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "description": "Plain text, escaped into an inert div by the descriptor."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/9a1f1c38eb.js",
+        "offset": 9090,
+        "snippet": "create call builds {name:t.name,images:t.images,templateHtml:t.templateHtml,id:void 0}; calls o.K3"
+      },
+      {
+        "file": "mail.asar/common/9a1f1c38eb.js",
+        "offset": 18281,
+        "snippet": "n.xHx transform:(e,t)=>({accountId:e,signature:t}); response signature"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.signature-delete",
+    "description": "Delete one unassigned signature ID, intended only to clean up a verified disposable fixture.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "accountId",
+        "type": "string",
+        "required": true,
+        "description": "Mailbox account ID."
+      },
+      {
+        "name": "signatureId",
+        "type": "string",
+        "required": true,
+        "description": "Exact fixture signature ID from create/readback."
+      },
+      {
+        "name": "signatureUsageCount",
+        "type": "integer",
+        "required": true,
+        "description": "Fresh count of assigned usage rows; must be zero."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/9a1f1c38eb.js",
+        "offset": 9090,
+        "snippet": "delete call o._c({signatureId:t,accountId:e})"
+      },
+      {
+        "file": "mail.asar/common/9a1f1c38eb.js",
+        "offset": 18461,
+        "snippet": "n.B_5 transform:e=>e; logFormat accountId"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.sender-block",
+    "description": "Block one validated sender address with the native block-sender scene. Read back with mail.blocked-sender before and after.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "address",
+        "type": "string",
+        "required": true,
+        "description": "Validated sender email address, at most 254 characters."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/bc90fef3a3.js",
+        "offset": 3381,
+        "snippet": "native _.Kgq transform {multiFrom:t,isAllow:!r,scene:c.pH.BLOCK_SENDER}; UI calls M({isBlockSender:u,from:t})"
+      },
+      {
+        "file": "mail.asar/chunk-common/835b3b6848.js",
+        "offset": 15873,
+        "snippet": "pH enum is {BLOCK_WEB_IMAGE:0,BLOCK_SENDER:1}"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.sender-unblock",
+    "description": "Add one validated sender address to the native allow list with isAllow:true. This is not deletion or cleanup; read back separately.",
+    "readOnly": false,
+    "effect": "settings",
+    "parameters": [
+      {
+        "name": "address",
+        "type": "string",
+        "required": true,
+        "description": "Validated sender email address, at most 254 characters."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar/common/bc90fef3a3.js",
+        "offset": 3381,
+        "snippet": "native _.Kgq transform {multiFrom:t,isAllow:!r,scene:c.pH.BLOCK_SENDER}; false isBlockSender produces isAllow:true"
+      },
+      {
+        "file": "mail.asar/chunk-common/835b3b6848.js",
+        "offset": 15873,
+        "snippet": "pH enum is {BLOCK_WEB_IMAGE:0,BLOCK_SENDER:1}"
+      }
+    ],
+    "verification": "schema-verified"
+  }
+]
