@@ -164,6 +164,9 @@ func BridgeCall(ctx context.Context, port int, token string, operation string, p
 		return nil
 	case <-callCtx.Done():
 		server.Close()
+		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("the patched Email page never connected to the bridge; restart Lark and open the Email tab, then try again")
+		}
 		return callCtx.Err()
 	}
 }
