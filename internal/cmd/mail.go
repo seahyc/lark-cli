@@ -777,15 +777,14 @@ var mailDraftCmd = &cobra.Command{
 	Long: `Build a MIME message and save it as a draft in your Drafts folder via IMAP APPEND.
 
 The draft can then be reviewed, edited, and sent from your mail client.
+--to is optional for drafts, so you can save one before choosing recipients.
 
 Examples:
   lark mail draft --to user@example.com --subject "Hello" --body "Hi there"
+  lark mail draft --subject "Update" --body-file update.txt   # no recipients yet
   lark mail draft --to user@example.com --subject "Re: Thread" --body-file msg.txt --attach file.pdf
   lark mail draft --to user@example.com --cc other@example.com --subject "Re: Old" --body-file reply.txt --in-reply-to "<msgid@server>" --attach video.mp4`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(mailDraftTo) == 0 {
-			output.Fatalf("VALIDATION_ERROR", "--to is required")
-		}
 		if mailDraftSubject == "" {
 			output.Fatalf("VALIDATION_ERROR", "--subject is required")
 		}

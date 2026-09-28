@@ -156,7 +156,9 @@ func buildMessage(from string, opts *SendOptions) ([]byte, error) {
 
 	// Headers
 	b.WriteString(fmt.Sprintf("From: %s\r\n", from))
-	b.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(opts.To, ", ")))
+	if len(opts.To) > 0 {
+		b.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(opts.To, ", ")))
+	}
 	if len(opts.CC) > 0 {
 		b.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(opts.CC, ", ")))
 	}

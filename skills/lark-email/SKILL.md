@@ -219,6 +219,7 @@ Save an email as a draft in the Drafts folder:
 
 ```bash
 lark mail draft --to user@example.com --subject "Hello" --body "Hi there"
+lark mail draft --subject "Update" --body-file msg.txt   # --to is optional for drafts
 lark mail draft --to user@example.com --subject "Re: Thread" --body-file msg.txt --attach file.pdf
 ```
 
