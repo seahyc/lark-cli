@@ -24,3 +24,6 @@ vendor/
 *.swp
 *.swo
 lark
+
+# Local agent settings
+.claude/settings.local.json
