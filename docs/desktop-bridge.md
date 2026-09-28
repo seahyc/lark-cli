@@ -36,6 +36,8 @@ and native decimal message/chat IDs belong to different identity spaces.
 
 ## Start and restore
 
+### macOS
+
 ```sh
 lark desktop status
 lark desktop start
@@ -44,6 +46,46 @@ lark desktop status --probe
 lark desktop operations
 lark desktop mutations
 ```
+
+Start the Lark application with the debugging port:
+
+```sh
+# Option 1: Using open with --args
+open -a Lark --args --remote-debugging-port=9330
+
+# Option 2: Direct launcher
+/Applications/LarkSuite.app/Contents/MacOS/Lark --remote-debugging-port=9330
+```
+
+### Linux
+
+```sh
+lark desktop status
+# Set the environment variable to allow Linux ASAR patching (until native protocol is revalidated)
+export LARK_LINUX_ALLOW_UNTRUSTED_ASAR=1
+# Run with sudo to patch system-owned files
+sudo -E lark desktop start
+# Restart Lark with debugging port, then open its Email tab.
+lark desktop status --probe
+lark desktop operations
+lark desktop mutations
+```
+
+Start the Lark application with the debugging port:
+
+```sh
+# Option 1: Using the system launcher
+/usr/bin/bytedance-lark-stable --remote-debugging-port=9330
+
+# Option 2: Direct binary
+/opt/bytedance/lark/lark --remote-debugging-port=9330
+```
+
+**Note for Linux**: The `/opt/bytedance/lark` directory is typically owned by root. The `lark desktop start` command requires elevated permissions to patch the mail.asar file. Use `sudo -E` to preserve the `LARK_LINUX_ALLOW_UNTRUSTED_ASAR` environment variable. Session files will be stored in your user's cache directory even when using sudo.
+
+**Security warning**: Setting `LARK_LINUX_ALLOW_UNTRUSTED_ASAR=1` bypasses hash validation. The Linux Lark 7.72.23 native protocol has not been fully revalidated. Use at your own risk for development/testing only.
+
+### General
 
 The temporary session lasts 30 minutes and is pinned to the supported installed
 archive hash. It uses authenticated localhost transport. It does not export the

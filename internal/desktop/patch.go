@@ -29,7 +29,19 @@ type Session struct {
 
 func SessionDir() (string, error) {
 	d, e := os.UserCacheDir()
-	return filepath.Join(d, "lark-cli", "desktop"), e
+	if e != nil {
+		return "", e
+	}
+	sessionDir := filepath.Join(d, "lark-cli", "desktop")
+	if os.Getenv("SUDO_USER") != "" && os.Geteuid() == 0 {
+		originalUser := os.Getenv("SUDO_USER")
+		originalHome := os.Getenv("SUDO_HOME")
+		if originalHome == "" {
+			originalHome = filepath.Join("/home", originalUser)
+		}
+		sessionDir = filepath.Join(originalHome, ".cache", "lark-cli", "desktop")
+	}
+	return sessionDir, nil
 }
 func ReadSession() (Session, error) {
 	var s Session
@@ -45,9 +57,14 @@ func ReadSession() (Session, error) {
 	return s, e
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func ComputeHash(b []byte) string { return digest(b) }
 func atomicWrite(path string, b []byte, mode os.FileMode) error {
-	f, e := os.CreateTemp(filepath.Dir(path), ".lark-cli-*")
+	dir := filepath.Dir(path)
+	f, e := os.CreateTemp(dir, ".lark-cli-*")
 	if e != nil {
+		if os.IsPermission(e) {
+			return fmt.Errorf("cannot write to %s (permission denied); on Linux, run with sudo to patch system-owned Lark files, or set LARK_APP_DIR to a user-writable location: %w", dir, e)
+		}
 		return e
 	}
 	name := f.Name()
@@ -138,23 +155,23 @@ func InstallSession(port int) (Session, error) {
 	if _, e = os.Stat(filepath.Join(d, "session.json")); !os.IsNotExist(e) {
 		return s, fmt.Errorf("session exists; restore it first")
 	}
-	path, e := filepath.EvalSymlinks("/Applications/LarkSuite.app/Contents/Frameworks/Lark Framework.framework/Versions/Current/Resources/webcontent/mail.asar")
+	platform, e := DetectPlatform()
 	if e != nil {
 		return s, e
 	}
-	original, e := os.ReadFile(path)
+	original, e := os.ReadFile(platform.AsarPath)
 	if e != nil {
 		return s, e
 	}
-	// Fail closed after a Lark update until its native protocol is revalidated.
-	if digest(original) != "fd2d495a7d8f4da81334a3695cdc996060aa16f7c20cd529d2c53c683e2f5c8c" {
-		return s, fmt.Errorf("unsupported Lark mail archive; revalidate the native protocol before patching this version")
+	hash := digest(original)
+	if e = ValidateAsarHash(hash, platform.AllowedHashes); e != nil {
+		return s, e
 	}
 	nonce := make([]byte, 32)
 	if _, e = rand.Read(nonce); e != nil {
 		return s, e
 	}
-	s = Session{Port: port, Token: hex.EncodeToString(nonce), ExpiresAt: time.Now().Add(30 * time.Minute).UnixMilli(), Archive: path, OriginalHash: digest(original)}
+	s = Session{Port: port, Token: hex.EncodeToString(nonce), ExpiresAt: time.Now().Add(30 * time.Minute).UnixMilli(), Archive: platform.AsarPath, OriginalHash: hash}
 	cfg, _ := json.Marshal(s)
 	modules, e := moduleJavaScript()
 	if e != nil {
@@ -179,7 +196,7 @@ func InstallSession(port int) (Session, error) {
 	if e = atomicWrite(filepath.Join(d, "session.json"), cfg, 0600); e != nil {
 		return s, e
 	}
-	e = atomicWrite(path, patched, 0644)
+	e = atomicWrite(platform.AsarPath, patched, 0644)
 	if e != nil {
 		_ = os.Remove(filepath.Join(d, "session.json"))
 	}

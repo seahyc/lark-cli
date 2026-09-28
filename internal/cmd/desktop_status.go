@@ -21,6 +21,24 @@ func init() {
 			return err
 		}
 		result := map[string]interface{}{"read_operations": len(reads), "mutation_operations": len(writes), "session_present": false}
+		
+		platform, err := desktop.DetectPlatform()
+		if err != nil {
+			result["platform_error"] = err.Error()
+		} else {
+			result["platform"] = map[string]interface{}{
+				"os":          platform.AppDir,
+				"asar_path":   platform.AsarPath,
+				"user_data":   platform.UserDataDir,
+				"launchers":   platform.LauncherPaths,
+			}
+			if data, err := os.ReadFile(platform.AsarPath); err == nil {
+				hash := desktop.ComputeHash(data)
+				result["platform"].(map[string]interface{})["asar_hash"] = hash[:16] + "..."
+				result["platform"].(map[string]interface{})["asar_size"] = len(data)
+			}
+		}
+		
 		session, err := desktop.ReadSession()
 		if os.IsNotExist(err) {
 			if probe {

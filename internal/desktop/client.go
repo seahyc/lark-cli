@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -28,15 +27,6 @@ type Client struct {
 	Target Target
 }
 
-func isMailTarget(t Target) bool {
-	u, err := url.Parse(t.URL)
-	if err != nil || u.Scheme != "file" {
-		return false
-	}
-	return strings.HasPrefix(u.Path, "/Applications/LarkSuite.app/Contents/") &&
-		(strings.Contains(u.Path, "/webcontent/mail/mail/") || strings.Contains(u.Path, "/webcontent/mail/AutoFilterDialog/"))
-}
-
 func localSocket(raw string, port int) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "ws" && u.Hostname() == "127.0.0.1" && u.Port() == strconv.Itoa(port) && u.User == nil
@@ -50,7 +40,12 @@ func Connect(ctx context.Context, port int) (*Client, error) {
 	req, _ := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/json/list", port), nil)
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Lark desktop debugging is unavailable on localhost:%d; start Lark with a temporary --remote-debugging-port=%d and open Email: %w", port, port, err)
+		platform, _ := DetectPlatform()
+		hint := "start Lark with a temporary --remote-debugging-port=%d and open Email"
+		if platform != nil && len(platform.LauncherPaths) > 0 {
+			hint = fmt.Sprintf("start Lark with %s --remote-debugging-port=%d and open Email", platform.LauncherPaths[0], port)
+		}
+		return nil, fmt.Errorf("Lark desktop debugging is unavailable on localhost:%d; %s: %w", port, hint, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -61,7 +56,7 @@ func Connect(ctx context.Context, port int) (*Client, error) {
 		return nil, fmt.Errorf("decode desktop targets: %w", err)
 	}
 	for _, t := range targets {
-		if !isMailTarget(t) {
+		if !IsMailTarget(t.URL) {
 			continue
 		}
 		if !localSocket(t.WebSocketURL, port) {
