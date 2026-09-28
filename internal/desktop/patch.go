@@ -46,6 +46,10 @@ func SessionDir() (string, error) {
 }
 
 func chownToSudoUser(path string) error {
+	return chownToSudoUserFunc(path)
+}
+
+var chownToSudoUserFunc = func(path string) error {
 	sudoUser := os.Getenv("SUDO_USER")
 	if sudoUser == "" || os.Geteuid() != 0 {
 		return nil
@@ -59,11 +63,14 @@ func chownToSudoUser(path string) error {
 	return os.Chown(path, uid, gid)
 }
 
+var userLookupFunc = user.Lookup
+var getEuidFunc = os.Geteuid
+
 func chownDirTree(targetDir string, chownFn func(string) error) error {
-	if os.Getenv("SUDO_USER") == "" || os.Geteuid() != 0 {
+	if os.Getenv("SUDO_USER") == "" || getEuidFunc() != 0 {
 		return nil
 	}
-	usr, e := user.Lookup(os.Getenv("SUDO_USER"))
+	usr, e := userLookupFunc(os.Getenv("SUDO_USER"))
 	if e != nil {
 		return e
 	}

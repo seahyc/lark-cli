@@ -71,14 +71,14 @@ func init() {
 			return e
 		}
 		var verified struct {
-			Emails []string `json:"verifiedEmails"`
+			Emails []string `json:"emails"`
 		}
 		if e := desktopCall(cmd, "verifiedEmails", nil, &verified); e != nil {
 			return e
 		}
 		verifiedMap := make(map[string]bool)
 		for _, email := range verified.Emails {
-			verifiedMap[email] = true
+			verifiedMap[strings.ToLower(email)] = true
 		}
 		var rule json.RawMessage
 		for _, r := range current.Rules {
@@ -100,7 +100,7 @@ func init() {
 			return fmt.Errorf("provide at least one --to recipient")
 		}
 		for _, email := range recipients {
-			if !verifiedMap[email] {
+			if !verifiedMap[strings.ToLower(email)] {
 				return fmt.Errorf("recipient %s is not verified; add it via Lark settings first", email)
 			}
 		}
@@ -108,13 +108,25 @@ func init() {
 		if e := json.Unmarshal(rule, &ruleData); e != nil {
 			return e
 		}
-		oldRecipients, _ := ruleData["forwardToEmailAddressList"].([]interface{})
+		action, _ := ruleData["action"].(map[string]interface{})
+		items, _ := action["items"].([]interface{})
+		
 		oldEmails := make(map[string]bool)
-		for _, r := range oldRecipients {
-			if email, ok := r.(string); ok {
-				oldEmails[strings.ToLower(email)] = true
+		var nonForwardingItems []interface{}
+		for _, item := range items {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			itemType, _ := itemMap["type"].(float64)
+			if int(itemType) == 12 {
+				input, _ := itemMap["input"].(string)
+				oldEmails[strings.ToLower(input)] = true
+			} else {
+				nonForwardingItems = append(nonForwardingItems, item)
 			}
 		}
+		
 		newEmails := make(map[string]bool)
 		for _, email := range recipients {
 			newEmails[strings.ToLower(email)] = true
@@ -128,8 +140,30 @@ func init() {
 				}
 			}
 		}
-		ruleData["forwardToEmailAddressList"] = recipients
-		resultingRule, _ := json.Marshal(ruleData)
+		
+		newItems := make([]interface{}, len(nonForwardingItems))
+		copy(newItems, nonForwardingItems)
+		for _, email := range recipients {
+			newItems = append(newItems, map[string]interface{}{
+				"type":                12,
+				"input":               email,
+				"authStatus":          2,
+				"enableAutoTransfer":  true,
+			})
+		}
+		
+		afterRule := make(map[string]interface{})
+		for k, v := range ruleData {
+			afterRule[k] = v
+		}
+		afterAction := make(map[string]interface{})
+		for k, v := range action {
+			afterAction[k] = v
+		}
+		afterAction["items"] = newItems
+		afterRule["action"] = afterAction
+		resultingRule, _ := json.Marshal(afterRule)
+		
 		p := map[string]interface{}{"expectedUserId": current.UserID, "expectedRule": rule, "recipients": recipients}
 		if !apply {
 			return desktopJSON(cmd, map[string]interface{}{

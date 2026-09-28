@@ -3,7 +3,9 @@ package desktop
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,40 +49,39 @@ func TestChownDirTree(t *testing.T) {
 	}
 	
 	origSudoUser := os.Getenv("SUDO_USER")
+	origChownFunc := chownToSudoUserFunc
+	origLookupFunc := userLookupFunc
+	origGetEuidFunc := getEuidFunc
 	defer func() {
 		if origSudoUser != "" {
 			os.Setenv("SUDO_USER", origSudoUser)
 		} else {
 			os.Unsetenv("SUDO_USER")
 		}
+		chownToSudoUserFunc = origChownFunc
+		userLookupFunc = origLookupFunc
+		getEuidFunc = origGetEuidFunc
 	}()
 	
 	os.Setenv("SUDO_USER", "mockuser")
+	getEuidFunc = func() int { return 0 }
 	
-	testChownDirTree := func(targetDir string, chownFn func(string) error, mockHomeDir string) error {
+	userLookupFunc = func(username string) (*user.User, error) {
+		if username == "mockuser" {
+			return &user.User{HomeDir: mockHome}, nil
+		}
+		return nil, fmt.Errorf("user not found")
+	}
+	
+	chownToSudoUserFunc = func(path string) error {
 		if os.Getenv("SUDO_USER") == "" {
 			return nil
 		}
-		homeDir := mockHomeDir
-		if !strings.HasPrefix(targetDir, homeDir) {
-			return nil
-		}
-		parts := strings.Split(strings.TrimPrefix(targetDir, homeDir+string(filepath.Separator)), string(filepath.Separator))
-		current := homeDir
-		for _, part := range parts {
-			if part == "" {
-				continue
-			}
-			current = filepath.Join(current, part)
-			if e := chownFn(current); e != nil && !os.IsNotExist(e) {
-				return e
-			}
-		}
-		return nil
+		return mockChown(path)
 	}
 	
-	if err := testChownDirTree(targetDir, mockChown, mockHome); err != nil {
-		t.Fatalf("testChownDirTree failed: %v", err)
+	if err := chownDirTree(targetDir, chownToSudoUser); err != nil {
+		t.Fatalf("chownDirTree failed: %v", err)
 	}
 	
 	expected := []string{
@@ -97,8 +98,8 @@ func TestChownDirTree(t *testing.T) {
 	
 	outsidePath := filepath.Join(t.TempDir(), "outside", "path")
 	visited = make(map[string]bool)
-	if err := testChownDirTree(outsidePath, mockChown, mockHome); err != nil {
-		t.Fatalf("testChownDirTree failed for outside path: %v", err)
+	if err := chownDirTree(outsidePath, chownToSudoUser); err != nil {
+		t.Fatalf("chownDirTree failed for outside path: %v", err)
 	}
 	if len(visited) > 0 {
 		t.Error("chown should not be called for paths outside home")
