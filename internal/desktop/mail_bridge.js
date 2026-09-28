@@ -398,14 +398,18 @@
       return {changed:true,verified:true,rule:saved};
     }
     if (!Array.isArray(p.recipients) || p.recipients.length < 1 || p.recipients.length > 20 || p.recipients.some(v => typeof v !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))) throw new Error('Invalid recipients');
-    if (new Set(p.recipients).size !== p.recipients.length) throw new Error('Duplicate recipients');
+    const normalize = v => v.trim().toLowerCase();
+    const normalizedRecipients = p.recipients.map(normalize);
+    if (new Set(normalizedRecipients).size !== normalizedRecipients.length) throw new Error('Duplicate recipients');
     const verified = await call('verifiedEmails', {});
-    if (p.recipients.some(v => !(verified.emails || []).includes(v))) throw new Error('Recipient not verified; verify in Lark first');
-    const current = (rule.action?.items || []).filter(a => a.type === 12).map(a => a.input).sort();
-    if (JSON.stringify(current) === JSON.stringify([...p.recipients].sort())) return {changed:false,rule};
+    const normalizedVerified = (verified.emails || []).map(normalize);
+    if (normalizedRecipients.some(v => !normalizedVerified.includes(v))) throw new Error('Recipient not verified; verify in Lark first');
+    const current = (rule.action?.items || []).filter(a => a.type === 12).map(a => normalize(a.input)).sort();
+    if (JSON.stringify(current) === JSON.stringify([...normalizedRecipients].sort())) return {changed:false,rule};
     const items = (rule.action?.items || []).filter(a => a.type !== 12);
     for (const input of p.recipients) {
-      items.push((rule.action?.items || []).find(a => a.type === 12 && a.input === input) || {type:12,input,authStatus:2,enableAutoTransfer:true});
+      const existing = (rule.action?.items || []).find(a => a.type === 12 && normalize(a.input) === normalize(input));
+      items.push(existing ? {...existing, input} : {type:12,input,authStatus:2,enableAutoTransfer:true});
     }
     const wanted = {...rule, action:{...rule.action, items}};
     const result = await call('updateRule', {rule:wanted});
@@ -413,8 +417,8 @@
     const after = await call('listRules', {version:'3'});
     const saved = after.rules?.find(r => r.ruleIdString === rule.ruleIdString);
     const unchanged = r => JSON.stringify({name:r.name,isEnable:r.isEnable,ignoreTheRestOfRules:r.ignoreTheRestOfRules,isInvisible:r.isInvisible,condition:r.condition,action:(r.action?.items || []).filter(a => a.type !== 12)});
-    const savedRecipients = (saved?.action?.items || []).filter(a => a.type === 12).map(a => a.input).sort();
-    if (!saved || unchanged(saved) !== unchanged(rule) || JSON.stringify(savedRecipients) !== JSON.stringify([...p.recipients].sort())) throw new Error('Readback differs from intended change; inspect rule before retrying');
+    const savedRecipients = (saved?.action?.items || []).filter(a => a.type === 12).map(a => normalize(a.input)).sort();
+    if (!saved || unchanged(saved) !== unchanged(rule) || JSON.stringify(savedRecipients) !== JSON.stringify([...normalizedRecipients].sort())) throw new Error('Readback differs from intended change; inspect rule before retrying');
     return {changed:true,verified:true,rule:saved};
   }
   function connect() {

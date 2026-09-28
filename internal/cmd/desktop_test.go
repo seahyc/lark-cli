@@ -22,6 +22,7 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 					"input":              "alice@example.com",
 					"authStatus":         float64(2),
 					"enableAutoTransfer": true,
+					"extraField":         "preserved",
 				},
 				map[string]interface{}{
 					"type":               float64(12),
@@ -88,7 +89,34 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 			},
 		},
 		{
-			name:            "added address",
+			name:            "reuses existing item with extraField",
+			rule:            baseRule,
+			newRecipients:   []string{"ALICE@example.com"},
+			expectedChanged: true,
+			checkAfter: func(t *testing.T, after map[string]interface{}) {
+				action := after["action"].(map[string]interface{})
+				items := action["items"].([]interface{})
+				var aliceItem map[string]interface{}
+				for _, item := range items {
+					itemMap := item.(map[string]interface{})
+					if int(itemMap["type"].(float64)) == 12 && itemMap["input"] == "ALICE@example.com" {
+						aliceItem = itemMap
+						break
+					}
+				}
+				if aliceItem == nil {
+					t.Fatal("Alice item not found")
+				}
+				if aliceItem["extraField"] != "preserved" {
+					t.Error("Expected extraField to be preserved from existing item")
+				}
+				if aliceItem["authStatus"] != float64(2) {
+					t.Error("Expected authStatus to be preserved")
+				}
+			},
+		},
+		{
+			name:            "added address creates new item",
 			rule:            baseRule,
 			newRecipients:   []string{"alice@example.com", "bob@example.com", "charlie@example.com"},
 			expectedChanged: true,
@@ -99,6 +127,7 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 				type3Count := 0
 				type1Count := 0
 				foundCharlie := false
+				var charlieItem map[string]interface{}
 				for _, item := range items {
 					itemMap := item.(map[string]interface{})
 					itemType := int(itemMap["type"].(float64))
@@ -107,12 +136,7 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 						type12Count++
 						if itemMap["input"] == "charlie@example.com" {
 							foundCharlie = true
-							if itemMap["authStatus"] != float64(2) {
-								t.Error("Expected authStatus 2 for new recipient")
-							}
-							if itemMap["enableAutoTransfer"] != true {
-								t.Error("Expected enableAutoTransfer true for new recipient")
-							}
+							charlieItem = itemMap
 						}
 					case 3:
 						type3Count++
@@ -128,6 +152,17 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 				}
 				if !foundCharlie {
 					t.Error("Expected charlie@example.com in forwarding list")
+				}
+				if charlieItem != nil {
+					if charlieItem["extraField"] != nil {
+						t.Error("New item should not have extraField")
+					}
+					if charlieItem["authStatus"] != float64(2) {
+						t.Error("Expected authStatus 2 for new recipient")
+					}
+					if charlieItem["enableAutoTransfer"] != true {
+						t.Error("Expected enableAutoTransfer true for new recipient")
+					}
 				}
 			},
 		},
@@ -160,58 +195,14 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ruleData := deepCopyMap(tt.rule)
 			
-			action, _ := ruleData["action"].(map[string]interface{})
-			items, _ := action["items"].([]interface{})
-			
-			oldEmails := make(map[string]bool)
-			var nonForwardingItems []interface{}
-			for _, item := range items {
-				itemMap, ok := item.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				itemType, _ := itemMap["type"].(float64)
-				if int(itemType) == 12 {
-					input, _ := itemMap["input"].(string)
-					oldEmails[strings.ToLower(input)] = true
-				} else {
-					nonForwardingItems = append(nonForwardingItems, item)
-				}
-			}
-			
-			newEmails := make(map[string]bool)
-			for _, email := range tt.newRecipients {
-				newEmails[strings.ToLower(email)] = true
-			}
-			changed := len(oldEmails) != len(newEmails)
-			if !changed {
-				for email := range newEmails {
-					if !oldEmails[email] {
-						changed = true
-						break
-					}
-				}
+			afterRule, changed, err := applyForwardingRecipients(ruleData, tt.newRecipients)
+			if err != nil {
+				t.Fatalf("applyForwardingRecipients failed: %v", err)
 			}
 			
 			if changed != tt.expectedChanged {
 				t.Errorf("Expected changed=%v, got %v", tt.expectedChanged, changed)
 			}
-			
-			newItems := make([]interface{}, len(nonForwardingItems))
-			copy(newItems, nonForwardingItems)
-			for _, email := range tt.newRecipients {
-				newItems = append(newItems, map[string]interface{}{
-					"type":               float64(12),
-					"input":              email,
-					"authStatus":         float64(2),
-					"enableAutoTransfer": true,
-				})
-			}
-			
-			afterRule := deepCopyMap(ruleData)
-			afterAction := deepCopyMap(action)
-			afterAction["items"] = newItems
-			afterRule["action"] = afterAction
 			
 			if tt.checkAfter != nil {
 				tt.checkAfter(t, afterRule)
@@ -221,10 +212,10 @@ func TestSetForwardingRuleLogic(t *testing.T) {
 }
 
 func TestVerifiedEmailValidation(t *testing.T) {
-	verifiedList := []string{"alice@example.com", "bob@example.com"}
+	verifiedList := []string{"alice@example.com", "bob@example.com", " charlie@example.com "}
 	verifiedMap := make(map[string]bool)
 	for _, email := range verifiedList {
-		verifiedMap[strings.ToLower(email)] = true
+		verifiedMap[strings.ToLower(strings.TrimSpace(email))] = true
 	}
 	
 	tests := []struct {
@@ -234,15 +225,47 @@ func TestVerifiedEmailValidation(t *testing.T) {
 	}{
 		{"exact match", "alice@example.com", true},
 		{"case insensitive", "Alice@Example.COM", true},
-		{"not verified", "charlie@example.com", false},
+		{"trimmed match", "charlie@example.com", true},
+		{"not verified", "david@example.com", false},
 		{"partial match", "alice@example", false},
 	}
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			verified := verifiedMap[strings.ToLower(tt.email)]
+			verified := verifiedMap[strings.ToLower(strings.TrimSpace(tt.email))]
 			if verified != tt.shouldPass {
 				t.Errorf("Expected verified=%v for %s, got %v", tt.shouldPass, tt.email, verified)
+			}
+		})
+	}
+}
+
+func TestDuplicateRecipients(t *testing.T) {
+	tests := []struct {
+		name       string
+		recipients []string
+		isDup      bool
+	}{
+		{"no duplicates", []string{"alice@example.com", "bob@example.com"}, false},
+		{"exact duplicate", []string{"alice@example.com", "alice@example.com"}, true},
+		{"case-insensitive duplicate", []string{"alice@example.com", "Alice@Example.COM"}, true},
+		{"trimmed duplicate", []string{"alice@example.com", " alice@example.com "}, true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalizedRecipients := make(map[string]string)
+			isDuplicate := false
+			for _, email := range tt.recipients {
+				normalized := strings.ToLower(strings.TrimSpace(email))
+				if _, exists := normalizedRecipients[normalized]; exists {
+					isDuplicate = true
+					break
+				}
+				normalizedRecipients[normalized] = email
+			}
+			if isDuplicate != tt.isDup {
+				t.Errorf("Expected duplicate=%v, got %v", tt.isDup, isDuplicate)
 			}
 		})
 	}

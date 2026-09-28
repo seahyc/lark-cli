@@ -24,6 +24,10 @@ test('wrong identity does not write',async()=>{const p=params();p.expectedUserId
 test('unverified recipient does not write',async()=>{const p=params();p.recipients=['unknown@example.com'];const r=await execute(p);assert.equal(r.reply.ok,false);assert.equal(r.writes,0);});
 test('stale preview does not write',async()=>{const p=params();p.expectedRule.name='stale';const r=await execute(p);assert.equal(r.reply.ok,false);assert.equal(r.writes,0);});
 test('same recipients are a no-op',async()=>{const p=params();p.recipients=['old@example.com'];const r=await execute(p);assert.equal(r.reply.ok,true);assert.equal(r.writes,0);assert.equal(r.reply.data.changed,false);});
+test('same recipients with different case are a no-op',async()=>{const p=params();p.recipients=['OLD@Example.COM'];const r=await execute(p);assert.equal(r.reply.ok,true);assert.equal(r.writes,0);assert.equal(r.reply.data.changed,false);});
+test('verified recipients are case-insensitive',async()=>{const p=params();p.recipients=['NEW@Example.COM'];const r=await execute(p);assert.equal(r.reply.ok,true);assert.equal(r.writes,1);});
+test('duplicate recipients are rejected',async()=>{const p=params();p.recipients=['new@example.com','NEW@example.com'];const r=await execute(p);assert.equal(r.reply.ok,false);assert.equal(r.writes,0);});
+test('existing item is reused with new case',async()=>{const p=params();p.recipients=['OLD@Example.COM'];const r=await execute(p);assert.equal(r.reply.ok,true);assert.equal(r.writes,0);assert.equal(r.reply.data.changed,false);});
 test('mismatching readback is failure without retry',async()=>{const r=await execute(params(),{readbackMismatch:true});assert.equal(r.reply.ok,false);assert.equal(r.writes,1);});
 
 test('rule field patch preserves conditions and all forwarding settings',async()=>{const r=await execute({expectedUserId:'user1',expectedRule:structuredClone(base),patch:{name:'renamed',ignoreTheRestOfRules:true}},{operation:'updateRuleFields'});assert.equal(r.writes,1);assert.equal(r.reply.data.verified,true);assert.deepEqual(r.current.condition,base.condition);assert.deepEqual(r.current.action,base.action)});
