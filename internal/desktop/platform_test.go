@@ -100,9 +100,9 @@ func TestValidateAsarHash(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			name:          "prefix match",
-			hash:          "7f2b8c49abc123",
-			allowedHashes: []string{"7f2b8c49"},
+			name:          "Linux 7.72.23 hash",
+			hash:          "7f2b8c498076c34d93e94f8d8511f8110c0bd61cc3311a8bbe570c7e0c2b51fd",
+			allowedHashes: []string{"7f2b8c498076c34d93e94f8d8511f8110c0bd61cc3311a8bbe570c7e0c2b51fd"},
 			expectError:   false,
 		},
 		{
@@ -119,8 +119,8 @@ func TestValidateAsarHash(t *testing.T) {
 		},
 		{
 			name:          "multiple allowed, match second",
-			hash:          "7f2b8c49",
-			allowedHashes: []string{"fd2d495a", "7f2b8c49"},
+			hash:          "7f2b8c498076c34d93e94f8d8511f8110c0bd61cc3311a8bbe570c7e0c2b51fd",
+			allowedHashes: []string{"fd2d495a7d8f4da81334a3695cdc996060aa16f7c20cd529d2c53c683e2f5c8c", "7f2b8c498076c34d93e94f8d8511f8110c0bd61cc3311a8bbe570c7e0c2b51fd"},
 			expectError:   false,
 		},
 	}

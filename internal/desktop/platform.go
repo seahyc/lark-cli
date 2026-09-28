@@ -66,7 +66,7 @@ func detectLinux() (*PlatformConfig, error) {
 	allowedHashes := []string{}
 	if os.Getenv("LARK_LINUX_ALLOW_UNTRUSTED_ASAR") == "1" {
 		allowedHashes = []string{
-			"7f2b8c49",
+			"7f2b8c498076c34d93e94f8d8511f8110c0bd61cc3311a8bbe570c7e0c2b51fd",
 		}
 	}
 
@@ -115,7 +115,7 @@ func ValidateAsarHash(hash string, allowedHashes []string) error {
 	}
 	
 	for _, allowed := range allowedHashes {
-		if hash == allowed || strings.HasPrefix(hash, allowed) {
+		if hash == allowed {
 			return nil
 		}
 	}
