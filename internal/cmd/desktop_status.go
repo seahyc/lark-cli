@@ -27,7 +27,7 @@ func init() {
 			result["platform_error"] = err.Error()
 		} else {
 			result["platform"] = map[string]interface{}{
-				"os":          platform.AppDir,
+				"app_dir":     platform.AppDir,
 				"asar_path":   platform.AsarPath,
 				"user_data":   platform.UserDataDir,
 				"launchers":   platform.LauncherPaths,

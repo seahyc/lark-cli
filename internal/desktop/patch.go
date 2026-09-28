@@ -114,6 +114,8 @@ func patchASAR(b []byte, script string) ([]byte, error) {
 		return nil, e
 	}
 	node := header
+	// Only patches en-US.html; other locales remain unpatched.
+	// Users must use English locale to access the bridge.
 	for _, key := range []string{"mail", "en-US.html"} {
 		files, ok := node["files"].(map[string]interface{})
 		if !ok {

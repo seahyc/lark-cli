@@ -69,6 +69,16 @@ func init() {
 		if e := desktopCall(cmd, "listRules", nil, &current); e != nil {
 			return e
 		}
+		var verified struct {
+			Emails []string `json:"verifiedEmails"`
+		}
+		if e := desktopCall(cmd, "verifiedEmails", nil, &verified); e != nil {
+			return e
+		}
+		verifiedMap := make(map[string]bool)
+		for _, email := range verified.Emails {
+			verifiedMap[email] = true
+		}
 		var rule json.RawMessage
 		for _, r := range current.Rules {
 			var id struct {
@@ -88,9 +98,44 @@ func init() {
 		if len(recipients) == 0 {
 			return fmt.Errorf("provide at least one --to recipient")
 		}
+		for _, email := range recipients {
+			if !verifiedMap[email] {
+				return fmt.Errorf("recipient %s is not verified; add it via Lark settings first", email)
+			}
+		}
+		var ruleData map[string]interface{}
+		if e := json.Unmarshal(rule, &ruleData); e != nil {
+			return e
+		}
+		oldRecipients, _ := ruleData["forwardToEmailAddressList"].([]interface{})
+		oldEmails := make([]string, 0, len(oldRecipients))
+		for _, r := range oldRecipients {
+			if email, ok := r.(string); ok {
+				oldEmails = append(oldEmails, email)
+			}
+		}
+		changed := len(oldEmails) != len(recipients)
+		if !changed {
+			for i, email := range recipients {
+				if i >= len(oldEmails) || oldEmails[i] != email {
+					changed = true
+					break
+				}
+			}
+		}
+		ruleData["forwardToEmailAddressList"] = recipients
+		resultingRule, _ := json.Marshal(ruleData)
 		p := map[string]interface{}{"expectedUserId": current.UserID, "expectedRule": rule, "recipients": recipients}
 		if !apply {
-			return desktopJSON(cmd, map[string]interface{}{"apply": false, "userId": current.UserID, "before": rule, "forward_to": recipients, "next": "Review then repeat with --apply --expect-user matching userId"})
+			return desktopJSON(cmd, map[string]interface{}{
+				"apply":          false,
+				"changed":        changed,
+				"userId":         current.UserID,
+				"before":         rule,
+				"after":          json.RawMessage(resultingRule),
+				"forward_to":     recipients,
+				"next":           "Review then repeat with --apply --expect-user matching userId",
+			})
 		}
 		if expectUser == "" || expectUser != current.UserID {
 			return fmt.Errorf("--expect-user must match the preview userId")
