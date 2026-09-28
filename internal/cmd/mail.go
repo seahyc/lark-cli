@@ -766,6 +766,7 @@ var (
 	mailDraftSubject     string
 	mailDraftBody        string
 	mailDraftBodyFile    string
+	mailDraftHTMLFile    string
 	mailDraftInReplyTo   string
 	mailDraftReferences  []string
 	mailDraftAttachments []string
@@ -782,6 +783,7 @@ The draft can then be reviewed, edited, and sent from your mail client.
 Examples:
   lark mail draft --to user@example.com --subject "Hello" --body "Hi there"
   lark mail draft --subject "Update" --body-file update.txt   # no recipients yet
+  lark mail draft --subject "Update" --body-file update.txt --html-file update.html
   lark mail draft --to user@example.com --subject "Re: Thread" --body-file msg.txt --attach file.pdf
   lark mail draft --to user@example.com --cc other@example.com --subject "Re: Old" --body-file reply.txt --in-reply-to "<msgid@server>" --attach video.mp4`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -801,11 +803,21 @@ Examples:
 			output.Fatalf("VALIDATION_ERROR", "--body or --body-file is required")
 		}
 
+		htmlBody := ""
+		if mailDraftHTMLFile != "" {
+			data, err := os.ReadFile(mailDraftHTMLFile)
+			if err != nil {
+				output.Fatal("IO_ERROR", fmt.Errorf("reading html file: %w", err))
+			}
+			htmlBody = string(data)
+		}
+
 		opts := &mail.SendOptions{
 			To:          mailDraftTo,
 			CC:          mailDraftCC,
 			Subject:     mailDraftSubject,
 			Body:        body,
+			HTMLBody:    htmlBody,
 			InReplyTo:   mailDraftInReplyTo,
 			References:  mailDraftReferences,
 			Attachments: mailDraftAttachments,
@@ -914,6 +926,7 @@ func init() {
 	mailDraftCmd.Flags().StringVar(&mailDraftSubject, "subject", "", "Email subject")
 	mailDraftCmd.Flags().StringVar(&mailDraftBody, "body", "", "Email body text")
 	mailDraftCmd.Flags().StringVar(&mailDraftBodyFile, "body-file", "", "Read email body from file")
+	mailDraftCmd.Flags().StringVar(&mailDraftHTMLFile, "html-file", "", "Read an HTML version of the body from file (sent alongside the plain-text body)")
 	mailDraftCmd.Flags().StringVar(&mailDraftInReplyTo, "in-reply-to", "", "Message-ID to reply to (for threading)")
 	mailDraftCmd.Flags().StringSliceVar(&mailDraftReferences, "references", nil, "Message-ID chain for threading")
 	mailDraftCmd.Flags().StringSliceVar(&mailDraftAttachments, "attach", nil, "File path(s) to attach")

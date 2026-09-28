@@ -21,6 +21,7 @@ type SendOptions struct {
 	BCC             []string
 	Subject         string
 	Body            string
+	HTMLBody        string   // Optional HTML alternative; sent as multipart/alternative with Body
 	InReplyTo       string   // Message-ID to reply to
 	References      []string // Chain of Message-IDs for threading
 	Attachments     []string // File paths to attach
@@ -183,11 +184,7 @@ func buildMessage(from string, opts *SendOptions) ([]byte, error) {
 
 		// Body part
 		b.WriteString(fmt.Sprintf("--%s\r\n", boundary))
-		b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
-		b.WriteString("Content-Transfer-Encoding: 7bit\r\n")
-		b.WriteString("\r\n")
-		b.WriteString(opts.Body)
-		b.WriteString("\r\n")
+		writeBodyPart(&b, opts, boundary)
 
 		// Attachment parts
 		for _, path := range opts.Attachments {
@@ -222,13 +219,46 @@ func buildMessage(from string, opts *SendOptions) ([]byte, error) {
 
 		b.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
 	} else {
+		writeBodyPart(&b, opts, boundary)
+	}
+
+	return []byte(b.String()), nil
+}
+
+// writeBodyPart writes the message body headers and content. With an HTML
+// body it emits a multipart/alternative part (plain text first, HTML second)
+// so clients that render HTML show the formatted version.
+func writeBodyPart(b *strings.Builder, opts *SendOptions, boundary string) {
+	if opts.HTMLBody == "" {
 		b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
 		b.WriteString("\r\n")
 		b.WriteString(opts.Body)
 		b.WriteString("\r\n")
+		return
 	}
 
-	return []byte(b.String()), nil
+	alt := "ALT_" + boundary
+	b.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n", alt))
+	b.WriteString("\r\n")
+	for _, part := range []struct{ mimeType, content string }{
+		{"text/plain", opts.Body},
+		{"text/html", opts.HTMLBody},
+	} {
+		b.WriteString(fmt.Sprintf("--%s\r\n", alt))
+		b.WriteString(fmt.Sprintf("Content-Type: %s; charset=\"utf-8\"\r\n", part.mimeType))
+		b.WriteString("Content-Transfer-Encoding: base64\r\n")
+		b.WriteString("\r\n")
+		encoded := base64.StdEncoding.EncodeToString([]byte(part.content))
+		for i := 0; i < len(encoded); i += 76 {
+			end := i + 76
+			if end > len(encoded) {
+				end = len(encoded)
+			}
+			b.WriteString(encoded[i:end])
+			b.WriteString("\r\n")
+		}
+	}
+	b.WriteString(fmt.Sprintf("--%s--\r\n", alt))
 }
 
 // DraftResult contains the result of saving a draft

@@ -220,10 +220,15 @@ Save an email as a draft in the Drafts folder:
 ```bash
 lark mail draft --to user@example.com --subject "Hello" --body "Hi there"
 lark mail draft --subject "Update" --body-file msg.txt   # --to is optional for drafts
+lark mail draft --subject "Update" --body-file msg.txt --html-file msg.html   # HTML + plain-text fallback
 lark mail draft --to user@example.com --subject "Re: Thread" --body-file msg.txt --attach file.pdf
 ```
 
 Flags are the same as `send`.
+
+Use `--html-file` for formatted emails (tables, bold, lists). Keep a plain-text
+`--body-file` alongside it as the fallback; both go in a multipart/alternative
+message.
 
 ### Edit Draft
 Replace an existing draft by UID while preserving To/Cc/Bcc/Subject by default:
