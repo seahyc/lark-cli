@@ -1,5 +1,5 @@
 ---
-name: sheets
+name: lark-sheets
 description: Read and write Lark Sheets (spreadsheets) - list sheets, read cell data, write values, create spreadsheets, add tabs, apply formatting, resize columns. Use when user asks about a spreadsheet, wants to read/write data in a Lark sheet, or mentions a spreadsheet URL/ID.
 ---
 

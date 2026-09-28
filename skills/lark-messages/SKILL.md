@@ -1,5 +1,5 @@
 ---
-name: messages
+name: lark-messages
 description: Chat and message operations in Lark - send/read/reply/recall/edit messages, react, download resources, and manage groups (create chats, add/remove members, pin/unpin messages, get share links, search messages across chats, forward or merge-forward messages). Use when the user asks about chat messages, conversation history, sending/searching messages, or managing Lark groups.
 ---
 

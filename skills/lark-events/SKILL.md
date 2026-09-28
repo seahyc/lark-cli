@@ -1,5 +1,5 @@
 ---
-name: events
+name: lark-events
 description: Subscribe to real-time Lark events (messages, reactions, calendar, etc.) via long-polling, streamed as NDJSON - use when the user wants to watch live activity, tail events to a file, or build a reactive workflow. Runs until interrupted.
 ---
 

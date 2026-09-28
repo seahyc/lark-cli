@@ -1,5 +1,5 @@
 ---
-name: approval
+name: lark-approval
 description: Manage Lark approval workflows - list pending tasks, view instance details, approve/reject/transfer tasks, cancel instances, cc additional users - use when the user needs to act on approvals from the CLI or automate approval flows.
 ---
 

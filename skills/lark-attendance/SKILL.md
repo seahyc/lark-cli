@@ -1,5 +1,5 @@
 ---
-name: attendance
+name: lark-attendance
 description: Query Lark Attendance check-in records from the CLI - list clock-in/out tasks for the current user or a teammate over a date range - use when you need to see working hours or check-in history without opening the Lark mobile app.
 ---
 

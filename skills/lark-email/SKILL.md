@@ -1,11 +1,11 @@
 ---
-name: email
-description: Read, search, send, reply, and manage emails from Lark Mail via IMAP/SMTP with local caching. Use when user asks about email, inbox, messages, sending, or replying.
+name: lark-email
+description: Read, search, send, reply, schedule, and manage emails from Lark Mail via IMAP/SMTP and the native Lark Mail API. Use when user asks about email, inbox, messages, sending, replying, or delayed delivery.
 ---
 
 # Email Management Skill
 
-Read, search, send, reply, and manage emails from Lark Mail via the `lark` CLI using IMAP/SMTP with local caching.
+Read, search, send, reply, and manage emails from Lark Mail via the `lark` CLI using IMAP/SMTP with local caching. Use Lark's native Mail API for scheduled delivery: Lark owns the queue and delivers the email even when the CLI is no longer running.
 
 ## Setup
 
@@ -165,6 +165,54 @@ Flags:
 - `--references`: Message-ID chain for threading
 
 **Note**: SMTP server is derived from the IMAP host (imap.x.com → smtp.x.com) unless smtp_host/smtp_port are set in mail.json.
+
+### Schedule Email (Native Lark delivery)
+
+Use this when the user explicitly asks to send an email later. Lark owns the
+server-side delivery queue, so it is **not** a local timer. The command
+requires the `mailsend` OAuth scope group once:
+
+```bash
+lark auth login --add --scopes mailsend
+```
+
+Use the review-first flow by default: create the native draft, let the user
+inspect it in Lark Mail, then schedule that exact `draft_id`. Creating a draft
+does not send or schedule it. Before the final `send --confirm` command, show
+the user the exact recipients, subject, body, attachments, account, and
+scheduled time, then obtain explicit approval. Use an ISO 8601 timestamp with
+a timezone offset; Lark requires a time at least five minutes in the future.
+
+```bash
+lark mail schedule draft --to rebecca@example.com --subject "PR reference letter" \
+  --body "Hi Rebecca, attached is the completed support letter." \
+  --attach ./PR_Referee_Letter_YingCongSeah.docx
+
+# After the user has reviewed the native Lark draft and explicitly approved:
+lark mail schedule send <draft-id> --at 2026-09-02T15:00:00+08:00 --confirm
+```
+
+If the user wants revisions after reviewing a native draft, update that same
+draft rather than create a competing copy. It remains unsent and unscheduled:
+
+```bash
+lark mail schedule update <draft-id> --to rebecca@example.com \
+  --subject "PR reference letter" --body "Revised email body" \
+  --attach ./Ying_Cong_Seah_Reference_Letter_for_Rebecca_Li_PR_Application.docx
+```
+
+The draft output includes `draft_id` and `reference`; scheduled-send output
+includes `scheduled_at` and the Unix `send_time`. To cancel before delivery
+(which restores the message to Drafts):
+
+```bash
+lark mail schedule cancel <draft-id>
+```
+
+For a scheduled reply, pass the original message's `MessageID` as
+`--in-reply-to`, and include its Message-ID chain with `--references`. The
+native Lark draft retains those headers, so delivery stays in the email thread.
+Pass those flags to `schedule draft`, not `schedule send`.
 
 ### Save Draft
 Save an email as a draft in the Drafts folder:

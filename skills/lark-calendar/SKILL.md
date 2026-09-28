@@ -1,5 +1,5 @@
 ---
-name: calendar
+name: lark-calendar
 description: Manage Lark calendar - view schedule, create/update/delete events, check availability, find meeting slots, RSVP to invitations. Use when user asks about meetings, schedule, availability, or calendar.
 ---
 

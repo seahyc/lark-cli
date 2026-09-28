@@ -1,5 +1,5 @@
 ---
-name: meetings
+name: lark-meetings
 description: Search Lark video meetings and fetch their notes, transcripts, and recording info - use when the user asks "what did we discuss in yesterday's call", wants a transcript of a meeting, or needs to look up past video meetings by organizer, participant, or meeting number.
 ---
 

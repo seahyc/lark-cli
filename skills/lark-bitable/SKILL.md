@@ -1,5 +1,5 @@
 ---
-name: bitable
+name: lark-bitable
 description: Full CRUD over Lark Bitable (multi-dimensional databases) - create Bitables, manage tables/fields, read/write/search records, and do batch operations. Use when the user wants to query, update, or build structured data stored in Lark Base (Bitable).
 ---
 

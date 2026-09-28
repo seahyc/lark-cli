@@ -1,5 +1,5 @@
 ---
-name: tasks
+name: lark-tasks
 description: Create, update, and manage Lark Tasks - list tasks, view details, create/update tasks with due dates, complete/reopen, assign to people, manage subtasks, add comments, set reminders, and organize into tasklists. Use when the user asks about their todo list or wants to create/update/track tasks in Lark.
 ---
 

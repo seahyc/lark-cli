@@ -1,5 +1,5 @@
 ---
-name: api
+name: lark-api
 description: Execute raw HTTP requests against any Lark Open API endpoint via the `lark api` passthrough - use when you need an endpoint that is not covered by the higher-level skills, want to prototype a new call, or need to upload/download files through the API.
 ---
 
@@ -111,3 +111,163 @@ Raw API is ideal for prototyping. If you find yourself calling the same endpoint
 - Event subscriptions → `lark events`
 
 Use the raw `lark api` when the dedicated command doesn't yet expose what you need.
+
+For a cross-surface lookup, use the public API aggregator before the native
+desktop bridge. It works while Lark Desktop is closed and reports per-surface
+scope errors without discarding other successful results:
+
+```sh
+lark find 'quarterly planning'
+lark find 'incident' --type messages,docs --limit 10
+```
+
+For ordinary public `om_...` messages, prefer the user-token commands; they do
+not require Lark Desktop:
+
+```sh
+lark msg edit --message-id om_xxx --text 'Updated text'       # --as user is default
+lark msg recall om_xxx                                        # --as user is default
+```
+
+These routes cannot address native numeric personal-self-chat message IDs.
+
+## Desktop-only capabilities
+
+When the public API cannot perform a desktop action, check the installed CLI's
+curated native operations before falling back to manual UI work:
+
+```sh
+lark desktop operations       # Typed reads and their inputs
+lark desktop mutations        # Typed writes and their effects
+lark desktop catalog --search SIGNATURE --details  # Research declarations only
+```
+
+The catalog is not executable coverage. Use only registered operations whose
+schema and live verification fit the requested action. Current implementation
+and evidence live in `/Users/yingcong/Code/lark-cli/docs/research/desktop-verification.md`.
+
+A native session uses a temporary, version-pinned patch to the desktop Email
+surface. `lark desktop start` installs it; restart Lark and open Email to load it.
+Use `desktop identity` to check the native account. `desktop restore` restores
+the original archive; restart unloads the in-memory bridge immediately, or its
+30-minute expiry ends it. Do not expose the bridge beyond loopback or export
+session credentials. Reuse existing authorization to patch/restart when given;
+otherwise obtain it before interrupting the desktop.
+
+```sh
+lark desktop run OPERATION --input '{"documentedField":"value"}'
+lark desktop mutate OPERATION --input '{"documentedField":"value"}' # preview
+# Only after reviewing the exact change and its identity:
+lark desktop mutate OPERATION --input '{"documentedField":"value"}' --apply --expect-user NATIVE_USER_ID
+```
+
+Native IDs are not interchangeable with public `oc_`/`om_` IDs. Shortcut channel
+IDs can identify apps such as Knowledge AI, so they are not necessarily chat IDs.
+A resolved native mutation is an acknowledgement; only a matching subsequent
+readback establishes the new state. Do not retry an uncertain write blindly.
+Outbound send/edits/scheduling follow the applicable communication rules. A
+user-authorized bounded test conversation remains authorized until its stopping
+condition; do not ask again for each in-scope test message.
+
+### Native self-chat messaging
+
+Do not treat a public `msg send --to <own open_id> --as user` as proof of personal
+self-chat delivery: on the verified installation it routes into the user's app
+conversation. Use the native self-chat resolver and guarded command instead:
+
+```sh
+lark desktop send-self --text 'Test text' # resolves native self-chat and previews
+lark desktop send-self --text 'Test text' --apply --expect-user NATIVE_USER_ID
+lark desktop run messaging.text-message --input '{"messageId":"NATIVE_MESSAGE_ID"}'
+lark desktop mutate messaging.edit-text --input '{"messageId":"NATIVE_MESSAGE_ID","chatId":"NATIVE_CHAT_ID","expectedText":"Test text","text":"Edited test text"}' --apply --expect-user NATIVE_USER_ID
+```
+
+Self-send uses CREATE_QUASI_MESSAGE followed by SEND_MESSAGE with the same CID.
+Never call SEND_MESSAGE directly with a fabricated CID: the pending local entity
+must exist first. The bridge performs bounded read-only polling for delayed
+readback, never retries the outbound write, and checks owner/chat/current text
+before editing. The plain-text edit path excludes rich messages, mentions, and
+attachments.
+
+The verified self-chat surface also supports styled text posts, guarded recall,
+and far-future plain-text scheduling. Inspect the operation schema before
+constructing JSON; POST payloads are normalized JSON strings and support only a
+title plus styled text runs (bold, italic, and underline).
+
+```sh
+lark desktop mutate messaging.send-self-post --input '{...}'
+lark desktop run messaging.post-message --input '{"messageId":"NATIVE_MESSAGE_ID"}'
+lark desktop mutate messaging.edit-post --input '{...}'
+lark desktop mutate messaging.recall-self-text --input '{...}'
+
+lark desktop schedule-self --text 'Scheduled test' --at 'RFC3339_TIME'
+lark desktop scheduled-self
+lark desktop cancel-scheduled-self NATIVE_MESSAGE_ID
+```
+
+All mutations preview by default. Apply with `--apply --expect-user
+NATIVE_USER_ID`, then use the corresponding read to prove the result. A
+scheduled-message acknowledgement is not delivery proof; for fixture tests,
+read the pending item back and cancel it before it becomes due.
+
+### Favorites and self-chat mute state
+
+Favorites and notification state are covered for tightly scoped self-chat
+fixtures:
+
+```sh
+lark desktop run messaging.favorites --input '{"count":15,"time":0}'
+lark desktop mutate triage.favorite-add --input '{"messageId":"NATIVE_MESSAGE_ID","chatId":"NATIVE_CHAT_ID"}'
+lark desktop mutate triage.favorite-delete --input '{"favoriteId":"NATIVE_FAVORITE_ID"}'
+
+lark desktop run inbox.chat-mute-state --input '{"chatId":"NATIVE_CHAT_ID"}'
+lark desktop mutate inbox.set-self-chat-mute --input '{...}'
+```
+
+For Favorites, diff the before/after list to identify only the fixture created
+by the test, and delete only that Favorite. For mute tests, capture the original
+state, apply the requested state, read it back, restore the original value, and
+read it back again.
+
+### Recipient-free mail fixtures
+
+The native bridge can create, inspect, update, and delete recipient-free draft
+fixtures, plus create/update/delete a temporary plain-text signature:
+
+```sh
+lark desktop mutate mailnext.draft-fixture-create --input '{...}'
+lark desktop run mailnext.draft-fixture-metadata --input '{"draftId":"NATIVE_DRAFT_ID"}'
+lark desktop mutate mailnext.draft-fixture-update --input '{...}'
+lark desktop mutate mailnext.draft-fixture-delete --input '{...}'
+
+lark desktop mutate mail.signature-create-text --input '{...}'
+lark desktop mutate mailnext.signature-fixture-update-text --input '{...}'
+lark desktop mutate mail.signature-delete --input '{...}'
+```
+
+These are fixture operations, not general mail composition. Drafts exclude
+recipients and attachments. Signature update/delete require the exact current
+fixture snapshot. Always delete the temporary object and verify its absence.
+
+### Desktop state reads
+
+The curated registry includes bounded reads that the public CLI did not expose:
+
+```sh
+lark desktop run workspacenext.navigation-layout --input '{}'
+lark desktop run workspacenext.device-notify-preferences --input '{}'
+lark desktop run workspacenext.time-format-preference --input '{}'
+lark desktop run workspacenext.calendar-resource-equipments --input '{}'
+```
+
+Treat `verification: schema-verified` as protocol evidence, not proof that the
+operation succeeded on the current client/account. Check the live-status notes
+in `docs/research/desktop-verification.md`. In particular, do not use
+`workspacenext.modify-navigation-order` until the navigation app-type mapping is
+live-verified; a full-order write can corrupt the user's layout.
+
+Registry counts are discovery metadata, not a parity claim. Enumerate the
+installed version with `desktop operations` and `desktop mutations`. Consult
+`/Users/yingcong/Code/lark-cli/docs/research/desktop-cli-gap.md` for remaining
+desktop gaps and `/Users/yingcong/Code/lark-cli/docs/desktop-bridge.md` for the
+session and threat model.
