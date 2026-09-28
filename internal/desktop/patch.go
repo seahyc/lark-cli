@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,7 +30,66 @@ type Session struct {
 
 func SessionDir() (string, error) {
 	d, e := os.UserCacheDir()
-	return filepath.Join(d, "lark-cli", "desktop"), e
+	if e != nil {
+		return "", e
+	}
+	sessionDir := filepath.Join(d, "lark-cli", "desktop")
+	if os.Getenv("SUDO_USER") != "" && os.Geteuid() == 0 {
+		originalUser := os.Getenv("SUDO_USER")
+		usr, e := user.Lookup(originalUser)
+		if e != nil {
+			return "", fmt.Errorf("cannot resolve SUDO_USER %s: %w", originalUser, e)
+		}
+		sessionDir = filepath.Join(usr.HomeDir, ".cache", "lark-cli", "desktop")
+	}
+	return sessionDir, nil
+}
+
+func chownToSudoUser(path string) error {
+	return chownToSudoUserFunc(path)
+}
+
+var chownToSudoUserFunc = func(path string) error {
+	sudoUser := os.Getenv("SUDO_USER")
+	if sudoUser == "" || os.Geteuid() != 0 {
+		return nil
+	}
+	usr, e := user.Lookup(sudoUser)
+	if e != nil {
+		return fmt.Errorf("cannot resolve SUDO_USER %s: %w", sudoUser, e)
+	}
+	uid, _ := strconv.Atoi(usr.Uid)
+	gid, _ := strconv.Atoi(usr.Gid)
+	return os.Chown(path, uid, gid)
+}
+
+var userLookupFunc = user.Lookup
+var getEuidFunc = os.Geteuid
+
+func chownDirTree(targetDir string, chownFn func(string) error) error {
+	if os.Getenv("SUDO_USER") == "" || getEuidFunc() != 0 {
+		return nil
+	}
+	usr, e := userLookupFunc(os.Getenv("SUDO_USER"))
+	if e != nil {
+		return e
+	}
+	homeDir := usr.HomeDir
+	if !strings.HasPrefix(targetDir, homeDir) {
+		return nil
+	}
+	parts := strings.Split(strings.TrimPrefix(targetDir, homeDir+string(filepath.Separator)), string(filepath.Separator))
+	current := homeDir
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		if e := chownFn(current); e != nil && !os.IsNotExist(e) {
+			return e
+		}
+	}
+	return nil
 }
 func ReadSession() (Session, error) {
 	var s Session
@@ -45,9 +105,14 @@ func ReadSession() (Session, error) {
 	return s, e
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+func ComputeHash(b []byte) string { return digest(b) }
 func atomicWrite(path string, b []byte, mode os.FileMode) error {
-	f, e := os.CreateTemp(filepath.Dir(path), ".lark-cli-*")
+	dir := filepath.Dir(path)
+	f, e := os.CreateTemp(dir, ".lark-cli-*")
 	if e != nil {
+		if os.IsPermission(e) {
+			return fmt.Errorf("cannot write to %s (permission denied); on Linux, run with sudo to patch system-owned Lark files, or set LARK_APP_DIR to a user-writable location: %w", dir, e)
+		}
 		return e
 	}
 	name := f.Name()
@@ -82,6 +147,8 @@ func patchASAR(b []byte, script string) ([]byte, error) {
 		return nil, e
 	}
 	node := header
+	// Only patches en-US.html; other locales remain unpatched.
+	// Users must use English locale to access the bridge.
 	for _, key := range []string{"mail", "en-US.html"} {
 		files, ok := node["files"].(map[string]interface{})
 		if !ok {
@@ -135,26 +202,29 @@ func InstallSession(port int) (Session, error) {
 	if e = os.MkdirAll(d, 0700); e != nil {
 		return s, e
 	}
+	if e = chownDirTree(d, chownToSudoUser); e != nil {
+		return s, fmt.Errorf("chown session dir tree: %w", e)
+	}
 	if _, e = os.Stat(filepath.Join(d, "session.json")); !os.IsNotExist(e) {
 		return s, fmt.Errorf("session exists; restore it first")
 	}
-	path, e := filepath.EvalSymlinks("/Applications/LarkSuite.app/Contents/Frameworks/Lark Framework.framework/Versions/Current/Resources/webcontent/mail.asar")
+	platform, e := DetectPlatform()
 	if e != nil {
 		return s, e
 	}
-	original, e := os.ReadFile(path)
+	original, e := os.ReadFile(platform.AsarPath)
 	if e != nil {
 		return s, e
 	}
-	// Fail closed after a Lark update until its native protocol is revalidated.
-	if digest(original) != "fd2d495a7d8f4da81334a3695cdc996060aa16f7c20cd529d2c53c683e2f5c8c" {
-		return s, fmt.Errorf("unsupported Lark mail archive; revalidate the native protocol before patching this version")
+	hash := digest(original)
+	if e = ValidateAsarHash(hash, platform.AllowedHashes); e != nil {
+		return s, e
 	}
 	nonce := make([]byte, 32)
 	if _, e = rand.Read(nonce); e != nil {
 		return s, e
 	}
-	s = Session{Port: port, Token: hex.EncodeToString(nonce), ExpiresAt: time.Now().Add(30 * time.Minute).UnixMilli(), Archive: path, OriginalHash: digest(original)}
+	s = Session{Port: port, Token: hex.EncodeToString(nonce), ExpiresAt: time.Now().Add(30 * time.Minute).UnixMilli(), Archive: platform.AsarPath, OriginalHash: hash}
 	cfg, _ := json.Marshal(s)
 	modules, e := moduleJavaScript()
 	if e != nil {
@@ -172,27 +242,46 @@ func InstallSession(port int) (Session, error) {
 		return s, e
 	}
 	s.PatchedHash = digest(patched)
-	if e = atomicWrite(filepath.Join(d, "mail.asar.original"), original, 0600); e != nil {
+	originalPath := filepath.Join(d, "mail.asar.original")
+	if e = atomicWrite(originalPath, original, 0600); e != nil {
 		return s, e
+	}
+	if e = chownToSudoUser(originalPath); e != nil {
+		return s, fmt.Errorf("chown backup: %w", e)
 	}
 	cfg, _ = json.Marshal(s)
-	if e = atomicWrite(filepath.Join(d, "session.json"), cfg, 0600); e != nil {
+	sessionPath := filepath.Join(d, "session.json")
+	if e = atomicWrite(sessionPath, cfg, 0600); e != nil {
+		_ = os.Remove(originalPath)
 		return s, e
 	}
-	e = atomicWrite(path, patched, 0644)
+	if e = chownToSudoUser(sessionPath); e != nil {
+		_ = os.Remove(originalPath)
+		_ = os.Remove(sessionPath)
+		return s, fmt.Errorf("chown session: %w", e)
+	}
+	e = atomicWrite(platform.AsarPath, patched, 0644)
 	if e != nil {
-		_ = os.Remove(filepath.Join(d, "session.json"))
+		_ = os.Remove(sessionPath)
+		_ = os.Remove(originalPath)
 	}
 	return s, e
 }
 func RestoreSession() error {
 	s, e := ReadSession()
 	if e != nil {
+		if os.IsPermission(e) && os.Getenv("SUDO_USER") != "" {
+			return fmt.Errorf("session files are owned by root; run with sudo: %w", e)
+		}
 		return e
 	}
 	d, _ := SessionDir()
-	original, e := os.ReadFile(filepath.Join(d, "mail.asar.original"))
+	originalPath := filepath.Join(d, "mail.asar.original")
+	original, e := os.ReadFile(originalPath)
 	if e != nil {
+		if os.IsPermission(e) && os.Getenv("SUDO_USER") != "" {
+			return fmt.Errorf("backup file is owned by root; run with sudo: %w", e)
+		}
 		return e
 	}
 	if digest(original) != s.OriginalHash {
@@ -211,5 +300,9 @@ func RestoreSession() error {
 			return e
 		}
 	}
-	return os.Remove(filepath.Join(d, "session.json"))
+	sessionPath := filepath.Join(d, "session.json")
+	if e = os.Remove(sessionPath); e != nil {
+		return e
+	}
+	return os.Remove(originalPath)
 }
