@@ -1,7 +1,6 @@
 package desktop
 
 import (
-	"runtime"
 	"testing"
 )
 
@@ -22,67 +21,6 @@ func TestDetectPlatform(t *testing.T) {
 	}
 	if len(platform.LauncherPaths) == 0 {
 		t.Error("Expected at least one launcher path")
-	}
-}
-
-func TestIsMailTarget(t *testing.T) {
-	tests := []struct {
-		name     string
-		url      string
-		expected bool
-		goos     string
-	}{
-		{
-			name:     "macOS mail path",
-			url:      "file:///Applications/LarkSuite.app/Contents/Frameworks/Lark Framework.framework/Versions/A/Resources/webcontent/mail/mail/index.html",
-			expected: runtime.GOOS == "darwin",
-			goos:     "darwin",
-		},
-		{
-			name:     "macOS AutoFilterDialog path",
-			url:      "file:///Applications/LarkSuite.app/Contents/Resources/webcontent/mail/AutoFilterDialog/index.html",
-			expected: runtime.GOOS == "darwin",
-			goos:     "darwin",
-		},
-		{
-			name:     "Linux mail path",
-			url:      "file:///opt/bytedance/lark/webcontent/mail/mail/index.html",
-			expected: runtime.GOOS == "linux",
-			goos:     "linux",
-		},
-		{
-			name:     "Linux AutoFilterDialog path",
-			url:      "file:///opt/bytedance/lark/webcontent/mail/AutoFilterDialog/index.html",
-			expected: runtime.GOOS == "linux",
-			goos:     "linux",
-		},
-		{
-			name:     "wrong scheme",
-			url:      "https://example.com/mail/index.html",
-			expected: false,
-		},
-		{
-			name:     "wrong path",
-			url:      "file:///random/path/index.html",
-			expected: false,
-		},
-		{
-			name:     "empty url",
-			url:      "",
-			expected: false,
-		},
-	}
-	
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.goos != "" && tt.goos != runtime.GOOS {
-				t.Skipf("Test is for %s, running on %s", tt.goos, runtime.GOOS)
-			}
-			result := IsMailTarget(tt.url)
-			if result != tt.expected {
-				t.Errorf("IsMailTarget(%q) = %v, expected %v", tt.url, result, tt.expected)
-			}
-		})
 	}
 }
 

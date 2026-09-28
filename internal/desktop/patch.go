@@ -58,6 +58,32 @@ func chownToSudoUser(path string) error {
 	gid, _ := strconv.Atoi(usr.Gid)
 	return os.Chown(path, uid, gid)
 }
+
+func chownDirTree(targetDir string, chownFn func(string) error) error {
+	if os.Getenv("SUDO_USER") == "" || os.Geteuid() != 0 {
+		return nil
+	}
+	usr, e := user.Lookup(os.Getenv("SUDO_USER"))
+	if e != nil {
+		return e
+	}
+	homeDir := usr.HomeDir
+	if !strings.HasPrefix(targetDir, homeDir) {
+		return nil
+	}
+	parts := strings.Split(strings.TrimPrefix(targetDir, homeDir+string(filepath.Separator)), string(filepath.Separator))
+	current := homeDir
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		if e := chownFn(current); e != nil && !os.IsNotExist(e) {
+			return e
+		}
+	}
+	return nil
+}
 func ReadSession() (Session, error) {
 	var s Session
 	d, e := SessionDir()
@@ -169,8 +195,8 @@ func InstallSession(port int) (Session, error) {
 	if e = os.MkdirAll(d, 0700); e != nil {
 		return s, e
 	}
-	if e = chownToSudoUser(d); e != nil {
-		return s, fmt.Errorf("chown session dir: %w", e)
+	if e = chownDirTree(d, chownToSudoUser); e != nil {
+		return s, fmt.Errorf("chown session dir tree: %w", e)
 	}
 	if _, e = os.Stat(filepath.Join(d, "session.json")); !os.IsNotExist(e) {
 		return s, fmt.Errorf("session exists; restore it first")
@@ -219,14 +245,18 @@ func InstallSession(port int) (Session, error) {
 	cfg, _ = json.Marshal(s)
 	sessionPath := filepath.Join(d, "session.json")
 	if e = atomicWrite(sessionPath, cfg, 0600); e != nil {
+		_ = os.Remove(originalPath)
 		return s, e
 	}
 	if e = chownToSudoUser(sessionPath); e != nil {
+		_ = os.Remove(originalPath)
+		_ = os.Remove(sessionPath)
 		return s, fmt.Errorf("chown session: %w", e)
 	}
 	e = atomicWrite(platform.AsarPath, patched, 0644)
 	if e != nil {
-		_ = os.Remove(filepath.Join(d, "session.json"))
+		_ = os.Remove(sessionPath)
+		_ = os.Remove(originalPath)
 	}
 	return s, e
 }

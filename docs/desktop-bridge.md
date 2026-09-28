@@ -63,6 +63,8 @@ lark desktop mutations
 
 **Note for Linux**: The `/opt/bytedance/lark` directory is typically owned by root. The `lark desktop start` command requires elevated permissions to patch the mail.asar file. Use `sudo -E` to preserve the `LARK_LINUX_ALLOW_UNTRUSTED_ASAR` environment variable. Session files will be stored in your user's cache directory even when using sudo.
 
+**Locale limitation**: Only the English (en-US) mail interface is patched. Users must set Lark to English locale to use the desktop bridge. Other locales remain unpatched.
+
 **Security warning**: Setting `LARK_LINUX_ALLOW_UNTRUSTED_ASAR=1` bypasses hash validation. The Linux Lark 7.72.23 native protocol has not been fully revalidated. Use at your own risk for development/testing only.
 
 ### General

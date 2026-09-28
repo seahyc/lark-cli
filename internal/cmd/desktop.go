@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -108,16 +109,20 @@ func init() {
 			return e
 		}
 		oldRecipients, _ := ruleData["forwardToEmailAddressList"].([]interface{})
-		oldEmails := make([]string, 0, len(oldRecipients))
+		oldEmails := make(map[string]bool)
 		for _, r := range oldRecipients {
 			if email, ok := r.(string); ok {
-				oldEmails = append(oldEmails, email)
+				oldEmails[strings.ToLower(email)] = true
 			}
 		}
-		changed := len(oldEmails) != len(recipients)
+		newEmails := make(map[string]bool)
+		for _, email := range recipients {
+			newEmails[strings.ToLower(email)] = true
+		}
+		changed := len(oldEmails) != len(newEmails)
 		if !changed {
-			for i, email := range recipients {
-				if i >= len(oldEmails) || oldEmails[i] != email {
+			for email := range newEmails {
+				if !oldEmails[email] {
 					changed = true
 					break
 				}

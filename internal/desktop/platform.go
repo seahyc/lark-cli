@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 type PlatformConfig struct {
@@ -85,28 +84,6 @@ func detectLinux() (*PlatformConfig, error) {
 		},
 		UserDataDir: filepath.Join(home, ".config/LarkInternational"),
 	}, nil
-}
-
-func IsMailTarget(targetURL string) bool {
-	u := targetURL
-	if !strings.HasPrefix(u, "file://") {
-		return false
-	}
-	
-	path := strings.TrimPrefix(u, "file://")
-	
-	switch runtime.GOOS {
-	case "darwin":
-		return strings.HasPrefix(path, "/Applications/LarkSuite.app/Contents/") &&
-			(strings.Contains(path, "/webcontent/mail/mail/") || 
-			 strings.Contains(path, "/webcontent/mail/AutoFilterDialog/"))
-	case "linux":
-		return strings.HasPrefix(path, "/opt/bytedance/lark/") &&
-			(strings.Contains(path, "/webcontent/mail/mail/") || 
-			 strings.Contains(path, "/webcontent/mail/AutoFilterDialog/"))
-	default:
-		return false
-	}
 }
 
 func ValidateAsarHash(hash string, allowedHashes []string) error {
