@@ -13,6 +13,11 @@ const (
 	remoteSearchMaxTextLength = 256
 	remoteSearchDefaultLimit  = 50
 	remoteSearchMaxLimit      = 100
+	// Lark's IMAP server ignores HEADER criteria (alone it matches nothing; combined
+	// with dates it is silently dropped), so From/Subject are matched client-side
+	// over envelopes of the newest server-side candidates, capped by this scan size.
+	remoteSearchMaxHeaderScan = 2000
+	remoteSearchFetchBatch    = 200
 )
 
 // RemoteSearchOptions is a deliberately small subset of standard IMAP SEARCH.
@@ -36,6 +41,13 @@ type RemoteSearchResult struct {
 	Results          []CachedEnvelope `json:"results"`
 	Count            int              `json:"count"`
 	ResultsTruncated bool             `json:"results_truncated"`
+	// HeaderFilter is "client" when --from/--subject were applied locally.
+	HeaderFilter string `json:"header_filter,omitempty"`
+	// Scanned counts envelopes inspected by the client-side header filter.
+	Scanned int `json:"scanned,omitempty"`
+	// ScanLimited is true when the header scan stopped at its cap before
+	// exhausting the server-side candidates; narrow with --since/--before.
+	ScanLimited bool `json:"scan_limited,omitempty"`
 }
 
 // ParseRemoteSearchOptions validates bounded CLI-style IMAP SEARCH inputs.
@@ -91,12 +103,6 @@ func remoteSearchCriteria(opts *RemoteSearchOptions) (*imap.SearchCriteria, erro
 		return nil, fmt.Errorf("remote search requires a text or date constraint")
 	}
 	criteria := &imap.SearchCriteria{}
-	if opts.From != "" {
-		criteria.Header = append(criteria.Header, imap.SearchCriteriaHeaderField{Key: "From", Value: opts.From})
-	}
-	if opts.Subject != "" {
-		criteria.Header = append(criteria.Header, imap.SearchCriteriaHeaderField{Key: "Subject", Value: opts.Subject})
-	}
 	if opts.Body != "" {
 		criteria.Body = append(criteria.Body, opts.Body)
 	}
@@ -107,6 +113,21 @@ func remoteSearchCriteria(opts *RemoteSearchOptions) (*imap.SearchCriteria, erro
 		criteria.SentBefore = *opts.Before
 	}
 	return criteria, nil
+}
+
+// matchesHeaders applies the From/Subject substring filters case-insensitively.
+// From matches either the address or the display name.
+func matchesHeaders(opts *RemoteSearchOptions, fromAddr, fromName, subject string) bool {
+	if opts.From != "" {
+		needle := strings.ToLower(opts.From)
+		if !strings.Contains(strings.ToLower(fromAddr), needle) && !strings.Contains(strings.ToLower(fromName), needle) {
+			return false
+		}
+	}
+	if opts.Subject != "" && !strings.Contains(strings.ToLower(subject), strings.ToLower(opts.Subject)) {
+		return false
+	}
+	return true
 }
 
 func newestUIDs(uids []imap.UID, limit int) []imap.UID {
@@ -151,28 +172,58 @@ func RemoteSearch(mailbox string, opts *RemoteSearchOptions) (*RemoteSearchResul
 		return nil, fmt.Errorf("searching IMAP mailbox: %w", err)
 	}
 	allUIDs := data.AllUIDs()
-	selected := newestUIDs(allUIDs, opts.Limit)
-	envelopes, err := client.FetchEnvelopesByUID(selected)
-	if err != nil {
-		return nil, err
+	headerFilter := opts.From != "" || opts.Subject != ""
+	var candidates []imap.UID
+	if headerFilter {
+		candidates = newestUIDs(allUIDs, remoteSearchMaxHeaderScan)
+	} else {
+		candidates = newestUIDs(allUIDs, opts.Limit)
 	}
-	sort.Slice(envelopes, func(i, j int) bool { return envelopes[i].Date > envelopes[j].Date })
-	results := make([]CachedEnvelope, 0, len(envelopes))
-	for _, envelope := range envelopes {
-		results = append(results, CachedEnvelope{
-			UID:       uint32(envelope.UID),
-			MessageID: envelope.MessageID,
-			Date:      time.Unix(envelope.Date, 0),
-			FromAddr:  envelope.FromAddr,
-			FromName:  envelope.FromName,
-			Subject:   envelope.Subject,
-		})
+
+	results := make([]CachedEnvelope, 0, opts.Limit)
+	scanned := 0
+	for start := 0; start < len(candidates) && len(results) < opts.Limit; start += remoteSearchFetchBatch {
+		end := start + remoteSearchFetchBatch
+		if end > len(candidates) {
+			end = len(candidates)
+		}
+		envelopes, err := client.FetchEnvelopesByUID(candidates[start:end])
+		if err != nil {
+			return nil, err
+		}
+		scanned += len(envelopes)
+		sort.Slice(envelopes, func(i, j int) bool { return envelopes[i].Date > envelopes[j].Date })
+		for _, envelope := range envelopes {
+			if headerFilter && !matchesHeaders(opts, envelope.FromAddr, envelope.FromName, envelope.Subject) {
+				continue
+			}
+			results = append(results, CachedEnvelope{
+				UID:       uint32(envelope.UID),
+				MessageID: envelope.MessageID,
+				Date:      time.Unix(envelope.Date, 0),
+				FromAddr:  envelope.FromAddr,
+				FromName:  envelope.FromName,
+				Subject:   envelope.Subject,
+			})
+			if len(results) == opts.Limit {
+				break
+			}
+		}
 	}
-	return &RemoteSearchResult{
-		Mailbox:          mailbox,
-		MatchedUIDs:      len(allUIDs),
-		Results:          results,
-		Count:            len(results),
-		ResultsTruncated: len(allUIDs) > len(selected),
-	}, nil
+	sort.Slice(results, func(i, j int) bool { return results[i].Date.After(results[j].Date) })
+	result := &RemoteSearchResult{
+		Mailbox:     mailbox,
+		MatchedUIDs: len(allUIDs),
+		Results:     results,
+		Count:       len(results),
+	}
+	if headerFilter {
+		result.HeaderFilter = "client"
+		result.Scanned = scanned
+		result.ScanLimited = len(allUIDs) > len(candidates) && len(results) < opts.Limit
+		result.ResultsTruncated = len(results) == opts.Limit
+	} else {
+		result.ResultsTruncated = len(allUIDs) > len(candidates)
+	}
+	return result, nil
 }

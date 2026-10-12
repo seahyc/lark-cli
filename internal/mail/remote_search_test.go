@@ -36,8 +36,9 @@ func TestRemoteSearchCriteriaUsesServerSideFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(criteria.Header) != 2 || criteria.Header[0] != (imap.SearchCriteriaHeaderField{Key: "From", Value: "a@example.test"}) || criteria.Header[1] != (imap.SearchCriteriaHeaderField{Key: "Subject", Value: "report"}) {
-		t.Fatalf("unexpected headers: %#v", criteria.Header)
+	// Lark IMAP ignores HEADER criteria, so From/Subject must not be sent to the server.
+	if len(criteria.Header) != 0 {
+		t.Fatalf("header criteria must be applied client-side, got: %#v", criteria.Header)
 	}
 	if len(criteria.Body) != 1 || criteria.Body[0] != "needle" || !criteria.SentSince.Equal(since) || !criteria.SentBefore.Equal(before) {
 		t.Fatalf("unexpected criteria: %#v", criteria)
@@ -54,5 +55,21 @@ func TestNewestUIDsCapsBeforeEnvelopeFetch(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %#v, want %#v", got, want)
 		}
+	}
+}
+
+func TestMatchesHeadersIsCaseInsensitiveSubstring(t *testing.T) {
+	opts := &RemoteSearchOptions{From: "LinkedIn", Subject: "data archive"}
+	if !matchesHeaders(opts, "security-noreply@linkedin.com", "LinkedIn", "Your LinkedIn Data Archive is ready") {
+		t.Fatal("expected match on address/name and subject")
+	}
+	if matchesHeaders(opts, "hello@ghost.org", "Ghost", "Your LinkedIn data archive") {
+		t.Fatal("from filter must reject a non-matching sender")
+	}
+	if !matchesHeaders(&RemoteSearchOptions{From: "ocbc"}, "noreply@notify.ocbc.com", "OCBC Bank", "Card Transaction Alert") {
+		t.Fatal("expected from-only match")
+	}
+	if matchesHeaders(&RemoteSearchOptions{Subject: "invoice"}, "a@b.c", "A", "Card Transaction Alert") {
+		t.Fatal("subject filter must reject a non-matching subject")
 	}
 }
