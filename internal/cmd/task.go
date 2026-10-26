@@ -125,12 +125,16 @@ Examples:
 // taskToOutput converts a Task to OutputTask
 func taskToOutput(t api.Task) api.OutputTask {
 	out := api.OutputTask{
-		GUID:        t.GUID,
-		Summary:     t.Summary,
-		Description: t.Description,
-		Status:      taskStatusToString(t.Status),
-		CompletedAt: t.CompletedAt,
-		CreatedAt:   t.CreatedAt,
+		TaskID:         t.TaskID,
+		URL:            t.URL,
+		ParentTaskGUID: t.ParentTaskGUID,
+		Tasklists:      t.Tasklists,
+		GUID:           t.GUID,
+		Summary:        t.Summary,
+		Description:    t.Description,
+		Status:         taskStatusToString(t.Status),
+		CompletedAt:    t.CompletedAt,
+		CreatedAt:      t.CreatedAt,
 	}
 
 	if t.Due != nil {

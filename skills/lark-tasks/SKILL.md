@@ -69,6 +69,27 @@ lark task tasklist add <tasklist-guid> --task-guid <task-guid>
 
 ## Commands Reference
 
+### Search Tasks
+
+```bash
+lark task search "application limit"
+lark task +search --query "t145000" --page-all
+lark task search "source URL" --completed=false
+lark task search --assignee ou_xxx --page-limit 10
+```
+
+Searches tasks visible to the authenticated user through the Task v2 search
+API. The `+search` alias supports Iris task resolution. Search hits include
+`id`, `display_info`, and `meta_data`; use `task get <id>` or the API passthrough
+to confirm the full record before selecting it. Search relevance is not proof
+that a task covers the requested work.
+
+The default reads one page. `--page-all` reads up to 40 pages; `--page-limit`
+sets a smaller bound. Output preserves `has_more` and `page_token` for resuming.
+`--completed` is optional: omitted matches either state, while explicit true or
+false filters completed or incomplete tasks. `--creator`, `--assignee`, and
+`--follower` accept comma-separated open IDs. A query or filter is required.
+
 ### List Tasks
 
 ```bash

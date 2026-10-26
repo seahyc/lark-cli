@@ -774,7 +774,7 @@ type DeleteBlocksResponse struct {
 // UpdateBlockRequest is the request body for PATCH /docx/v1/documents/{id}/blocks/{block_id}
 // The Lark API uses update_text_elements for ALL text-based block types (text, headings, bullet, etc.)
 type UpdateBlockRequest struct {
-	UpdateTextElements *TextBlock          `json:"update_text_elements,omitempty"`
+	UpdateTextElements *TextBlock           `json:"update_text_elements,omitempty"`
 	ReplaceImage       *ReplaceImageRequest `json:"replace_image,omitempty"`
 }
 
@@ -2107,18 +2107,22 @@ type OutputSheetAddTab struct {
 
 // Task represents a Lark task
 type Task struct {
-	GUID        string       `json:"guid,omitempty"`
-	Summary     string       `json:"summary,omitempty"`
-	Description string       `json:"description,omitempty"`
-	Due         *TaskDue     `json:"due,omitempty"`
-	Creator     *TaskMember  `json:"creator,omitempty"`
-	Members     []TaskMember `json:"members,omitempty"`
-	CompletedAt string       `json:"completed_at,omitempty"`
-	CreatedAt   string       `json:"created_at,omitempty"`
-	UpdatedAt   string       `json:"updated_at,omitempty"`
-	Status      string       `json:"status,omitempty"`
-	Mode        int          `json:"mode,omitempty"`
-	Source      int          `json:"source,omitempty"`
+	TaskID         string               `json:"task_id,omitempty"`
+	URL            string               `json:"url,omitempty"`
+	ParentTaskGUID string               `json:"parent_task_guid,omitempty"`
+	Tasklists      []TasklistMembership `json:"tasklists,omitempty"`
+	GUID           string               `json:"guid,omitempty"`
+	Summary        string               `json:"summary,omitempty"`
+	Description    string               `json:"description,omitempty"`
+	Due            *TaskDue             `json:"due,omitempty"`
+	Creator        *TaskMember          `json:"creator,omitempty"`
+	Members        []TaskMember         `json:"members,omitempty"`
+	CompletedAt    string               `json:"completed_at,omitempty"`
+	CreatedAt      string               `json:"created_at,omitempty"`
+	UpdatedAt      string               `json:"updated_at,omitempty"`
+	Status         string               `json:"status,omitempty"`
+	Mode           int                  `json:"mode,omitempty"`
+	Source         int                  `json:"source,omitempty"`
 }
 
 // TaskDue represents a task due date
@@ -2164,16 +2168,20 @@ type OutputTaskList struct {
 
 // OutputTask is the simplified task format for CLI output
 type OutputTask struct {
-	GUID        string `json:"guid"`
-	Summary     string `json:"summary"`
-	Description string `json:"description,omitempty"`
-	DueDate     string `json:"due_date,omitempty"`
-	IsAllDay    bool   `json:"is_all_day,omitempty"`
-	Status      string `json:"status"`
-	CreatorID   string `json:"creator_id,omitempty"`
-	CreatorName string `json:"creator_name,omitempty"`
-	CompletedAt string `json:"completed_at,omitempty"`
-	CreatedAt   string `json:"created_at,omitempty"`
+	TaskID         string               `json:"task_id,omitempty"`
+	URL            string               `json:"url,omitempty"`
+	ParentTaskGUID string               `json:"parent_task_guid,omitempty"`
+	Tasklists      []TasklistMembership `json:"tasklists,omitempty"`
+	GUID           string               `json:"guid"`
+	Summary        string               `json:"summary"`
+	Description    string               `json:"description,omitempty"`
+	DueDate        string               `json:"due_date,omitempty"`
+	IsAllDay       bool                 `json:"is_all_day,omitempty"`
+	Status         string               `json:"status"`
+	CreatorID      string               `json:"creator_id,omitempty"`
+	CreatorName    string               `json:"creator_name,omitempty"`
+	CompletedAt    string               `json:"completed_at,omitempty"`
+	CreatedAt      string               `json:"created_at,omitempty"`
 }
 
 // --- Drive Upload Types ---
