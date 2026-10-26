@@ -444,8 +444,7 @@ Examples:
 		} else {
 			result["chat_id"] = ""
 			result["send_command"] = "lark msg send --to " + openID + ` --text "..."`
-			result["hint"] = "No P2P chat_id known (not cached, no recent activity). Lark only returns a 1:1 chat_id when you send a message (which notifies the person). " +
-				"Send via the command above and reuse the chat_id from the response; it will then be cached for read-only access."
+			result["hint"] = "No verified P2P chat_id found. Search a phrase from the conversation with `lark msg search`, then retry; verified DM results are cached. No message was sent."
 		}
 		output.JSON(result)
 	},

@@ -161,9 +161,9 @@ Examples:
 					"name":    user.Name,
 				},
 				"chat_id": "",
-				"message": "No P2P chat_id is known for this person (not in the local DM cache, and no recent activity surfaced one). " +
-					"Lark exposes no read-only way to obtain a 1:1 chat_id from an open_id — it is only returned when you send a message (which notifies them). " +
-					"To read this DM, run with --reply to send + read in one step, or `lark msg send --to " + user.OpenID + " --as user --text \"…\"` and reuse the chat_id from the response.",
+				"message": "No verified P2P chat_id was found in the cache or the bounded discovery scan. " +
+					"Search for a phrase from this conversation with `lark msg search`; verified DM results are cached for the next `lark dm` read. " +
+					"You can also read a known chat_id with `lark msg history --chat-id oc_...`. No message was sent.",
 				"open_id":      user.OpenID,
 				"send_command": "lark dm " + user.OpenID + ` --reply "…"`,
 			})

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yjwong/lark-cli/internal/api"
+	"github.com/yjwong/lark-cli/internal/config"
 	"github.com/yjwong/lark-cli/internal/output"
 )
 
@@ -32,6 +33,25 @@ func filterSearchResults(results []api.SearchMessageResult, senderID, chatID str
 		out = append(out, r)
 	}
 	return out, true
+}
+
+// Remember search-discovered DMs only after checking actual chat membership.
+func rememberSearchDMs(results []api.SearchMessageResult, counterpart func(string) (string, string), remember func(string, string, string) error) {
+	seen := make(map[string]bool)
+	for _, result := range results {
+		meta := result.MetaData
+		if meta == nil || !meta.IsP2PChat || meta.ChatID == "" || seen[meta.ChatID] {
+			continue
+		}
+		if len(seen) >= 12 {
+			break
+		}
+		seen[meta.ChatID] = true
+		id, name := counterpart(meta.ChatID)
+		if id != "" {
+			_ = remember(id, name, meta.ChatID)
+		}
+	}
 }
 
 // --- msg search ---
@@ -109,6 +129,10 @@ Examples:
 		if msgSearchLimit > 0 && len(allMessages) > msgSearchLimit {
 			allMessages = allMessages[:msgSearchLimit]
 		}
+
+		rememberSearchDMs(allMessages, func(cid string) (string, string) {
+			return counterpartOfP2PChat(client, cid)
+		}, config.RememberVerifiedDMChat)
 
 		if output.Format == output.FormatText {
 			resolver := newNameResolver(client)
