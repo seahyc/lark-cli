@@ -145,12 +145,109 @@ func systemDefaultLinkBrowser(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("cannot detect system default browser on this platform; select --browser explicitly")
 }
 
-func linkWorkspaceOrigin(raw string) (string, error) {
-	u, e := url.Parse(raw)
-	if e != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || !(strings.HasSuffix(u.Hostname(), ".larksuite.com") || strings.HasSuffix(u.Hostname(), ".feishu.cn")) || (u.Path != "" && u.Path != "/" && u.Path != "/messenger/" && u.Path != "/next/messenger/") || u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("workspace URL must be an HTTPS Lark/Feishu workspace origin or Messenger URL")
+// nonWorkspaceHostLabels are first host labels of Lark service hosts that are not
+// a tenant workspace (e.g. open.larksuite.com, applink.larksuite.com).
+var nonWorkspaceHostLabels = map[string]bool{
+	"open": true, "applink": true, "www": true, "accounts": true, "passport": true,
+	"login": true, "sso": true, "api": true, "internal-api": true, "docs": true,
+	"sg": true, "us": true, "jp": true, "mail": true, "lf": true, "s": true,
+	"developer": true, "help": true, "support": true, "go": true,
+	"anycross": true, "meetings": true, "vc": true,
+}
+
+// workspaceHost validates and lowercases a tenant workspace host: it must end in
+// .larksuite.com or .feishu.cn, have at least three non-empty labels, and not start
+// with a known service label. It is shared by discovery and `config set`.
+func workspaceHost(host string) (string, error) {
+	host = strings.ToLower(host)
+	if !(strings.HasSuffix(host, ".larksuite.com") || strings.HasSuffix(host, ".feishu.cn")) {
+		return "", fmt.Errorf("host must end in .larksuite.com or .feishu.cn")
 	}
-	return u.Scheme + "://" + u.Host + "/messenger/", nil
+	labels := strings.Split(host, ".")
+	if len(labels) < 3 {
+		return "", fmt.Errorf("host must be a workspace host such as <team>.larksuite.com")
+	}
+	for _, label := range labels {
+		if label == "" {
+			return "", fmt.Errorf("host has an empty label")
+		}
+	}
+	if nonWorkspaceHostLabels[labels[0]] {
+		return "", fmt.Errorf("%q is a Lark service host, not a workspace", host)
+	}
+	return host, nil
+}
+
+func linkWorkspaceOrigin(raw string) (string, error) {
+	invalid := fmt.Errorf("workspace URL must be an HTTPS Lark/Feishu workspace origin or Messenger URL")
+	u, e := url.Parse(raw)
+	if e != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || (u.Path != "" && u.Path != "/" && u.Path != "/messenger/" && u.Path != "/next/messenger/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", invalid
+	}
+	host, e := workspaceHost(u.Hostname())
+	if e != nil {
+		return "", fmt.Errorf("%w: %v", invalid, e)
+	}
+	return "https://" + host + "/messenger/", nil
+}
+
+// nonWorkspacePathPrefixes are public/shared link paths that may be served from
+// a tenant host but do not reliably indicate the user's signed-in workspace.
+var nonWorkspacePathPrefixes = []string{"/share/", "/invite", "/l/", "/form/"}
+
+// workspaceOriginFromTabURL derives a workspace origin from a tab URL. It reports
+// whether the tab is a Messenger page (only those origins are trusted enough to
+// persist). Other tabs (docs, sheets, ...) may be influenced by guest tenants.
+// Public share/invite/form link paths are ignored.
+func workspaceOriginFromTabURL(raw string) (origin string, messenger, ok bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
+		return "", false, false
+	}
+	host, err := workspaceHost(u.Hostname())
+	if err != nil {
+		return "", false, false
+	}
+	for _, prefix := range nonWorkspacePathPrefixes {
+		if strings.HasPrefix(u.Path, prefix) {
+			return "", false, false
+		}
+	}
+	for _, m := range []string{"/messenger", "/next/messenger"} {
+		if u.Path == m || strings.HasPrefix(u.Path, m+"/") {
+			messenger = true
+		}
+	}
+	return "https://" + host + "/messenger/", messenger, true
+}
+
+// discoverWorkspaceOrigin returns the workspace origin found among tab URLs and
+// whether it came from a Messenger tab, "" when none, or an error when several
+// distinct workspaces are open. Messenger tabs win over other tabs; origins from
+// other tabs are only a fallback and must not be persisted.
+func discoverWorkspaceOrigin(tabURLs []string) (string, bool, error) {
+	messengerOrigins, otherOrigins := map[string]bool{}, map[string]bool{}
+	for _, raw := range tabURLs {
+		if origin, messenger, ok := workspaceOriginFromTabURL(raw); ok {
+			if messenger {
+				messengerOrigins[origin] = true
+			} else {
+				otherOrigins[origin] = true
+			}
+		}
+	}
+	for _, c := range []struct {
+		set       map[string]bool
+		messenger bool
+	}{{messengerOrigins, true}, {otherOrigins, false}} {
+		if len(c.set) > 1 {
+			return "", false, fmt.Errorf("multiple Lark workspaces are open; select --workspace-url")
+		}
+		for origin := range c.set {
+			return origin, c.messenger, nil
+		}
+	}
+	return "", false, nil
 }
 
 // evalInMessengerTab opens a dedicated background Messenger tab in the selected
@@ -181,6 +278,7 @@ func evalInMessengerTab(ctx context.Context, buildScript func(origin string) str
 		return b, nil
 	}
 	origin := ""
+	discovered := false // origin came from a Messenger tab, so it is safe to cache
 	workspace := firstLinkSetting(msgLinkWorkspaceURL, os.Getenv("LARK_MSG_LINK_WORKSPACE_URL"), config.Get().MessageLinks.WorkspaceURL)
 	if workspace != "" {
 		origin, err = linkWorkspaceOrigin(workspace)
@@ -198,26 +296,17 @@ func evalInMessengerTab(ctx context.Context, buildScript func(origin string) str
 		if json.Unmarshal(tabs, &inventory) != nil {
 			return nil, fmt.Errorf("cannot read background browser inventory")
 		}
-		origins := map[string]bool{}
+		urls := make([]string, 0, len(inventory))
 		for _, tab := range inventory {
-			t, e := url.Parse(tab.URL)
-			if e != nil || (t.Path != "/messenger/" && t.Path != "/next/messenger/") {
-				continue
-			}
-			candidate, e := linkWorkspaceOrigin(tab.URL)
-			if e == nil {
-				origins[candidate] = true
-			}
+			urls = append(urls, tab.URL)
 		}
-		if len(origins) > 1 {
-			return nil, fmt.Errorf("multiple Lark workspaces are open; select --workspace-url")
-		}
-		for candidate := range origins {
-			origin = candidate
+		origin, discovered, err = discoverWorkspaceOrigin(urls)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if origin == "" {
-		return nil, fmt.Errorf("set --workspace-url or LARK_MSG_LINK_WORKSPACE_URL, or open a signed-in web Messenger tab in the selected browser")
+		return nil, fmt.Errorf("no Lark workspace found in the browser tabs; run `lark config set message_links.workspace_url https://<team>.larksuite.com`, or pass --workspace-url, or set LARK_MSG_LINK_WORKSPACE_URL, or open any signed-in Lark tab in the selected browser")
 	}
 	b, err := run("open", origin, "--id")
 	if err != nil {
@@ -232,7 +321,17 @@ func evalInMessengerTab(ctx context.Context, buildScript func(origin string) str
 		defer stop()
 		_ = exec.CommandContext(cleanup, "browserctrl", "--browser", browser, "--agent-id", agent, "close", tab).Run()
 	}()
-	return run("eval", tab, buildScript(origin))
+	result, err := run("eval", tab, buildScript(origin))
+	if err == nil && discovered {
+		// Cache for next time; never overwrite an existing value, never fail the command.
+		wrote, werr := config.SetFileValueIfUnset("message_links.workspace_url", origin)
+		if werr != nil {
+			fmt.Fprintf(os.Stderr, "lark: warning: could not cache message_links.workspace_url=%s: %v\n", origin, werr)
+		} else if wrote {
+			fmt.Fprintf(os.Stderr, "lark: cached message_links.workspace_url=%s (change with: lark config set message_links.workspace_url <url>)\n", origin)
+		}
+	}
+	return result, err
 }
 
 // messengerGuardJS verifies the tab is a signed-in Messenger page of the expected
