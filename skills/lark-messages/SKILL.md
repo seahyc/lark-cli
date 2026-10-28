@@ -43,6 +43,7 @@ lark msg history --chat-id oc_12345 --limit 10
 lark msg search "incident" --chat-id oc_xxx --limit 20
 lark msg forward --message-id om_xxx --to oc_yyy
 lark msg merge-forward --message-ids om_a,om_b,om_c --to oc_yyy
+lark msg link om_xxx                                          # shareable applink, same as web "Copy link"
 ```
 
 **Edit / recall / react:**
@@ -316,6 +317,40 @@ The resolver uses a private Lark read operation and may need updating after Lark
 changes. Unsupported thread-position/multi-message links, denied access, and
 messages beyond the bounded 10,000-message history scan fail explicitly. A
 message without a thread can still be read with `msg get`.
+
+### Create a message link (Copy link)
+
+```bash
+lark msg link om_xxx
+lark msg link om_xxx --chat-id oc_yyy --browser dia --workspace-url https://your-team.larksuite.com
+```
+
+Prints `https://applink.larksuite.com/client/message/link/open?token=...`, the same
+URL the web client's "Copy link" produces. The public Open API has no way to build
+it, so the CLI reads the message through the Open API (chat id, position, thread
+id, thread position, root id) and creates the link from a background `browserctrl`
+tab with the signed-in web Messenger session. Browser and workspace settings follow
+the same flags, environment variables, and config as the link reader above. The tab
+is never focused and is closed afterwards.
+
+Chat messages and thread replies are supported. Limits: the message's chat must be
+in the Messenger chat list (otherwise pass `--internal-chat-id` with the numeric
+Lark chat id); topic-style chats are not supported. `--chat-id` only asserts the
+expected chat. Creating a link is the only write; it sends nothing.
+
+A link to a thread reply opens the thread in Lark: the root message with the replies
+shown inline underneath. This is Lark's own behaviour, the same as the native Copy
+link. Lark's jump target for such a link is the root's chat position, so
+`msg get <url>` returns the thread root, not the reply; use `msg history` to read
+the replies.
+
+Internal request, for maintainers: `1150|messages.PutMessageLinkRequest` with
+`{fromId, from, copiedId: [internalMessageId]}`. `from` is 1 (chat; fromId is the
+numeric chat id) or 3 (thread reply; fromId is the numeric thread id, which equals
+the numeric id of the thread root). Internal ids are found by pulling the message
+by position (`43|messages.PullMessagesByPositionsRequest`, or
+`8109|thread.PullThreadMessagesByPositionsRequest` for thread replies) and matching
+its create time against the Open API value.
 
 ### Batch Fetch Messages
 

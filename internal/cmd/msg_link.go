@@ -153,13 +153,11 @@ func linkWorkspaceOrigin(raw string) (string, error) {
 	return u.Scheme + "://" + u.Host + "/messenger/", nil
 }
 
-// resolveMessageURL uses only a read operation in a dedicated background tab.
-// The session stays in the browser; only the canonical jump URL is returned.
-func resolveMessageURL(ctx context.Context, raw string) (messageLinkTarget, error) {
-	u, err := larkMessageURL(raw)
-	if err != nil {
-		return messageLinkTarget{}, err
-	}
+// evalInMessengerTab opens a dedicated background Messenger tab in the selected
+// browser, evaluates the script built for the workspace origin, and always closes
+// the tab. It never focuses or raises the tab. The script must return a string.
+func evalInMessengerTab(ctx context.Context, buildScript func(origin string) string) ([]byte, error) {
+	var err error
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	agent := fmt.Sprintf("lark-msg-link-%d", os.Getpid())
@@ -168,10 +166,10 @@ func resolveMessageURL(ctx context.Context, raw string) (messageLinkTarget, erro
 		browser, err = systemDefaultLinkBrowser(ctx)
 	}
 	if err != nil {
-		return messageLinkTarget{}, err
+		return nil, err
 	}
 	if !supportedLinkBrowser(browser) {
-		return messageLinkTarget{}, fmt.Errorf("default/selected browser %q is not supported for background resolution; use --browser with a browserctrl-enabled Chromium browser", browser)
+		return nil, fmt.Errorf("default/selected browser %q is not supported for background resolution; use --browser with a browserctrl-enabled Chromium browser", browser)
 	}
 	run := func(args ...string) ([]byte, error) {
 		args = append([]string{"--browser", browser, "--agent-id", agent}, args...)
@@ -187,18 +185,18 @@ func resolveMessageURL(ctx context.Context, raw string) (messageLinkTarget, erro
 	if workspace != "" {
 		origin, err = linkWorkspaceOrigin(workspace)
 		if err != nil {
-			return messageLinkTarget{}, err
+			return nil, err
 		}
 	} else {
 		tabs, e := run("tabs", "--json")
 		if e != nil {
-			return messageLinkTarget{}, e
+			return nil, e
 		}
 		var inventory []struct {
 			URL string `json:"url"`
 		}
 		if json.Unmarshal(tabs, &inventory) != nil {
-			return messageLinkTarget{}, fmt.Errorf("cannot read background browser inventory")
+			return nil, fmt.Errorf("cannot read background browser inventory")
 		}
 		origins := map[string]bool{}
 		for _, tab := range inventory {
@@ -212,32 +210,49 @@ func resolveMessageURL(ctx context.Context, raw string) (messageLinkTarget, erro
 			}
 		}
 		if len(origins) > 1 {
-			return messageLinkTarget{}, fmt.Errorf("multiple Lark workspaces are open; select --workspace-url")
+			return nil, fmt.Errorf("multiple Lark workspaces are open; select --workspace-url")
 		}
 		for candidate := range origins {
 			origin = candidate
 		}
 	}
 	if origin == "" {
-		return messageLinkTarget{}, fmt.Errorf("set --workspace-url or LARK_MSG_LINK_WORKSPACE_URL, or open a signed-in web Messenger tab in the selected browser")
+		return nil, fmt.Errorf("set --workspace-url or LARK_MSG_LINK_WORKSPACE_URL, or open a signed-in web Messenger tab in the selected browser")
 	}
 	b, err := run("open", origin, "--id")
 	if err != nil {
-		return messageLinkTarget{}, err
+		return nil, err
 	}
 	tab := strings.TrimSpace(string(b))
 	if len(tab) != 8 || strings.Trim(tab, "0123456789ABCDEF") != "" {
-		return messageLinkTarget{}, fmt.Errorf("cannot identify resolver background tab")
+		return nil, fmt.Errorf("cannot identify resolver background tab")
 	}
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stop()
 		_ = exec.CommandContext(cleanup, "browserctrl", "--browser", browser, "--agent-id", agent, "close", tab).Run()
 	}()
-	token, _ := json.Marshal(u.Query().Get("token"))
+	return run("eval", tab, buildScript(origin))
+}
+
+// messengerGuardJS verifies the tab is a signed-in Messenger page of the expected
+// workspace and waits for the in-page transport. It evaluates to a statement list.
+func messengerGuardJS(origin string) string {
 	expectedOrigin, _ := json.Marshal(strings.TrimSuffix(origin, "/messenger/"))
-	script := `(async()=>{if(location.origin!==` + string(expectedOrigin) + `||!/^\/(next\/)?messenger\/?$/.test(location.pathname))throw Error("Lark Messenger session unavailable");for(let i=0;i<100&&!window.LarkAPI?.transport?.callServerApi;i++)await new Promise(r=>setTimeout(r,100));if(!window.LarkAPI?.transport?.callServerApi)throw Error("Lark session unavailable");const r=await LarkAPI.transport.callServerApi("1151|messages.GetMessageLinkPermissionRequest|messages.GetMessageLinkPermissionResponse",{token:` + string(token) + `});return JSON.stringify({permission:r.data?.permission,url:r.data?.applinkUrl});})()`
-	b, err = run("eval", tab, script)
+	return `if(location.origin!==` + string(expectedOrigin) + `||!/^\/(next\/)?messenger\/?$/.test(location.pathname))throw Error("Lark Messenger session unavailable");for(let i=0;i<100&&!window.LarkAPI?.transport?.callServerApi;i++)await new Promise(r=>setTimeout(r,100));if(!window.LarkAPI?.transport?.callServerApi)throw Error("Lark session unavailable");`
+}
+
+// resolveMessageURL uses only a read operation in a dedicated background tab.
+// The session stays in the browser; only the canonical jump URL is returned.
+func resolveMessageURL(ctx context.Context, raw string) (messageLinkTarget, error) {
+	u, err := larkMessageURL(raw)
+	if err != nil {
+		return messageLinkTarget{}, err
+	}
+	token, _ := json.Marshal(u.Query().Get("token"))
+	b, err := evalInMessengerTab(ctx, func(origin string) string {
+		return `(async()=>{` + messengerGuardJS(origin) + `const r=await LarkAPI.transport.callServerApi("1151|messages.GetMessageLinkPermissionRequest|messages.GetMessageLinkPermissionResponse",{token:` + string(token) + `});return JSON.stringify({permission:r.data?.permission,url:r.data?.applinkUrl});})()`
+	})
 	if err != nil {
 		return messageLinkTarget{}, err
 	}
