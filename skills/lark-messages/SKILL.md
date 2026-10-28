@@ -305,10 +305,30 @@ Settings, in precedence order: command flags; `LARK_MSG_LINK_BROWSER` and
 is also accepted as the final browser fallback.
 
 With a workspace URL, no existing Messenger tab is required: the temporary tab
-uses the browser's existing login cookies. Without one, the CLI discovers a
-workspace from open Messenger tabs and rejects ambiguous workspaces. An expired
-login fails explicitly; sign in through the browser and retry. Credentials stay
-inside the browser.
+uses the browser's existing login cookies. Without one, the CLI discovers the
+workspace from the browser's open tabs: any tab on a tenant workspace host
+(`<team>.larksuite.com`, `<team>.sg.larksuite.com`, `<team>.feishu.cn`) counts,
+including docx, sheets, wiki, and Messenger tabs; no Messenger tab is needed.
+Service hosts (`open.`, `applink.`, `www.`, `accounts.`, `passport.`, and similar),
+plain `http`, and public `/share/`, `/invite`, `/l/`, `/form/` links are ignored.
+If tabs from more than one workspace are open, it fails and asks for
+`--workspace-url`.
+
+A workspace found by discovery is cached to `message_links.workspace_url` after
+the command succeeds (an existing value is never overwritten; a failed write does
+not fail the command). To set it explicitly, or set the browser:
+
+```bash
+lark config set message_links.workspace_url https://<team>.larksuite.com
+lark config set message_links.browser dia
+lark config get message_links.workspace_url
+```
+
+`lark config set` validates the value (workspace URLs must be a Lark/Feishu
+workspace origin; the stored form is `https://<host>/messenger/`). If nothing can be
+found, the error shows this command; `--workspace-url` and
+`LARK_MSG_LINK_WORKSPACE_URL` also work. An expired login fails explicitly; sign in
+through the browser and retry. Credentials stay inside the browser.
 
 `msg get` reads the linked message; `msg history` follows its `thread_id` to read
 replies using user API access.
