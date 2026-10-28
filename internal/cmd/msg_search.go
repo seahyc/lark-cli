@@ -154,7 +154,8 @@ Examples:
 var msgGetCmd = &cobra.Command{
 	Use:   "get <message-ids>",
 	Short: "Batch fetch messages by ID (comma-separated)",
-	Long: `Fetch one or more messages by ID.
+	Long: `Fetch one or more messages by ID or copied Lark message URL.
+URLs resolve in a background browser tab using the signed-in Lark web session.
 
 Pass multiple IDs as a comma-separated list.
 
@@ -177,6 +178,16 @@ Examples:
 		}
 
 		client := api.NewClient()
+		for i, id := range ids {
+			if strings.Contains(id, "://") {
+				message, err := messageFromURL(cmd.Context(), client, id)
+				if err != nil {
+					output.Fatal("LINK_RESOLUTION_ERROR", err)
+					return
+				}
+				ids[i] = message.MessageID
+			}
+		}
 		messages, err := client.BatchGetMessages(ids)
 		if err != nil {
 			output.Fatal("API_ERROR", err)

@@ -42,6 +42,7 @@ var msgHistoryCmd = &cobra.Command{
 	Use:   "history",
 	Short: "Get chat message history",
 	Long: `Retrieve message history from a chat or thread.
+A copied message URL in --chat-id resolves to its thread in a background browser tab.
 
 By default, reads as the user (works for DMs and any group you are a member of).
 Use --as bot to read as the bot instead, which requires the bot to be in the group.
@@ -63,6 +64,22 @@ Examples:
 
 		historyAsUser := msgHistoryAs == "user"
 		client := api.NewClient()
+		if strings.Contains(msgHistoryChatID, "://") {
+			if !historyAsUser {
+				output.Fatalf("VALIDATION_ERROR", "message links require --as user")
+				return
+			}
+			message, err := messageFromURL(cmd.Context(), client, msgHistoryChatID)
+			if err != nil {
+				output.Fatal("LINK_RESOLUTION_ERROR", err)
+				return
+			}
+			if message.ThreadID == "" {
+				output.Fatalf("VALIDATION_ERROR", "linked message has no thread; use lark msg get with the URL")
+				return
+			}
+			msgHistoryChatID, msgHistoryType = message.ThreadID, "thread"
+		}
 
 		// Build options
 		opts := &api.ListMessagesOptions{}

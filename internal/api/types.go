@@ -1240,20 +1240,21 @@ type MessageMention struct {
 
 // Message represents a message from the IM API
 type Message struct {
-	MessageID      string           `json:"message_id,omitempty"`
-	RootID         string           `json:"root_id,omitempty"`     // Root message ID for replies
-	ParentID       string           `json:"parent_id,omitempty"`   // Parent message ID for replies
-	ThreadID       string           `json:"thread_id,omitempty"`   // Thread ID if in a thread
-	MsgType        string           `json:"msg_type,omitempty"`    // text, post, image, file, audio, media, sticker, interactive, share_chat, share_user
-	CreateTime     string           `json:"create_time,omitempty"` // Unix ms timestamp
-	UpdateTime     string           `json:"update_time,omitempty"` // Unix ms timestamp
-	Deleted        bool             `json:"deleted,omitempty"`     // Whether message is deleted/recalled
-	Updated        bool             `json:"updated,omitempty"`     // Whether message is updated
-	ChatID         string           `json:"chat_id,omitempty"`     // Group ID
-	Sender         *MessageSender   `json:"sender,omitempty"`
-	Body           *MessageBody     `json:"body,omitempty"`
-	Mentions       []MessageMention `json:"mentions,omitempty"`
-	UpperMessageID string           `json:"upper_message_id,omitempty"` // For combined/forwarded messages
+	MessagePosition string           `json:"message_position,omitempty"`
+	MessageID       string           `json:"message_id,omitempty"`
+	RootID          string           `json:"root_id,omitempty"`     // Root message ID for replies
+	ParentID        string           `json:"parent_id,omitempty"`   // Parent message ID for replies
+	ThreadID        string           `json:"thread_id,omitempty"`   // Thread ID if in a thread
+	MsgType         string           `json:"msg_type,omitempty"`    // text, post, image, file, audio, media, sticker, interactive, share_chat, share_user
+	CreateTime      string           `json:"create_time,omitempty"` // Unix ms timestamp
+	UpdateTime      string           `json:"update_time,omitempty"` // Unix ms timestamp
+	Deleted         bool             `json:"deleted,omitempty"`     // Whether message is deleted/recalled
+	Updated         bool             `json:"updated,omitempty"`     // Whether message is updated
+	ChatID          string           `json:"chat_id,omitempty"`     // Group ID
+	Sender          *MessageSender   `json:"sender,omitempty"`
+	Body            *MessageBody     `json:"body,omitempty"`
+	Mentions        []MessageMention `json:"mentions,omitempty"`
+	UpperMessageID  string           `json:"upper_message_id,omitempty"` // For combined/forwarded messages
 }
 
 // ReactionType represents a reaction resource type

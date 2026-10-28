@@ -276,6 +276,47 @@ custom_emojis:
   "7405453485858095136": "ez-pepe"
 ```
 
+### Read a copied message link without foregrounding the browser
+
+```bash
+lark msg get 'https://applink.larksuite.com/client/message/link/open?token=...'
+lark msg history --chat-id 'https://applink.larksuite.com/client/message/link/open?token=...' --format text
+```
+
+URL inputs automatically use `browserctrl` and the selected browser's signed-in
+Lark web Messenger session to resolve the exact chat position. The CLI opens and
+closes its own background tab without focusing the browser or launching Lark.
+Existing ID inputs do not use a browser.
+
+Chrome, Edge, Brave, Chromium, Arc, and Dia are supported when accessible through
+browserctrl. When no browser override is supplied, the CLI reads the operating system’s
+default HTTPS browser (macOS, Linux, or Windows). It does not choose whichever
+browser happens to be accessible. Safari and Firefox are not supported by this
+background resolver. Only Dia has been verified live so far.
+
+```bash
+lark msg get '<message-url>' --browser chrome --workspace-url https://your-team.larksuite.com
+```
+
+Settings, in precedence order: command flags; `LARK_MSG_LINK_BROWSER` and
+`LARK_MSG_LINK_WORKSPACE_URL`; `message_links.browser` and
+`message_links.workspace_url` in the existing CLI config. `BROWSERCTRL_BROWSER`
+is also accepted as the final browser fallback.
+
+With a workspace URL, no existing Messenger tab is required: the temporary tab
+uses the browser's existing login cookies. Without one, the CLI discovers a
+workspace from open Messenger tabs and rejects ambiguous workspaces. An expired
+login fails explicitly; sign in through the browser and retry. Credentials stay
+inside the browser.
+
+`msg get` reads the linked message; `msg history` follows its `thread_id` to read
+replies using user API access.
+
+The resolver uses a private Lark read operation and may need updating after Lark
+changes. Unsupported thread-position/multi-message links, denied access, and
+messages beyond the bounded 10,000-message history scan fail explicitly. A
+message without a thread can still be read with `msg get`.
+
 ### Batch Fetch Messages
 
 ```bash

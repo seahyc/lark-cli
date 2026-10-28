@@ -10,6 +10,10 @@ import (
 )
 
 type Config struct {
+	MessageLinks struct {
+		Browser      string `mapstructure:"browser"`
+		WorkspaceURL string `mapstructure:"workspace_url"`
+	} `mapstructure:"message_links"`
 	AppID     string `mapstructure:"app_id"`
 	AppSecret string `mapstructure:"app_secret"`
 	Defaults  struct {
