@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/yjwong/lark-cli/internal/api"
+)
 
 func TestParseMarkdownInlineStyles(t *testing.T) {
 	blocks := parseMarkdownToBlocks([]byte("Plain **bold** and *ital* and `code` and [link](https://x.test).\n"))
@@ -84,5 +88,18 @@ func TestMarkdownTableKeepsRowsStylesAndFitsPage(t *testing.T) {
 	cell := pendingMarkdownTables[0].RowCells[0][0]
 	if cell == nil || len(cell.Elements) == 0 || cell.Elements[0].TextRun.TextElementStyle == nil || !cell.Elements[0].TextRun.TextElementStyle.Bold {
 		t.Errorf("bold markdown in a table cell lost its style: %+v", cell)
+	}
+}
+
+func TestNonEmptyCellReplacesEmptyText(t *testing.T) {
+	for _, tb := range []*api.TextBlock{nil, makeTextBlock(""), {}} {
+		got := nonEmptyCell(tb)
+		if len(got.Elements) != 1 || got.Elements[0].TextRun.Content != " " {
+			t.Errorf("nonEmptyCell(%+v) = %+v, want a single-space run", tb, got)
+		}
+	}
+	keep := makeTextBlock("x")
+	if nonEmptyCell(keep) != keep {
+		t.Errorf("non-empty cell was replaced")
 	}
 }

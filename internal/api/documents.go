@@ -723,6 +723,9 @@ func (c *Client) DeleteDriveFile(fileToken, docType string) error {
 // fileToken: the file token
 // docType: document type (e.g., "docx", "doc", "sheet", "bitable", "folder", "file")
 func (c *Client) RenameDriveFile(fileToken, docType, title string) error {
+	if docType == "docx" {
+		return c.renameDocx(fileToken, title)
+	}
 	path := fmt.Sprintf("/drive/v1/files/%s?type=%s",
 		url.PathEscape(fileToken), url.QueryEscape(docType))
 	req := RenameDriveFileRequest{Name: title}
@@ -737,6 +740,24 @@ func (c *Client) RenameDriveFile(fileToken, docType, title string) error {
 	}
 
 	return nil
+}
+
+// renameDocx sets a docx document's title. A docx title is the text of its
+// root page block (block_id == document_id); the Drive file PATCH endpoint
+// rejects docx files with "params error".
+func (c *Client) renameDocx(documentID, title string) error {
+	path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s?document_revision_id=-1",
+		url.PathEscape(documentID), url.PathEscape(documentID))
+	req := UpdateBlockRequest{
+		UpdateTextElements: &TextBlock{
+			Elements: []TextElement{{TextRun: &TextRun{Content: title}}},
+		},
+	}
+	var resp BaseResponse
+	if err := c.Patch(path, req, &resp); err != nil {
+		return err
+	}
+	return resp.Err()
 }
 
 // SearchDocuments searches for documents using the Lark Docs API

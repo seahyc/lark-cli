@@ -776,7 +776,7 @@ func createTableTree(client *api.Client, documentID, parentID string, data Markd
 	if cols == 0 {
 		return nil, 0, nil
 	}
-	cellText := func(r, c int) *api.TextBlock {
+	rawCell := func(r, c int) *api.TextBlock {
 		if r == 0 {
 			if c < len(data.HeaderCells) && data.HeaderCells[c] != nil {
 				return data.HeaderCells[c]
@@ -792,6 +792,7 @@ func createTableTree(client *api.Client, documentID, parentID string, data Markd
 		}
 		return makeTextBlock("")
 	}
+	cellText := func(r, c int) *api.TextBlock { return nonEmptyCell(rawCell(r, c)) }
 
 	rows := 1 + len(data.Rows)
 	table := api.DocumentBlock{
@@ -819,6 +820,19 @@ func createTableTree(client *api.Client, documentID, parentID string, data Markd
 		}
 	}
 	return client.CreateDocumentDescendants(documentID, parentID, []string{"tbl"}, descendants, index)
+}
+
+// nonEmptyCell returns tb, or a single-space paragraph when tb has no text.
+// Lark rejects table cells whose paragraph has no text run or an empty one.
+func nonEmptyCell(tb *api.TextBlock) *api.TextBlock {
+	if tb != nil {
+		for _, e := range tb.Elements {
+			if e.TextRun != nil && e.TextRun.Content != "" {
+				return tb
+			}
+		}
+	}
+	return makeTextBlock(" ")
 }
 
 // createAndFillTable creates one table at index, exiting on error.
