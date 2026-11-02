@@ -49,7 +49,11 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 			level = 9
 		}
 		block := api.DocumentBlock{BlockType: blockTypeForHeadingLevel(level)}
-		setHeadingField(&block, level, makeTextBlock(content))
+		tb := styledInline(n, source)
+		if tb == nil {
+			tb = makeTextBlock(content)
+		}
+		setHeadingField(&block, level, tb)
 		return []api.DocumentBlock{block}
 
 	case *ast.Paragraph:
@@ -57,11 +61,11 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 		if _, ok := node.Parent().(*ast.ListItem); ok {
 			return nil
 		}
-		content := nodeText(n, source)
-		if content == "" {
+		tb := styledInline(n, source)
+		if tb == nil {
 			return nil
 		}
-		return []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(content)}}
+		return []api.DocumentBlock{{BlockType: 2, Text: tb}}
 
 	case *ast.FencedCodeBlock:
 		var buf bytes.Buffer
@@ -97,29 +101,32 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 		}
 		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
 			if li, ok := child.(*ast.ListItem); ok {
-				content := nodeText(li, source)
-				tb := makeTextBlock(content)
-				block := api.DocumentBlock{BlockType: blockType}
-				if blockType == 12 {
-					block.Bullet = tb
-				} else {
-					block.Ordered = tb
+				if tb := styledTextBlock(li, source); tb != nil {
+					block := api.DocumentBlock{BlockType: blockType}
+					if blockType == 12 {
+						block.Bullet = tb
+					} else {
+						block.Ordered = tb
+					}
+					blocks = append(blocks, block)
 				}
-				blocks = append(blocks, block)
+				// Nested lists become their own blocks after the parent item
+				// instead of being glued onto the parent's text.
+				for gc := li.FirstChild(); gc != nil; gc = gc.NextSibling() {
+					if nested, ok := gc.(*ast.List); ok {
+						blocks = append(blocks, convertNode(nested, source)...)
+					}
+				}
 			}
 		}
 		return blocks
 
 	case *ast.Blockquote:
-		var parts []string
-		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
-			t := nodeText(child, source)
-			if t != "" {
-				parts = append(parts, t)
-			}
+		tb := styledTextBlock(n, source)
+		if tb == nil {
+			return nil
 		}
-		content := strings.Join(parts, "\n")
-		return []api.DocumentBlock{{BlockType: 15, Quote: makeTextBlock(content)}}
+		return []api.DocumentBlock{{BlockType: 15, Quote: tb}}
 
 	case *ast.ThematicBreak:
 		return []api.DocumentBlock{{BlockType: 22, Divider: &api.DividerBlock{}}}
@@ -277,6 +284,171 @@ func chunkTableRows(rows []string, maxRows int) [][]string {
 		chunks = append(chunks, rows[i:end])
 	}
 	return chunks
+}
+
+// styledTextBlock converts a node's inline children into a TextBlock whose
+// text runs keep markdown inline styling (bold, italic, inline code, links).
+// Nested lists inside the node are skipped; callers emit them separately.
+func styledTextBlock(node ast.Node, source []byte) *api.TextBlock {
+	var elems []api.TextElement
+	first := true
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if _, isList := child.(*ast.List); isList {
+			continue
+		}
+		var part []api.TextElement
+		switch child.(type) {
+		case *ast.Paragraph, *ast.TextBlock:
+			part = inlineElements(kidsOf(child), source, api.TextElementStyle{})
+			if !first && len(part) > 0 {
+				elems = appendRun(elems, "\n", api.TextElementStyle{})
+			}
+		default:
+			part = inlineElements([]ast.Node{child}, source, api.TextElementStyle{})
+		}
+		for _, e := range part {
+			elems = appendRun(elems, e.TextRun.Content, styleValue(e.TextRun.TextElementStyle))
+		}
+		if len(part) > 0 {
+			first = false
+		}
+	}
+	// Trim trailing newlines left by soft/hard breaks.
+	for len(elems) > 0 {
+		last := elems[len(elems)-1].TextRun
+		trimmed := strings.TrimRight(last.Content, "\n")
+		if trimmed != "" {
+			last.Content = trimmed
+			break
+		}
+		elems = elems[:len(elems)-1]
+	}
+	if len(elems) == 0 {
+		return nil
+	}
+	return &api.TextBlock{Elements: elems}
+}
+
+// styledInline converts an inline container (heading, paragraph) into a
+// styled TextBlock.
+func styledInline(n ast.Node, source []byte) *api.TextBlock {
+	elems := inlineElements(kidsOf(n), source, api.TextElementStyle{})
+	for len(elems) > 0 {
+		last := elems[len(elems)-1].TextRun
+		trimmed := strings.TrimRight(last.Content, "\n")
+		if trimmed != "" {
+			last.Content = trimmed
+			break
+		}
+		elems = elems[:len(elems)-1]
+	}
+	if len(elems) == 0 {
+		return nil
+	}
+	return &api.TextBlock{Elements: elems}
+}
+
+// kidsOf returns a node's direct children.
+func kidsOf(n ast.Node) []ast.Node {
+	var kids []ast.Node
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		kids = append(kids, c)
+	}
+	return kids
+}
+
+// inlineElements walks inline nodes and returns styled text runs.
+func inlineElements(kids []ast.Node, source []byte, style api.TextElementStyle) []api.TextElement {
+	var out []api.TextElement
+	for _, child := range kids {
+		switch c := child.(type) {
+		case *ast.Text:
+			content := string(c.Segment.Value(source))
+			if c.HardLineBreak() || c.SoftLineBreak() {
+				content += "\n"
+			}
+			out = appendRun(out, content, style)
+		case *ast.String:
+			out = appendRun(out, string(c.Value), style)
+		case *ast.CodeSpan:
+			s := style
+			s.InlineCode = true
+			var buf bytes.Buffer
+			for gc := c.FirstChild(); gc != nil; gc = gc.NextSibling() {
+				if t, ok := gc.(*ast.Text); ok {
+					buf.Write(t.Segment.Value(source))
+				}
+			}
+			out = appendRun(out, buf.String(), s)
+		case *ast.Emphasis:
+			s := style
+			if c.Level >= 2 {
+				s.Bold = true
+			} else {
+				s.Italic = true
+			}
+			for _, e := range inlineElements(kidsOf(c), source, s) {
+				out = appendRun(out, e.TextRun.Content, styleValue(e.TextRun.TextElementStyle))
+			}
+		case *ast.Link:
+			s := style
+			s.Link = &api.TextLink{URL: string(c.Destination)}
+			for _, e := range inlineElements(kidsOf(c), source, s) {
+				out = appendRun(out, e.TextRun.Content, styleValue(e.TextRun.TextElementStyle))
+			}
+		case *ast.AutoLink:
+			s := style
+			url := string(c.URL(source))
+			s.Link = &api.TextLink{URL: url}
+			out = appendRun(out, url, s)
+		case *ast.List:
+			// handled by the list converter
+		default:
+			if c.HasChildren() {
+				for _, e := range inlineElements(kidsOf(c), source, style) {
+					out = appendRun(out, e.TextRun.Content, styleValue(e.TextRun.TextElementStyle))
+				}
+			}
+		}
+	}
+	return out
+}
+
+func styleValue(s *api.TextElementStyle) api.TextElementStyle {
+	if s == nil {
+		return api.TextElementStyle{}
+	}
+	return *s
+}
+
+// appendRun appends content as a text run, merging with the previous run when
+// the styles match.
+func appendRun(elems []api.TextElement, content string, style api.TextElementStyle) []api.TextElement {
+	if content == "" {
+		return elems
+	}
+	if n := len(elems); n > 0 && sameStyle(styleValue(elems[n-1].TextRun.TextElementStyle), style) {
+		elems[n-1].TextRun.Content += content
+		return elems
+	}
+	run := &api.TextRun{Content: content}
+	if !sameStyle(style, api.TextElementStyle{}) {
+		s := style
+		run.TextElementStyle = &s
+	}
+	return append(elems, api.TextElement{TextRun: run})
+}
+
+func sameStyle(a, b api.TextElementStyle) bool {
+	la, lb := "", ""
+	if a.Link != nil {
+		la = a.Link.URL
+	}
+	if b.Link != nil {
+		lb = b.Link.URL
+	}
+	a.Link, b.Link = nil, nil
+	return a == b && la == lb
 }
 
 // nodeText extracts text content from an AST node.
