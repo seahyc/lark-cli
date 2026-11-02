@@ -118,6 +118,31 @@ func (c *Client) CreateDocumentBlocks(documentID, blockID string, children []Doc
 	return resp.Data.Children, resp.Data.DocumentRevisionID, nil
 }
 
+// CreateDocumentDescendants creates a nested block tree under blockID in one
+// request. Blocks in descendants use temporary block_id values and reference
+// each other through children; childrenID lists the top-level temporary IDs.
+// Tables created this way get exactly the cell contents supplied, with no
+// auto-generated empty paragraph per cell.
+func (c *Client) CreateDocumentDescendants(documentID, blockID string, childrenID []string, descendants []DocumentBlock, index int) ([]DocumentBlock, int, error) {
+	path := fmt.Sprintf("/docx/v1/documents/%s/blocks/%s/descendant?document_revision_id=-1",
+		url.PathEscape(documentID), url.PathEscape(blockID))
+
+	req := CreateDescendantsRequest{
+		ChildrenID:  childrenID,
+		Descendants: descendants,
+		Index:       index,
+	}
+
+	var resp CreateDescendantsResponse
+	if err := c.Post(path, req, &resp); err != nil {
+		return nil, 0, err
+	}
+	if err := resp.Err(); err != nil {
+		return nil, 0, err
+	}
+	return resp.Data.Children, resp.Data.DocumentRevisionID, nil
+}
+
 // ListFolderItems lists items in a Lark Drive folder
 // folderToken: folder token (empty for root cloud space)
 // pageSize: number of items per page (max 200)

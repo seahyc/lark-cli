@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 	"github.com/yjwong/lark-cli/internal/api"
@@ -767,43 +768,64 @@ Examples:
 // accepts in one request.
 const maxAppendBatch = 50
 
-// createAndFillTable creates one markdown table at index and fills its cells.
+// createTableTree creates a table with its cell contents in one descendant
+// request, so every cell holds exactly one paragraph (no blank first line) and
+// tables are not limited to 9 rows.
+func createTableTree(client *api.Client, documentID, parentID string, data MarkdownTableData, index int) ([]api.DocumentBlock, int, error) {
+	cols := len(data.Headers)
+	if cols == 0 {
+		return nil, 0, nil
+	}
+	cellText := func(r, c int) *api.TextBlock {
+		if r == 0 {
+			if c < len(data.HeaderCells) && data.HeaderCells[c] != nil {
+				return data.HeaderCells[c]
+			}
+			return makeTextBlock(data.Headers[c])
+		}
+		if r-1 < len(data.RowCells) && c < len(data.RowCells[r-1]) && data.RowCells[r-1][c] != nil {
+			return data.RowCells[r-1][c]
+		}
+		cells := strings.Split(data.Rows[r-1], "|")
+		if c < len(cells) {
+			return makeTextBlock(strings.TrimSpace(cells[c]))
+		}
+		return makeTextBlock("")
+	}
+
+	rows := 1 + len(data.Rows)
+	table := api.DocumentBlock{
+		BlockID:   "tbl",
+		BlockType: 31,
+		Table: &api.TableBlock{
+			Property: &api.TableProperty{
+				RowSize:     rows,
+				ColumnSize:  cols,
+				ColumnWidth: calcColumnWidths(data.Headers, data.Rows),
+				HeaderRow:   true,
+			},
+		},
+	}
+	descendants := []api.DocumentBlock{table}
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			cellID := fmt.Sprintf("c_%d_%d", r, c)
+			textID := fmt.Sprintf("t_%d_%d", r, c)
+			descendants[0].Children = append(descendants[0].Children, cellID)
+			descendants = append(descendants,
+				api.DocumentBlock{BlockID: cellID, BlockType: 32, TableCell: &api.TableCellBlock{}, Children: []string{textID}},
+				api.DocumentBlock{BlockID: textID, BlockType: 2, Text: cellText(r, c)},
+			)
+		}
+	}
+	return client.CreateDocumentDescendants(documentID, parentID, []string{"tbl"}, descendants, index)
+}
+
+// createAndFillTable creates one table at index, exiting on error.
 func createAndFillTable(client *api.Client, documentID, blockID string, mdTable MarkdownTableData, index int) ([]api.DocumentBlock, int) {
-	mdTableBlocks := buildTableBlocks(mdTable.Headers, mdTable.Rows)
-	created, rev, err := client.CreateDocumentBlocks(documentID, blockID, mdTableBlocks, index)
+	created, rev, err := createTableTree(client, documentID, blockID, mdTable, index)
 	if err != nil {
 		output.Fatal("API_ERROR", err)
-	}
-	for _, tb := range created {
-		if tb.BlockType != 31 || tb.Table == nil || len(tb.Table.Cells) == 0 {
-			continue
-		}
-		var cellContents []string
-		cellContents = append(cellContents, mdTable.Headers...)
-		colSize := len(mdTable.Headers)
-		for _, row := range mdTable.Rows {
-			cells := strings.Split(row, "|")
-			for i := 0; i < colSize; i++ {
-				if i < len(cells) {
-					cellContents = append(cellContents, strings.TrimSpace(cells[i]))
-				} else {
-					cellContents = append(cellContents, "")
-				}
-			}
-		}
-		for i, cellID := range tb.Table.Cells {
-			if i >= len(cellContents) || cellContents[i] == "" {
-				continue
-			}
-			time.Sleep(200 * time.Millisecond)
-			textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
-			if _, _, cellErr := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1); cellErr != nil {
-				time.Sleep(500 * time.Millisecond)
-				if _, _, cellErr = client.CreateDocumentBlocks(documentID, cellID, textBlock, -1); cellErr != nil {
-					output.Fatal("API_ERROR", fmt.Errorf("failed to populate table cell %d: %w", i, cellErr))
-				}
-			}
-		}
 	}
 	return created, rev
 }
@@ -936,60 +958,61 @@ func buildBlocks(opts BlockBuildOpts) []api.DocumentBlock {
 	return blocks
 }
 
-// calcColumnWidths computes per-column widths based on content length.
-// Each width is clamped to [150, 500] pixels, scaled at ~8px per character.
+// tablePageWidth is the usable width of a default-width Lark doc, in px.
+const tablePageWidth = 800
+
+// calcColumnWidths splits the page width across columns in proportion to
+// their longest cell (clamped so short columns stay readable and long ones
+// don't crowd out the rest). The total stays within the page so tables do not
+// scroll horizontally.
 func calcColumnWidths(headers []string, rows []string) []int {
 	colSize := len(headers)
-	maxLen := make([]int, colSize)
+	if colSize == 0 {
+		return nil
+	}
+	weight := make([]int, colSize)
 	for i, h := range headers {
-		if len(h) > maxLen[i] {
-			maxLen[i] = len(h)
-		}
+		weight[i] = utf8.RuneCountInString(h)
 	}
 	for _, row := range rows {
 		cells := strings.SplitN(row, "|", colSize+1)
 		for i := 0; i < colSize && i < len(cells); i++ {
-			if l := len(strings.TrimSpace(cells[i])); l > maxLen[i] {
-				maxLen[i] = l
+			if l := utf8.RuneCountInString(strings.TrimSpace(cells[i])); l > weight[i] {
+				weight[i] = l
 			}
 		}
 	}
-	widths := make([]int, colSize)
-	for i, l := range maxLen {
-		w := l * 8
-		if w < 150 {
-			w = 150
-		} else if w > 500 {
-			w = 500
+	total := 0
+	for i := range weight {
+		if weight[i] < 8 {
+			weight[i] = 8
+		} else if weight[i] > 60 {
+			weight[i] = 60
 		}
-		widths[i] = w
+		total += weight[i]
+	}
+	minWidth := 80
+	if colSize*minWidth > tablePageWidth {
+		minWidth = tablePageWidth / colSize
+	}
+	widths := make([]int, colSize)
+	for i, w := range weight {
+		widths[i] = tablePageWidth * w / total
+		if widths[i] < minWidth {
+			widths[i] = minWidth
+		}
+	}
+	// Re-normalise if the minimums pushed the sum over the page width.
+	sum := 0
+	for _, w := range widths {
+		sum += w
+	}
+	if sum > tablePageWidth {
+		for i := range widths {
+			widths[i] = widths[i] * tablePageWidth / sum
+		}
 	}
 	return widths
-}
-
-// buildTableBlocks creates a table block with the given dimensions.
-// The Lark API auto-generates cell blocks when a table is created.
-// Cell content can be populated via separate append calls to each cell.
-func buildTableBlocks(headers []string, rows []string) []api.DocumentBlock {
-	if len(headers) == 0 {
-		return nil
-	}
-	colSize := len(headers)
-	rowSize := 1 + len(rows) // header row + data rows
-
-	table := api.DocumentBlock{
-		BlockType: 31,
-		Table: &api.TableBlock{
-			Property: &api.TableProperty{
-				RowSize:     rowSize,
-				ColumnSize:  colSize,
-				ColumnWidth: calcColumnWidths(headers, rows),
-				HeaderRow:   true,
-			},
-		},
-	}
-
-	return []api.DocumentBlock{table}
 }
 
 // readBlocksFromStdin reads a JSON array of DocumentBlocks from stdin
@@ -1159,51 +1182,11 @@ Examples:
 			}
 		}
 
-		// Create table and auto-populate cells
+		// Create table with its cell contents
 		if len(tableHeaders) > 0 {
-			tableBlocks := buildTableBlocks(tableHeaders, tableRows)
-			createdTableBlocks, tableRevID, err := client.CreateDocumentBlocks(documentID, blockID, tableBlocks, index)
-			if err != nil {
-				output.Fatal("API_ERROR", err)
-			}
+			createdTableBlocks, tableRevID := createAndFillTable(client, documentID, blockID,
+				MarkdownTableData{Headers: tableHeaders, Rows: tableRows}, index)
 			revisionID = tableRevID
-
-			// Populate cells with content
-			for _, tb := range createdTableBlocks {
-				if tb.BlockType == 31 && tb.Table != nil && len(tb.Table.Cells) > 0 {
-					// Build flat list of cell contents: headers first, then rows
-					var cellContents []string
-					cellContents = append(cellContents, tableHeaders...)
-					colSize := len(tableHeaders)
-					for _, row := range tableRows {
-						cells := strings.Split(row, "|")
-						for i := 0; i < colSize; i++ {
-							if i < len(cells) {
-								cellContents = append(cellContents, strings.TrimSpace(cells[i]))
-							} else {
-								cellContents = append(cellContents, "")
-							}
-						}
-					}
-
-					// Populate each cell (with delay and retry to handle API rate limits)
-					for i, cellID := range tb.Table.Cells {
-						if i < len(cellContents) && cellContents[i] != "" {
-							time.Sleep(200 * time.Millisecond)
-							textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
-							_, _, cellErr := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
-							if cellErr != nil {
-								// Retry once after a longer delay
-								time.Sleep(500 * time.Millisecond)
-								_, _, cellErr = client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
-								if cellErr != nil {
-									output.Fatal("API_ERROR", fmt.Errorf("failed to populate cell %d: %w", i, cellErr))
-								}
-							}
-						}
-					}
-				}
-			}
 			allCreatedBlocks = append(allCreatedBlocks, createdTableBlocks...)
 		}
 
@@ -1939,7 +1922,7 @@ func cloneBlockForReinsertion(src api.DocumentBlock) api.DocumentBlock {
 
 // extractTableCellTexts walks a table block's cells, finds the text content of
 // each cell's first text child (most common case), and returns header + row data
-// in the format buildTableBlocks expects. Cells without text content become "".
+// as header and pipe-separated row strings. Cells without text content become "".
 // Returns (headers, rows, ok). ok=false means we couldn't safely extract — the
 // caller should fall back to fail-fast behaviour.
 func extractTableCellTexts(table api.DocumentBlock, allBlocks []api.DocumentBlock) ([]string, []string, bool) {
@@ -2020,29 +2003,6 @@ func extractTableCellTexts(table api.DocumentBlock, allBlocks []api.DocumentBloc
 	return headers, rows, true
 }
 
-// populateTableCells writes text content into the cells of a freshly-created
-// table block. cellContents is laid out row-major: first colSize entries are
-// the header row, then each subsequent row.
-func populateTableCells(client *api.Client, documentID string, table api.DocumentBlock, cellContents []string) error {
-	if table.Table == nil || len(table.Table.Cells) == 0 {
-		return nil
-	}
-	for i, cellID := range table.Table.Cells {
-		if i >= len(cellContents) || cellContents[i] == "" {
-			continue
-		}
-		// Small inter-cell delay to ride under Lark's per-table-write QPS cap.
-		// The client itself retries on 99991400, but spacing requests reduces
-		// the probability of even hitting the limiter.
-		time.Sleep(150 * time.Millisecond)
-		textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
-		if _, _, err := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1); err != nil {
-			return fmt.Errorf("failed to populate table cell %d: %w", i, err)
-		}
-	}
-	return nil
-}
-
 // findBlockChild scans all blocks for a child reference and returns its parent
 // id and child index. Returns ok=false if not found.
 func findBlockChild(blocks []api.DocumentBlock, childID string) (parentID string, index int, ok bool) {
@@ -2114,41 +2074,20 @@ func moveSingleBlock(client *api.Client, blocks []api.DocumentBlock, documentID,
 	}
 
 	// Build a clean block for re-insertion.
-	var insertBlocks []api.DocumentBlock
+	var createdBlocks []api.DocumentBlock
+	var newRev int
 	if isTable {
-		insertBlocks = buildTableBlocks(tblHeaders, tblRows)
-		if len(insertBlocks) == 0 {
-			return "", 0, api.DocumentBlock{}, fmt.Errorf("internal error: failed to rebuild table block")
-		}
+		createdBlocks, newRev, err = createTableTree(client, documentID, destParentID,
+			MarkdownTableData{Headers: tblHeaders, Rows: tblRows}, destIndex)
 	} else {
-		insertBlocks = []api.DocumentBlock{cloneBlockForReinsertion(*target)}
+		createdBlocks, newRev, err = client.CreateDocumentBlocks(documentID, destParentID,
+			[]api.DocumentBlock{cloneBlockForReinsertion(*target)}, destIndex)
 	}
-
-	createdBlocks, newRev, err := client.CreateDocumentBlocks(documentID, destParentID, insertBlocks, destIndex)
 	if err != nil {
 		return "", 0, api.DocumentBlock{}, fmt.Errorf("deleted block but failed to insert at new position: %w", err)
 	}
 	if len(createdBlocks) == 0 {
 		return "", 0, api.DocumentBlock{}, fmt.Errorf("insert returned no blocks")
-	}
-
-	// For tables, re-populate cells now that we have new cell ids.
-	if isTable {
-		var headerCells []string
-		headerCells = append(headerCells, tblHeaders...)
-		for _, row := range tblRows {
-			cells := strings.Split(row, "|")
-			for i := 0; i < len(tblHeaders); i++ {
-				if i < len(cells) {
-					headerCells = append(headerCells, strings.TrimSpace(cells[i]))
-				} else {
-					headerCells = append(headerCells, "")
-				}
-			}
-		}
-		if err := populateTableCells(client, documentID, createdBlocks[0], headerCells); err != nil {
-			return createdBlocks[0].BlockID, newRev, createdBlocks[0], err
-		}
 	}
 
 	return createdBlocks[0].BlockID, newRev, createdBlocks[0], nil

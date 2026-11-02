@@ -58,3 +58,31 @@ func TestParseMarkdownNestedListsAreSeparateBlocks(t *testing.T) {
 		t.Errorf("bold run inside bullet lost its style")
 	}
 }
+
+func TestMarkdownTableKeepsRowsStylesAndFitsPage(t *testing.T) {
+	src := "| Product | Price |\n|---|---|\n"
+	for i := 0; i < 12; i++ {
+		src += "| **VIP** item | IDR 360K (US$23) |\n"
+	}
+	blocks := parseMarkdownToBlocks([]byte(src))
+	if len(blocks) != 1 || blocks[0].BlockType != 31 {
+		t.Fatalf("want a single table placeholder, got %d blocks", len(blocks))
+	}
+	if got := blocks[0].Table.Property.RowSize; got != 13 {
+		t.Errorf("row size = %d, want 13 (header + 12 rows in one table)", got)
+	}
+	sum := 0
+	for _, w := range blocks[0].Table.Property.ColumnWidth {
+		sum += w
+	}
+	if sum > tablePageWidth {
+		t.Errorf("column widths sum to %d, wider than the page (%d)", sum, tablePageWidth)
+	}
+	if len(pendingMarkdownTables) != 1 {
+		t.Fatalf("pending tables = %d, want 1", len(pendingMarkdownTables))
+	}
+	cell := pendingMarkdownTables[0].RowCells[0][0]
+	if cell == nil || len(cell.Elements) == 0 || cell.Elements[0].TextRun.TextElementStyle == nil || !cell.Elements[0].TextRun.TextElementStyle.Bold {
+		t.Errorf("bold markdown in a table cell lost its style: %+v", cell)
+	}
+}

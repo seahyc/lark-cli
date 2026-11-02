@@ -14,8 +14,10 @@ import (
 
 // MarkdownTableData holds parsed table data from markdown for 2-phase table creation.
 type MarkdownTableData struct {
-	Headers []string
-	Rows    []string // each row is pipe-separated cells
+	Headers     []string
+	Rows        []string           // each row is pipe-separated cells
+	HeaderCells []*api.TextBlock   // styled header cells (optional)
+	RowCells    [][]*api.TextBlock // styled row cells (optional)
 }
 
 // pendingMarkdownTables collects tables found during markdown parsing.
@@ -140,43 +142,68 @@ func convertNode(node ast.Node, source []byte) []api.DocumentBlock {
 	}
 }
 
-// maxMarkdownTableRows / maxMarkdownTableCols cap how many data rows and
-// columns can go into a single Lark table when importing from markdown.
-// Empirically Lark's docx create-blocks endpoint rejects any table whose
-// row_size or column_size exceeds 9 with code 1770001 ("invalid param");
-// we use 8 for rows (matching the previous 6+header convention) and 9 for
-// columns. Tables exceeding either limit are split into a grid of adjacent
-// sub-tables that render acceptably in the Lark UI.
+// maxMarkdownTableCols caps columns per Lark table; wider markdown tables are
+// split into adjacent sub-tables. Rows are not capped by Lark when tables are
+// created through the descendant endpoint, but one request may carry at most
+// maxDescendantBlocks blocks (table + cells + one paragraph per cell), so very
+// long tables are split into consecutive chunks that repeat the header.
 const (
-	maxMarkdownTableRows = 8
 	maxMarkdownTableCols = 9
+	maxDescendantBlocks  = 1000
 )
 
+// rowsPerTableChunk returns how many data rows fit in one descendant request.
+func rowsPerTableChunk(cols int) int {
+	if cols <= 0 {
+		return 1
+	}
+	n := (maxDescendantBlocks-1)/(2*cols) - 1 // minus the header row
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
 // convertMarkdownTable extracts header and row data from a goldmark table AST
-// node, stores it in pendingMarkdownTables for 2-phase creation, and returns
-// one or more placeholder table blocks. Tables with more than
-// maxMarkdownTableRows data rows are split into chunks; each chunk repeats the
-// header so the visual result matches a single big table.
+// node, stores it in pendingMarkdownTables, and returns one placeholder table
+// block per (row chunk, column slice). Cell text keeps inline styles.
 func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock {
 	var headers []string
-	var rows []string
+	var headerCells []*api.TextBlock
+	var rows [][]string
+	var rowCells [][]*api.TextBlock
+
+	cellOf := func(cell ast.Node) (string, *api.TextBlock) {
+		text := strings.TrimSpace(nodeText(cell, source))
+		tb := styledInline(cell, source)
+		if tb == nil {
+			tb = makeTextBlock(text)
+		}
+		return text, tb
+	}
 
 	for child := table.FirstChild(); child != nil; child = child.NextSibling() {
 		switch row := child.(type) {
 		case *east.TableHeader:
 			for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
 				if _, ok := cell.(*east.TableCell); ok {
-					headers = append(headers, strings.TrimSpace(nodeText(cell, source)))
+					t, tb := cellOf(cell)
+					headers = append(headers, t)
+					headerCells = append(headerCells, tb)
 				}
 			}
 		case *east.TableRow:
-			var cells []string
+			var texts []string
+			var tbs []*api.TextBlock
 			for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
 				if _, ok := cell.(*east.TableCell); ok {
-					cells = append(cells, strings.TrimSpace(nodeText(cell, source)))
+					t, tb := cellOf(cell)
+					texts = append(texts, t)
+					tbs = append(tbs, tb)
 				}
 			}
-			rows = append(rows, strings.Join(cells, "|"))
+			rows = append(rows, texts)
+			rowCells = append(rowCells, tbs)
 		}
 	}
 
@@ -184,36 +211,47 @@ func convertMarkdownTable(table *east.Table, source []byte) []api.DocumentBlock 
 		return nil
 	}
 
-	// First chunk vertically (by rows), then within each row-chunk slice
-	// horizontally (by columns). Each (rowChunk, colChunk) pair becomes one
-	// pendingMarkdownTable + placeholder block. Order: top-to-bottom, then
-	// left-to-right within a row-chunk, so the visual reading order matches
-	// the source markdown when blocks are rendered sequentially.
-	rowChunks := chunkTableRows(rows, maxMarkdownTableRows)
 	colSlices := sliceColumns(len(headers), maxMarkdownTableCols)
-
-	out := make([]api.DocumentBlock, 0, len(rowChunks)*len(colSlices))
-	for _, rowChunk := range rowChunks {
-		for _, cs := range colSlices {
-			subHeaders := headers[cs.start:cs.end]
-			subRows := projectRowColumns(rowChunk, cs.start, cs.end, len(headers))
-			pendingMarkdownTables = append(pendingMarkdownTables, MarkdownTableData{
-				Headers: subHeaders,
-				Rows:    subRows,
-			})
-			colSize := len(subHeaders)
-			rowSize := 1 + len(subRows)
+	var out []api.DocumentBlock
+	for _, cs := range colSlices {
+		width := cs.end - cs.start
+		chunk := rowsPerTableChunk(width)
+		for r0 := 0; r0 == 0 || r0 < len(rows); r0 += chunk {
+			r1 := r0 + chunk
+			if r1 > len(rows) {
+				r1 = len(rows)
+			}
+			data := MarkdownTableData{
+				Headers:     append([]string(nil), headers[cs.start:cs.end]...),
+				HeaderCells: append([]*api.TextBlock(nil), headerCells[cs.start:cs.end]...),
+			}
+			for i := r0; i < r1; i++ {
+				texts := make([]string, width)
+				tbs := make([]*api.TextBlock, width)
+				for c := cs.start; c < cs.end; c++ {
+					if c < len(rows[i]) {
+						texts[c-cs.start] = rows[i][c]
+						tbs[c-cs.start] = rowCells[i][c]
+					}
+				}
+				data.Rows = append(data.Rows, strings.Join(texts, "|"))
+				data.RowCells = append(data.RowCells, tbs)
+			}
+			pendingMarkdownTables = append(pendingMarkdownTables, data)
 			out = append(out, api.DocumentBlock{
 				BlockType: 31,
 				Table: &api.TableBlock{
 					Property: &api.TableProperty{
-						RowSize:     rowSize,
-						ColumnSize:  colSize,
-						ColumnWidth: calcColumnWidths(subHeaders, subRows),
+						RowSize:     1 + len(data.Rows),
+						ColumnSize:  width,
+						ColumnWidth: calcColumnWidths(data.Headers, data.Rows),
 						HeaderRow:   true,
 					},
 				},
 			})
+			if len(rows) == 0 {
+				break
+			}
 		}
 	}
 	return out
@@ -241,49 +279,6 @@ func sliceColumns(total, maxCols int) []columnSlice {
 		out = append(out, columnSlice{i, end})
 	}
 	return out
-}
-
-// projectRowColumns extracts columns [colStart, colEnd) from a slice of rows
-// encoded as "c1|c2|..." strings. Missing cells are emitted as empty.
-func projectRowColumns(rows []string, colStart, colEnd, totalCols int) []string {
-	if rows == nil {
-		return nil
-	}
-	out := make([]string, 0, len(rows))
-	for _, row := range rows {
-		cells := strings.SplitN(row, "|", totalCols+1)
-		sub := make([]string, 0, colEnd-colStart)
-		for i := colStart; i < colEnd; i++ {
-			if i < len(cells) {
-				sub = append(sub, strings.TrimSpace(cells[i]))
-			} else {
-				sub = append(sub, "")
-			}
-		}
-		out = append(out, strings.Join(sub, "|"))
-	}
-	return out
-}
-
-// chunkTableRows splits a row slice into chunks of at most maxRows entries.
-// An empty input yields a single empty chunk so the header-only table is
-// still emitted.
-func chunkTableRows(rows []string, maxRows int) [][]string {
-	if maxRows <= 0 {
-		maxRows = 1
-	}
-	if len(rows) == 0 {
-		return [][]string{nil}
-	}
-	var chunks [][]string
-	for i := 0; i < len(rows); i += maxRows {
-		end := i + maxRows
-		if end > len(rows) {
-			end = len(rows)
-		}
-		chunks = append(chunks, rows[i:end])
-	}
-	return chunks
 }
 
 // styledTextBlock converts a node's inline children into a TextBlock whose

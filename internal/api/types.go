@@ -757,6 +757,23 @@ type CreateBlockChildrenResponse struct {
 	} `json:"data,omitempty"`
 }
 
+// CreateDescendantsRequest is the request body for
+// POST /docx/v1/documents/:document_id/blocks/:block_id/descendant
+type CreateDescendantsRequest struct {
+	ChildrenID  []string        `json:"children_id"`
+	Descendants []DocumentBlock `json:"descendants"`
+	Index       int             `json:"index"`
+}
+
+// CreateDescendantsResponse is the response from creating a block tree
+type CreateDescendantsResponse struct {
+	BaseResponse
+	Data struct {
+		Children           []DocumentBlock `json:"children,omitempty"`
+		DocumentRevisionID int             `json:"document_revision_id,omitempty"`
+	} `json:"data,omitempty"`
+}
+
 // DeleteBlocksRequest is the request body for batch deleting block children
 type DeleteBlocksRequest struct {
 	StartIndex int `json:"start_index"`
