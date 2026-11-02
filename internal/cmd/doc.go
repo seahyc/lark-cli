@@ -763,6 +763,51 @@ Examples:
 
 // --- doc append ---
 
+// maxAppendBatch is the most children the docx create-blocks endpoint
+// accepts in one request.
+const maxAppendBatch = 50
+
+// createAndFillTable creates one markdown table at index and fills its cells.
+func createAndFillTable(client *api.Client, documentID, blockID string, mdTable MarkdownTableData, index int) ([]api.DocumentBlock, int) {
+	mdTableBlocks := buildTableBlocks(mdTable.Headers, mdTable.Rows)
+	created, rev, err := client.CreateDocumentBlocks(documentID, blockID, mdTableBlocks, index)
+	if err != nil {
+		output.Fatal("API_ERROR", err)
+	}
+	for _, tb := range created {
+		if tb.BlockType != 31 || tb.Table == nil || len(tb.Table.Cells) == 0 {
+			continue
+		}
+		var cellContents []string
+		cellContents = append(cellContents, mdTable.Headers...)
+		colSize := len(mdTable.Headers)
+		for _, row := range mdTable.Rows {
+			cells := strings.Split(row, "|")
+			for i := 0; i < colSize; i++ {
+				if i < len(cells) {
+					cellContents = append(cellContents, strings.TrimSpace(cells[i]))
+				} else {
+					cellContents = append(cellContents, "")
+				}
+			}
+		}
+		for i, cellID := range tb.Table.Cells {
+			if i >= len(cellContents) || cellContents[i] == "" {
+				continue
+			}
+			time.Sleep(200 * time.Millisecond)
+			textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
+			if _, _, cellErr := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1); cellErr != nil {
+				time.Sleep(500 * time.Millisecond)
+				if _, _, cellErr = client.CreateDocumentBlocks(documentID, cellID, textBlock, -1); cellErr != nil {
+					output.Fatal("API_ERROR", fmt.Errorf("failed to populate table cell %d: %w", i, cellErr))
+				}
+			}
+		}
+	}
+	return created, rev
+}
+
 // makeTextBlock creates a TextBlock with a single text run
 func makeTextBlock(content string) *api.TextBlock {
 	return &api.TextBlock{
@@ -1057,6 +1102,8 @@ Examples:
 		useMarkdown, _ := cmd.Flags().GetBool("markdown")
 
 		var blocks []api.DocumentBlock
+		var markdownSeq []api.DocumentBlock
+		var markdownTables []MarkdownTableData
 		if useJSON {
 			var err error
 			blocks, err = readBlocksFromStdin()
@@ -1068,16 +1115,11 @@ Examples:
 			if err != nil {
 				output.Fatal("READ_ERROR", err)
 			}
-			blocks = parseMarkdownToBlocks(data)
-			// Separate table blocks from non-table blocks;
-			// markdown tables need 2-phase creation (handled below).
-			var nonTableBlocks []api.DocumentBlock
-			for _, b := range blocks {
-				if b.BlockType != 31 {
-					nonTableBlocks = append(nonTableBlocks, b)
-				}
-			}
-			blocks = nonTableBlocks
+			// Keep the full sequence (table placeholders included) so blocks
+			// and tables are created in document order below.
+			markdownSeq = parseMarkdownToBlocks(data)
+			markdownTables = pendingMarkdownTables
+			pendingMarkdownTables = nil
 		} else {
 			bulletItems, _ := cmd.Flags().GetStringArray("bullet")
 			orderedItems, _ := cmd.Flags().GetStringArray("ordered")
@@ -1100,7 +1142,7 @@ Examples:
 		tableHeaders, _ := cmd.Flags().GetStringArray("table-header")
 		tableRows, _ := cmd.Flags().GetStringArray("table-row")
 
-		if len(blocks) == 0 && len(tableHeaders) == 0 && len(pendingMarkdownTables) == 0 {
+		if len(blocks) == 0 && len(tableHeaders) == 0 && len(markdownSeq) == 0 {
 			output.Fatal("MISSING_ARG", fmt.Errorf("at least one content flag is required (--text, --heading, --code, --bullet, --ordered, --todo, --divider, --quote, --table-header, --json, or --markdown)"))
 		}
 
@@ -1165,50 +1207,49 @@ Examples:
 			allCreatedBlocks = append(allCreatedBlocks, createdTableBlocks...)
 		}
 
-		// Handle tables extracted from markdown input
-		for _, mdTable := range pendingMarkdownTables {
-			mdTableBlocks := buildTableBlocks(mdTable.Headers, mdTable.Rows)
-			createdMdTableBlocks, mdTableRevID, err := client.CreateDocumentBlocks(documentID, blockID, mdTableBlocks, index)
-			if err != nil {
-				output.Fatal("API_ERROR", err)
-			}
-			revisionID = mdTableRevID
-
-			for _, tb := range createdMdTableBlocks {
-				if tb.BlockType == 31 && tb.Table != nil && len(tb.Table.Cells) > 0 {
-					var cellContents []string
-					cellContents = append(cellContents, mdTable.Headers...)
-					colSize := len(mdTable.Headers)
-					for _, row := range mdTable.Rows {
-						cells := strings.Split(row, "|")
-						for i := 0; i < colSize; i++ {
-							if i < len(cells) {
-								cellContents = append(cellContents, strings.TrimSpace(cells[i]))
-							} else {
-								cellContents = append(cellContents, "")
-							}
-						}
+		// Create markdown content in document order: batches of regular
+		// blocks (at most maxAppendBatch per request) interleaved with tables.
+		if len(markdownSeq) > 0 {
+			curIndex := index
+			var batch []api.DocumentBlock
+			flush := func() {
+				for len(batch) > 0 {
+					n := len(batch)
+					if n > maxAppendBatch {
+						n = maxAppendBatch
 					}
-
-					for i, cellID := range tb.Table.Cells {
-						if i < len(cellContents) && cellContents[i] != "" {
-							time.Sleep(200 * time.Millisecond)
-							textBlock := []api.DocumentBlock{{BlockType: 2, Text: makeTextBlock(cellContents[i])}}
-							_, _, cellErr := client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
-							if cellErr != nil {
-								time.Sleep(500 * time.Millisecond)
-								_, _, cellErr = client.CreateDocumentBlocks(documentID, cellID, textBlock, -1)
-								if cellErr != nil {
-									output.Fatal("API_ERROR", fmt.Errorf("failed to populate table cell %d: %w", i, cellErr))
-								}
-							}
-						}
+					created, rev, err := client.CreateDocumentBlocks(documentID, blockID, batch[:n], curIndex)
+					if err != nil {
+						output.Fatal("API_ERROR", err)
 					}
+					revisionID = rev
+					allCreatedBlocks = append(allCreatedBlocks, created...)
+					if curIndex >= 0 {
+						curIndex += n
+					}
+					batch = batch[n:]
 				}
 			}
-			allCreatedBlocks = append(allCreatedBlocks, createdMdTableBlocks...)
+			tableIdx := 0
+			for _, b := range markdownSeq {
+				if b.BlockType != 31 {
+					batch = append(batch, b)
+					continue
+				}
+				flush()
+				if tableIdx >= len(markdownTables) {
+					continue
+				}
+				created, rev := createAndFillTable(client, documentID, blockID, markdownTables[tableIdx], curIndex)
+				tableIdx++
+				revisionID = rev
+				allCreatedBlocks = append(allCreatedBlocks, created...)
+				if curIndex >= 0 {
+					curIndex++
+				}
+			}
+			flush()
 		}
-		pendingMarkdownTables = nil
 
 		output.JSON(api.OutputDocumentAppend{
 			Success:            true,
