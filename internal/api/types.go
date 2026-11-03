@@ -2,6 +2,8 @@ package api
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -2333,6 +2335,30 @@ type ChatDetail struct {
 	ChatType    string `json:"chat_type"`
 	External    bool   `json:"external"`
 	ChatStatus  string `json:"chat_status"`
+	// UserCount / BotCount are returned by GET /im/v1/chats/:chat_id as
+	// strings ("2"); FlexInt accepts either a JSON string or number.
+	UserCount FlexInt `json:"user_count,omitempty"`
+	BotCount  FlexInt `json:"bot_count,omitempty"`
+}
+
+// FlexInt decodes an integer that Lark may encode as a JSON number or a
+// numeric string. Empty or unparseable values decode to 0.
+type FlexInt int
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (f *FlexInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(strings.TrimSpace(string(b)), "\"")
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		*f = 0
+		return nil
+	}
+	*f = FlexInt(n)
+	return nil
 }
 
 // ChatMember represents a chat member

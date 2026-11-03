@@ -28,6 +28,9 @@ Full coverage for Lark chat + message operations via the `lark` CLI: send, read,
 
 **Send / reply:**
 ```bash
+# Safe send to a person: dry-run first, then the same command without --dry-run
+lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user --dry-run
+lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user
 lark msg send --to user@example.com --text "Hello!"
 lark msg send --to oc_12345 --parent-id om_abcdef --msg-type text --text "Replying here"
 lark msg send --to oc_12345 --file ./report.pdf
@@ -99,12 +102,60 @@ Reply in thread:
 lark msg send --to oc_xxxx --parent-id om_xxxx --msg-type text --text "Replying here"
 ```
 
+#### Sending to the right person (recommended flow)
+
+1. Address the person by name, email, or `me`. No open_id lookup needed:
+   ```bash
+   lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user --dry-run
+   ```
+2. Read the JSON. Check `ok`, `recipient.person` (name, email, open_id),
+   `chat` (`chat_mode` p2p/group, group `name`, `user_count`, and for a p2p
+   chat the `counterpart` taken from the chat's member list), `identity`
+   (`as` user/bot, and which user), `message.msg_type`, and each
+   `message.attachments[]` entry (`size`, `limit`, `within_limit`). A dry run
+   uses read-only contact/chat APIs only. It never uploads or sends, and it
+   exits 1 when `problems` is non-empty.
+3. Run the same command again without `--dry-run`. When `--to` was a name,
+   stderr prints `note: --to "..." resolved to Name <email> (ou_...)`.
+
+Name resolution rules (`--to "Name"`, or `--to-type name` to force it):
+- Contact search runs and the CLI picks the **one** hit whose name equals the
+  query (case/space-insensitive). Failing that, it picks the one hit whose name
+  contains every query token as a word prefix (`"os yeo"` matches `Oswald Yeo`).
+- More than one plausible person fails with `AMBIGUOUS_RECIPIENT` and lists
+  `candidates` (name, en_name, email, department, open_id). Re-run with the
+  chosen open_id or email. The CLI never guesses.
+- No plausible person fails with `RECIPIENT_NOT_FOUND`, listing near-misses
+  when there are any.
+- IDs keep their usual meaning: `ou_` open_id, `oc_` chat_id, `x@y` email,
+  numeric or user_id-shaped tokens such as `3e3cf96b`. An explicit
+  `--to-type` other than `name`/`me` turns name lookup off.
+- `--to me` sends to yourself (your own open_id).
+- Name lookup uses contact search with the **user** token, so it requires a
+  completed `lark auth login`. `department` may be empty when the tenant
+  hides department info from the app.
+
+File size limits are checked **before** anything is uploaded or sent. Lark IM
+allows 30 MiB per file (`POST /im/v1/files`, error 234006 when exceeded) and
+10 MiB per image (`POST /im/v1/images`). It rejects empty files (234010). An
+oversize `--file` fails with `FILE_TOO_LARGE`. For a large deck or video,
+upload it to Drive and send the link:
+```bash
+lark doc upload ./deck.pptx            # returns the Drive file URL
+lark msg send --to "Oswald Yeo" --text "Deck: <url>" --as user --dry-run
+```
+
+Identity: `msg send` already defaults to `--as user`, so you do not need to
+pass it. Passing it anyway documents the intent. `--as bot` sends as the app
+bot; the dry run shows that as `identity.as: "bot"` with the `app_id`.
+
 Flags:
-- `--to` (required): Recipient identifier (user ID, open_id, email, or chat_id)
-- `--to-type`: Explicitly specify ID type (`open_id`, `user_id`, `email`, `chat_id`) — auto-detected if omitted
+- `--to` (required): Recipient: a person's name (`"Oswald Yeo"`), email, `me`, open_id (`ou_`), chat_id (`oc_`), or user_id
+- `--to-type`: Explicitly specify the recipient type (`name`, `me`, `open_id`, `bot_open_id`, `user_id`, `email`, `chat_id`). It is auto-detected if omitted
+- `--dry-run`: Resolve and print recipient, chat, identity, and file size checks as JSON. Nothing is uploaded or sent
 - `--text`: Message text (markdown-lite). Use `{{image}}` to place images.
 - `--image`: Image file path (repeatable)
-- `--file`: File path to send (repeatable; each file sent as a separate message). The CLI picks the message type from the extension: **video** (`.mp4`/`.mov`/`.m4v`) is sent as a playable **media** message, **audio** (`.opus`) as a **voice** message, and everything else (pdf, doc/docx, xls/xlsx, ppt/pptx, and any other type via `stream`) as a plain file. **Cannot be combined with `--text` or `--image`.** Max 30MB per file (Lark API limit). Images sent via `--image` are capped at 10MB each.
+- `--file`: File path to send (repeatable; each file sent as a separate message). The CLI picks the message type from the extension: **video** (`.mp4`/`.mov`/`.m4v`) is sent as a playable **media** message, **audio** (`.opus`) as a **voice** message, and everything else (pdf, doc/docx, xls/xlsx, ppt/pptx, and any other type via `stream`) as a plain file. **Cannot be combined with `--text` or `--image`.** Max 30 MiB per file and 10 MiB per `--image` (Lark IM limits). The CLI checks sizes before uploading and fails with `FILE_TOO_LARGE`. Use `lark doc upload` and send the link for anything larger.
 - `--cover`: Cover image for a video `--file` (optional). If omitted, a plain placeholder cover is generated automatically — Lark overlays its own play button. A video *must* have a cover or Lark stores it as `nonsupport` ("This message type is currently not supported"); the CLI handles this for you. Video duration is read from the mp4 and shown on the thumbnail automatically.
 - `--msg-type`: `text` (default) or `post` — auto-upgraded to `post` when `--text` contains `**`/`@{` mentions or `--image` is used
 - `--as`: `bot` or `user` (default)
@@ -593,6 +644,9 @@ Common error codes:
 - `SCOPE_ERROR` — Missing messages permissions
 - `VALIDATION_ERROR` — Missing required fields
 - `API_ERROR` — Lark API issue (e.g., bot not in group, missing permissions)
+- `AMBIGUOUS_RECIPIENT` — `--to "Name"` matched several people; the error carries a `candidates` array (name, email, department, open_id)
+- `RECIPIENT_NOT_FOUND` — no person matches the `--to` name or email (near-miss `candidates` are included when available)
+- `FILE_TOO_LARGE` — a `--file` exceeds 30 MiB, or an `--image` exceeds 10 MiB. Nothing was uploaded; use `lark doc upload` and send the link
 
 ## Required Permissions
 

@@ -273,6 +273,20 @@ func (c *Client) UploadMessageImageAsUser(filePath string) (string, error) {
 	return c.uploadImageWithToken(filePath, auth.GetTokenStore().GetAccessToken())
 }
 
+// IM upload size limits, from the Lark Open Platform docs:
+//   - POST /open-apis/im/v1/files: "文件大小不得超过30M，且不允许上传空文件"
+//     (file must not exceed 30M; empty files are rejected). Exceeding it
+//     returns error 234006 "The file size exceed the max value"; a 0-byte
+//     upload returns 234010.
+//   - POST /open-apis/im/v1/images: images are capped at 10M.
+//
+// The docs say "30M"/"10M" without defining M; we treat it as MiB. The CLI
+// pre-checks against these so a large file fails before any upload.
+const (
+	MaxIMFileBytes  int64 = 30 << 20
+	MaxIMImageBytes int64 = 10 << 20
+)
+
 // uploadFileWithToken is the shared implementation for file uploads
 func (c *Client) uploadFileWithToken(filePath, fileType, token string, durationMs int) (string, error) {
 	file, err := os.Open(filePath)

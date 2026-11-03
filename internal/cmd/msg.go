@@ -368,6 +368,7 @@ var (
 	msgSendParentID string
 	msgSendMsgType  string
 	msgSendAs       string
+	msgSendDryRun   bool
 
 	// msg edit flags
 	msgEditMessageID string
@@ -381,7 +382,20 @@ var msgSendCmd = &cobra.Command{
 	Short: "Send a message to a user or chat",
 	Long: `Send a message to a user or chat.
 
-By default, messages are sent as the bot. Use --as user to send as yourself.
+Messages are sent as you (--as user) by default. Use --as bot to send as the
+app bot.
+
+Recipients (--to):
+- A person's name ("Oswald Yeo"), resolved through contact search. It must
+  identify exactly one person; otherwise the command fails and lists the
+  candidates (name, email, department, open_id) instead of guessing.
+- An email, "me", an open_id (ou_...), a chat_id (oc_...), or a user_id.
+
+Use --dry-run first to confirm the destination: it resolves and prints the
+recipient, the chat (p2p vs group, name, member count), the sending identity,
+and each file's size against the Lark IM limit (30 MiB files, 10 MiB images),
+then exits without uploading or sending. Oversize files fail before upload;
+share large files via Drive (lark doc upload) and send the link instead.
 
 Message format:
 - Plain text (default): sent as-is, no formatting applied
@@ -390,11 +404,16 @@ Message format:
 - Message type: text (default) or post (rich; auto-selected when needed)
 
 Examples:
-	# Send text to user (as bot)
+	# Check who/where a file would go, then send it
+	lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user --dry-run
+	lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user
+
+	# Send text to a user by email or open_id
+	lark msg send --to oswald@example.com --text "Hello!"
 	lark msg send --to ou_xxx --text "Hello!"
 
-	# Send as yourself (user token)
-	lark msg send --to ou_xxx --text "Hello!" --as user
+	# Send as the app bot
+	lark msg send --to ou_xxx --text "Hello!" --as bot
 
 	# Send to group chat with line breaks
 	lark msg send --to oc_xxx --text "Line 1\nLine 2\nLine 3"
@@ -454,17 +473,56 @@ Examples:
 
 		asUser := msgSendAs == "user"
 
-		// Auto-detect receive_id_type if not specified
-		receiveIDType := msgSendToType
-		if receiveIDType == "" {
-			receiveIDType = detectIDType(msgSendTo)
+		// Check attachment sizes before resolving or uploading anything, so an
+		// oversize file fails fast (a dry run reports it instead).
+		attachments := inspectSendAttachments(msgSendFiles, msgSendImages)
+		if !msgSendDryRun {
+			if err := firstAttachmentProblem(attachments); err != nil {
+				var ae *attachmentError
+				if errors.As(err, &ae) {
+					output.Fatalf(ae.Code, "%s", ae.Message)
+				}
+				output.Fatal("FILE_ERROR", err)
+			}
 		}
-		receiveIDType, receiveID, targetErr := resolveMessageSendTargetForIdentity(receiveIDType, msgSendTo, asUser)
+
+		client := api.NewClient()
+		dir := newAPIRecipientDirectory(client, config.GetAppID())
+
+		// Resolve --to: names and "me" go through the contact API; raw IDs are
+		// auto-detected when --to-type is not given.
+		recipient, rErr := resolveSendRecipient(dir, msgSendTo, msgSendToType)
+		if rErr != nil {
+			fatalRecipientError(rErr)
+		}
+		receiveIDType, receiveID, targetErr := resolveMessageSendTargetForIdentity(recipient.ReceiveIDType, recipient.ReceiveID, asUser)
 		if targetErr != nil {
 			output.Fatal("BOT_CHAT_ID_REQUIRED", targetErr)
 		}
 
-		client := api.NewClient()
+		if msgSendDryRun {
+			report := buildSendDryRun(dir, sendDryRunInput{
+				AsUser:        asUser,
+				Recipient:     recipient,
+				ReceiveIDType: receiveIDType,
+				ReceiveID:     receiveID,
+				MsgType:       effectiveTextMsgType(msgSendMsgType, msgSendText, len(msgSendImages)),
+				Text:          msgSendText,
+				Attachments:   attachments,
+				FileCount:     len(msgSendFiles),
+				ParentID:      msgSendParentID,
+				RootID:        msgSendRootID,
+			})
+			output.JSON(report)
+			if !report.OK {
+				os.Exit(1)
+			}
+			return
+		}
+		if recipient.ResolvedBy == "name" || recipient.ResolvedBy == "me" {
+			p := recipient.Person
+			fmt.Fprintf(os.Stderr, "note: --to %q resolved to %s <%s> (%s)\n", recipient.Input, p.Name, p.Email, p.OpenID)
+		}
 
 		// Handle file sends (one message per file)
 		if len(msgSendFiles) > 0 {
@@ -579,9 +637,8 @@ Examples:
 		}
 
 		// Auto-upgrade text -> post when mentions, markdown, or images are present
-		msgType := msgSendMsgType
-		if msgType == "text" && (strings.Contains(msgSendText, "@{") || strings.Contains(msgSendText, "**") || len(imageKeys) > 0) {
-			msgType = "post"
+		msgType := effectiveTextMsgType(msgSendMsgType, msgSendText, len(imageKeys))
+		if msgType != msgSendMsgType {
 			fmt.Fprintf(os.Stderr, "note: auto-upgraded --msg-type from text to post (mentions/markdown/image detected)\n")
 		}
 
@@ -633,6 +690,28 @@ Examples:
 
 		output.JSON(result)
 	},
+}
+
+// effectiveTextMsgType applies the text -> post auto-upgrade used when the
+// text carries mentions or bold markdown, or images are attached.
+func effectiveTextMsgType(msgType, text string, imageCount int) string {
+	if msgType == "text" && (strings.Contains(text, "@{") || strings.Contains(text, "**") || imageCount > 0) {
+		return "post"
+	}
+	return msgType
+}
+
+// fatalRecipientError prints a --to resolution failure, including candidate
+// people for ambiguous names, and exits.
+func fatalRecipientError(err error) {
+	var re *recipientError
+	if errors.As(err, &re) {
+		if len(re.Candidates) > 0 {
+			output.FatalWithDetails(re.Code, re.Message, map[string]interface{}{"candidates": re.Candidates})
+		}
+		output.Fatalf(re.Code, "%s", re.Message)
+	}
+	output.Fatal("API_ERROR", err)
 }
 
 // resolveMessageSendTarget routes a person open_id through a previously
@@ -1517,7 +1596,7 @@ func init() {
 
 	// msg send flags
 	msgSendCmd.Flags().StringVar(&msgSendTo, "to", "", "Recipient ID (user ID, open_id, email, or chat_id) (required)")
-	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient ID type: open_id, bot_open_id, user_id, email, chat_id (auto-detected if not specified)")
+	msgSendCmd.Flags().StringVar(&msgSendToType, "to-type", "", "Recipient type: name, me, open_id, bot_open_id, user_id, email, chat_id (auto-detected if not specified)")
 	msgSendCmd.Flags().StringVar(&msgSendText, "text", "", "Message text (markdown-lite). Use {{image}} to place images")
 	msgSendCmd.Flags().StringSliceVar(&msgSendImages, "image", nil, "Image file path (repeatable)")
 	msgSendCmd.Flags().StringVar(&msgSendMsgType, "msg-type", "text", "Message type: text (default) or post (auto-upgraded when markdown/mentions/images are used)")
@@ -1526,6 +1605,7 @@ func init() {
 	msgSendCmd.Flags().StringSliceVar(&msgSendFiles, "file", nil, "File path to send (repeatable; each file sent as a separate message). Video (.mp4/.mov/.m4v) is sent as a playable video, audio (.opus) as a voice message, everything else as a file.")
 	msgSendCmd.Flags().StringVar(&msgSendCover, "cover", "", "Cover image for a video --file (optional; a plain cover is generated if omitted)")
 	msgSendCmd.Flags().StringVar(&msgSendAs, "as", "user", "Send as 'user' (default, your identity) or 'bot'")
+	msgSendCmd.Flags().BoolVar(&msgSendDryRun, "dry-run", false, "Resolve and print recipient, chat, identity, and file checks as JSON without uploading or sending")
 
 	// msg react flags
 	msgReactCmd.Flags().StringVar(&msgReactMessageID, "message-id", "", "Message ID to react to (required)")

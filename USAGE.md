@@ -411,7 +411,27 @@ Output:
 
 #### Send Message
 
-Send messages to users or group chats as the bot.
+Send messages to users or group chats. The default identity is you
+(`--as user`). Use `--as bot` to send as the app bot.
+
+`--to` accepts a person's name (`"Oswald Yeo"`), an email, `me`, an open_id
+(`ou_`), a chat_id (`oc_`), or a user_id. A name must match exactly one person.
+When it matches several, the command fails with `AMBIGUOUS_RECIPIENT` and lists
+the candidates (name, email, department, open_id).
+
+Run with `--dry-run` first to confirm where the message goes. The dry run
+prints JSON with the resolved recipient, the chat (p2p or group, name, member
+count, p2p counterpart), the sending identity, the message type, and each
+file's size against the IM limit. It uploads and sends nothing:
+
+```bash
+./lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user --dry-run
+./lark msg send --to "Oswald Yeo" --file ./deck.pptx --as user
+```
+
+Files over Lark's IM limit (30 MiB per file, 10 MiB per image) fail with
+`FILE_TOO_LARGE` before anything is uploaded. Share those through Drive with
+`lark doc upload` and send the link instead.
 
 ```bash
 # Send simple text to user

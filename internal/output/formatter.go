@@ -76,6 +76,28 @@ func Fatal(code string, err error) {
 	os.Exit(1)
 }
 
+// ErrorWithDetails outputs a structured error that carries extra fields
+// (for example a candidate list) alongside the standard error/code/message.
+// The standard keys always win over same-named detail keys.
+func ErrorWithDetails(code, message string, details map[string]interface{}) {
+	body := make(map[string]interface{}, len(details)+3)
+	for k, v := range details {
+		body[k] = v
+	}
+	body["error"] = true
+	body["code"] = code
+	body["message"] = message
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(body)
+}
+
+// FatalWithDetails outputs a structured error with extra fields and exits.
+func FatalWithDetails(code, message string, details map[string]interface{}) {
+	ErrorWithDetails(code, message, details)
+	os.Exit(1)
+}
+
 // Fatalf outputs a formatted error and exits
 func Fatalf(code, format string, args ...interface{}) {
 	Error(code, fmt.Sprintf(format, args...))
