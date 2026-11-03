@@ -103,3 +103,20 @@ func TestNonEmptyCellReplacesEmptyText(t *testing.T) {
 		t.Errorf("non-empty cell was replaced")
 	}
 }
+
+func TestColumnWidthsFitLongestToken(t *testing.T) {
+	w := calcColumnWidths(
+		[]string{"Number", "What it is", "Period"},
+		[]string{"US$662K|Billings for the quarter (SGD 838K), +15% QoQ, plus a long explanation that goes on|Q3-26 average (Q1-26: 1.5M)"},
+	)
+	if w[0] < len("US$662K")*9+24 {
+		t.Errorf("first column %dpx is too narrow for US$662K", w[0])
+	}
+	sum := 0
+	for _, x := range w {
+		sum += x
+	}
+	if sum > tablePageWidth {
+		t.Errorf("widths sum %d exceeds page width", sum)
+	}
+}

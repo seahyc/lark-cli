@@ -984,18 +984,51 @@ func calcColumnWidths(headers []string, rows []string) []int {
 	if colSize == 0 {
 		return nil
 	}
-	weight := make([]int, colSize)
+	weight := make([]int, colSize)  // longest cell, in characters
+	longest := make([]int, colSize) // longest unbreakable token, in characters
+	measure := func(i int, cell string) {
+		cell = strings.TrimSpace(cell)
+		if l := utf8.RuneCountInString(cell); l > weight[i] {
+			weight[i] = l
+		}
+		for _, tok := range strings.Fields(cell) {
+			if l := utf8.RuneCountInString(tok); l > longest[i] {
+				longest[i] = l
+			}
+		}
+	}
 	for i, h := range headers {
-		weight[i] = utf8.RuneCountInString(h)
+		measure(i, h)
 	}
 	for _, row := range rows {
 		cells := strings.SplitN(row, "|", colSize+1)
 		for i := 0; i < colSize && i < len(cells); i++ {
-			if l := utf8.RuneCountInString(strings.TrimSpace(cells[i])); l > weight[i] {
-				weight[i] = l
-			}
+			measure(i, cells[i])
 		}
 	}
+	// Each column gets at least enough room for its longest word, so
+	// numbers like "US$662K" never wrap mid-token.
+	const pxPerChar, padding, maxMin = 9, 24, 300
+	minW := make([]int, colSize)
+	minSum := 0
+	for i := range minW {
+		minW[i] = longest[i]*pxPerChar + padding
+		if minW[i] < 80 {
+			minW[i] = 80
+		}
+		if minW[i] > maxMin {
+			minW[i] = maxMin
+		}
+		minSum += minW[i]
+	}
+	if minSum >= tablePageWidth {
+		widths := make([]int, colSize)
+		for i := range widths {
+			widths[i] = minW[i] * tablePageWidth / minSum
+		}
+		return widths
+	}
+	// Share the remaining width in proportion to content length.
 	total := 0
 	for i := range weight {
 		if weight[i] < 8 {
@@ -1005,26 +1038,10 @@ func calcColumnWidths(headers []string, rows []string) []int {
 		}
 		total += weight[i]
 	}
-	minWidth := 80
-	if colSize*minWidth > tablePageWidth {
-		minWidth = tablePageWidth / colSize
-	}
+	spare := tablePageWidth - minSum
 	widths := make([]int, colSize)
 	for i, w := range weight {
-		widths[i] = tablePageWidth * w / total
-		if widths[i] < minWidth {
-			widths[i] = minWidth
-		}
-	}
-	// Re-normalise if the minimums pushed the sum over the page width.
-	sum := 0
-	for _, w := range widths {
-		sum += w
-	}
-	if sum > tablePageWidth {
-		for i := range widths {
-			widths[i] = widths[i] * tablePageWidth / sum
-		}
+		widths[i] = minW[i] + spare*w/total
 	}
 	return widths
 }
