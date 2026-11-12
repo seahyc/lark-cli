@@ -127,8 +127,102 @@ function draftMetadata(response) {
   };
 }
 
+// Forward-card reads.  A "forward card" is the mail-share card Lark posts into
+// a chat; it is keyed by (cardId, ownerUserId) and its thread lives in the
+// card owner's mailbox, so the public Mail API cannot read it.  The projection
+// returns bodies and attachment metadata but never attachment file tokens: the
+// download mutation resolves a token inside the app from the same card.
+const CARD_MESSAGE_LIMIT = 50;
+const CARD_ATTACHMENT_LIMIT = 100;
+const CARD_ADDRESS_LIMIT = 100;
+const CARD_BODY_LIMIT = 200000;
+const CARD_SUMMARY_LIMIT = 1000;
+
+function cardString(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+function cardAddresses(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, CARD_ADDRESS_LIMIT).map((entry) => ({
+    name: cardString(entry?.name),
+    address: cardString(entry?.address),
+  }));
+}
+
+function cardRequest(input, withSender) {
+  const keys = withSender ? ['cardId', 'ownerUserId', 'cardSenderUserId', 'includeBody'] : ['cardId', 'ownerUserId', 'includeBody'];
+  const value = exactKeys(input, keys);
+  const request = {
+    cardId: requiredString(value.cardId, 'cardId'),
+    ownerUserId: requiredString(value.ownerUserId, 'ownerUserId'),
+    msgNeedClipped: false,
+  };
+  if (withSender && value.cardSenderUserId !== undefined) {
+    request.cardSenderUserId = requiredString(value.cardSenderUserId, 'cardSenderUserId');
+  }
+  if (value.includeBody !== undefined && typeof value.includeBody !== 'boolean') {
+    throw new TypeError('includeBody must be a boolean');
+  }
+  return request;
+}
+
+function cardMessages(response, input) {
+  const value = object(response);
+  const includeBody = !!(input && input.includeBody === true);
+  const items = Array.isArray(value.messageItems) ? value.messageItems : [];
+  return {
+    notInDatabase: !!value.notInDatabase,
+    isLastPage: value.isLastPage === undefined ? null : !!value.isLastPage,
+    subject: cardString(value.subject),
+    messageCount: items.length,
+    messagesTruncated: items.length > CARD_MESSAGE_LIMIT,
+    messages: items.slice(0, CARD_MESSAGE_LIMIT).map((item) => {
+      const message = item && typeof item.message === 'object' && item.message ? item.message : {};
+      const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+      const html = cardString(message.bodyHtml);
+      const result = {
+        id: cardString(message.id),
+        subject: cardString(message.subject),
+        from: cardAddresses(message.from ? [message.from] : [])[0] || { name: '', address: '' },
+        to: cardAddresses(message.to),
+        cc: cardAddresses(message.cc),
+        createdTimestamp: Number.isFinite(Number(message.createdTimestamp)) ? Number(message.createdTimestamp) : 0,
+        bodySummary: cardString(message.bodySummary).slice(0, CARD_SUMMARY_LIMIT),
+        isBodyClipped: !!message.isBodyClipped,
+        hasBodyHtml: html.length > 0,
+        imageCount: Array.isArray(message.images) ? message.images.length : 0,
+        attachmentsTruncated: attachments.length > CARD_ATTACHMENT_LIMIT,
+        attachments: attachments.slice(0, CARD_ATTACHMENT_LIMIT).map((attachment, index) => ({
+          index,
+          fileName: cardString(attachment?.fileName),
+          fileSize: Number.isFinite(Number(attachment?.fileSize)) ? Number(attachment.fileSize) : 0,
+          type: attachment?.type,
+          expireTime: attachment?.expireTime,
+          hasToken: typeof attachment?.fileToken === 'string' && attachment.fileToken.length > 0,
+        })),
+      };
+      if (includeBody) {
+        result.bodyHtml = html.slice(0, CARD_BODY_LIMIT);
+        result.bodyHtmlTruncated = html.length > CARD_BODY_LIMIT;
+      }
+      return result;
+    }),
+  };
+}
+
 module.exports = {
   operations: {
+    'mail.forward-card-messages': {
+      command: '3657|email.client.v1.MailGetForwardMessageListRequest|email.client.v1.MailGetMessageListResponse|1|MAIL_GET_FORWARD_MESSAGE_LIST_FROM_DB',
+      request: (input) => cardRequest(input, true),
+      project: cardMessages,
+    },
+    'mail.forward-card-messages-net': {
+      command: '3658|email.client.v1.MailGetForwardMessageListFromNetRequest|email.client.v1.MailGetMessageListResponse|1|MAIL_GET_FORWARD_MESSAGE_LIST_FROM_NET',
+      request: (input) => cardRequest(input, false),
+      project: cardMessages,
+    },
     'mail.signatures': {
       command: '3728|email.client.v1.MailGetSignaturesRequest|email.client.v1.MailGetSignatureResponse|1|MAIL_GET_SIGNATURE',
       request(input) {

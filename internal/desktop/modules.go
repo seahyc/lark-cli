@@ -59,7 +59,7 @@ func loadModules(mutations bool) (map[string]ReadOperation, []string, error) {
 			if !valid.MatchString(entry.Name) || entry.ReadOnly == mutations || entry.Verification != "schema-verified" || len(entry.Evidence) == 0 {
 				return nil, nil, fmt.Errorf("invalid read operation manifest: %s", path)
 			}
-			if mutations && entry.Effect != "settings" && entry.Effect != "draft" && entry.Effect != "outbound" {
+			if mutations && entry.Effect != "settings" && entry.Effect != "draft" && entry.Effect != "outbound" && entry.Effect != "download" {
 				return nil, nil, fmt.Errorf("invalid mutation effect: %s", entry.Name)
 			}
 			if _, exists := ops[entry.Name]; exists {

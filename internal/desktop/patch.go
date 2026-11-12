@@ -123,6 +123,24 @@ func patchASAR(b []byte, script string) ([]byte, error) {
 	out = append(out, b[base:]...)
 	return append(out, replacement...), nil
 }
+
+// supportedMailArchiveHashes lists the SHA-256 of each installed mail.asar whose
+// native protocol has been revalidated. Add a hash only after checking that the
+// shipped wrappers behind every curated operation still match.
+var supportedMailArchiveHashes = map[string]string{
+	"fd2d495a7d8f4da81334a3695cdc996060aa16f7c20cd529d2c53c683e2f5c8c": "Lark 8.0.3",
+	// Updated build (mail.asar changed 2026-11-09). Static check: mail/en-US.html
+	// still has the </body> injection point; the forward-card and mail-download
+	// wrappers behind mail.forward-card-messages* and
+	// mail.card-attachment-download were read in this archive and js-worker.
+	"a51fce531aa99b5f6c58b88be412e7b544b201cbaa417e6501720b49595532b2": "Lark 7727.149 build",
+}
+
+func supportedMailArchive(hash string) bool {
+	_, ok := supportedMailArchiveHashes[hash]
+	return ok
+}
+
 func InstallSession(port int) (Session, error) {
 	var s Session
 	if port < 1024 || port > 65535 {
@@ -147,7 +165,7 @@ func InstallSession(port int) (Session, error) {
 		return s, e
 	}
 	// Fail closed after a Lark update until its native protocol is revalidated.
-	if digest(original) != "fd2d495a7d8f4da81334a3695cdc996060aa16f7c20cd529d2c53c683e2f5c8c" {
+	if !supportedMailArchive(digest(original)) {
 		return s, fmt.Errorf("unsupported Lark mail archive; revalidate the native protocol before patching this version")
 	}
 	nonce := make([]byte, 32)

@@ -55,6 +55,40 @@ lark desktop restore
 # Restart Lark when convenient to unload the in-memory bridge.
 ```
 
+## Forward cards (mail shared into a chat)
+
+A Lark Mail "forward card" posted in a chat is keyed by the `cardId` and
+`ownerId` in its `card_link` (read it from `lark msg get om_xxx`). Its thread
+lives in the card owner's mailbox, so the public Mail API can list the message
+IDs (`GET /mail/v1/user_mailboxes/me/messages/get_by_card`) but cannot read them,
+and the web client cannot open the card. The bridge can:
+
+```sh
+lark desktop run mail.forward-card-messages \
+  --input '{"cardId":"CARD_ID","ownerUserId":"OWNER_ID","includeBody":true}'
+# If it reports notInDatabase, use mail.forward-card-messages-net instead.
+
+# Preview, then apply. The file token is resolved inside the app and is never
+# printed. Download into a new, empty directory; the file arrives asynchronously.
+lark desktop mutate mail.card-attachment-download --input '{"cardId":"CARD_ID",
+  "ownerUserId":"OWNER_ID","messageId":"MESSAGE_ID","attachmentIndex":0,
+  "fileName":"EXACT_NAME","fileSize":12345,"destinationPath":"/abs/new-dir/file.pdf"}'
+lark desktop mutate ... --apply --expect-user NATIVE_USER_ID
+```
+
+`mail.card-attachment-download` writes only to `destinationPath` on this
+computer and changes nothing in any mailbox. It re-reads the card and refuses
+unless the message ID, index, file name and size all match. Treat downloaded
+files as untrusted input. Live-verified on Lark 7727.149 (a PDF and an XLSX from
+another user's card, byte counts matched).
+
+Patching and restoring `mail.asar` write inside `LarkSuite.app`, which macOS
+App Management protects. The process that runs `lark desktop start` or
+`restore` needs that permission (System Settings, Privacy & Security, App
+Management) or the write fails with `operation not permitted`. Opening the
+`lark://applink.larksuite.com/client/mail/home` link loads the Email page, which
+connects the bridge after a Lark restart.
+
 ## Personal self-chat
 
 ```sh

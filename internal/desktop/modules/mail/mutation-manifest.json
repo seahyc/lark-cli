@@ -220,5 +220,73 @@
       }
     ],
     "verification": "schema-verified"
+  },
+  {
+    "name": "mail.card-attachment-download",
+    "description": "Download one attachment of a Lark Mail forward card to a local file. Writes only to destinationPath on this computer and changes nothing in any mailbox. The attachment is named by message ID, index, file name and size; the bridge re-reads the card and rejects any mismatch. The file arrives asynchronously, so the caller must wait for destinationPath to reach fileSize bytes.",
+    "readOnly": false,
+    "effect": "download",
+    "parameters": [
+      {
+        "name": "cardId",
+        "type": "string",
+        "required": true,
+        "description": "Forward-card ID from the mail card link."
+      },
+      {
+        "name": "ownerUserId",
+        "type": "string",
+        "required": true,
+        "description": "Card owner's native user ID from the card link."
+      },
+      {
+        "name": "messageId",
+        "type": "string",
+        "required": true,
+        "description": "Message ID from mail.forward-card-messages."
+      },
+      {
+        "name": "attachmentIndex",
+        "type": "integer",
+        "required": true,
+        "description": "Zero-based attachment index from mail.forward-card-messages."
+      },
+      {
+        "name": "fileName",
+        "type": "string",
+        "required": true,
+        "description": "Exact attachment file name from mail.forward-card-messages."
+      },
+      {
+        "name": "fileSize",
+        "type": "integer",
+        "required": true,
+        "description": "Exact attachment size in bytes from mail.forward-card-messages."
+      },
+      {
+        "name": "destinationPath",
+        "type": "string",
+        "required": true,
+        "description": "Absolute local file path to write; must not contain . or .. segments."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "js-worker.asar:worker_temperate.js",
+        "offset": 1754413,
+        "snippet": "startDownloadV2: kP(W.gEv,{driveReq:{localPath,fileToken,mountNodePoint:userId,mountPoint:'email',apiType,bizScene:pA,watermarkScene},messageId,forceDownload,mailScene},accountParams)"
+      },
+      {
+        "file": "js-worker.asar:worker_temperate.js",
+        "offset": 2205424,
+        "snippet": "4064|email.client.v1.MailFileDownloadRequest|email.client.v1.MailFileDownloadResponse|1|MAIL_FILE_DOWNLOAD"
+      },
+      {
+        "file": "mail.asar:common/a97c2b688d.js",
+        "offset": 33309,
+        "snippet": "function N(e){return{fileName,fileSize,fileKey:e.fileToken,type,expireTime,fileUrl}}"
+      }
+    ],
+    "verification": "schema-verified"
   }
 ]

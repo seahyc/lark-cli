@@ -55,8 +55,82 @@ function escapeHtml(textValue) {
   })[character]);
 }
 
+const CARD_DOWNLOAD_KEYS = ['cardId', 'ownerUserId', 'messageId', 'attachmentIndex', 'fileName', 'fileSize', 'destinationPath'];
+
+function cardDownloadInput(input) {
+  const value = exactKeys(input, CARD_DOWNLOAD_KEYS);
+  const destinationPath = string(value.destinationPath, 'destinationPath');
+  if (!destinationPath.startsWith('/') || destinationPath.includes('\0') || destinationPath.endsWith('/')
+    || destinationPath.split('/').some((segment) => segment === '..' || segment === '.')) {
+    throw new TypeError('destinationPath must be an absolute file path without . or .. segments');
+  }
+  const attachmentIndex = integer(value.attachmentIndex, 'attachmentIndex');
+  if (attachmentIndex >= 100) throw new TypeError('attachmentIndex must be below 100');
+  return {
+    cardId: string(value.cardId, 'cardId'),
+    ownerUserId: string(value.ownerUserId, 'ownerUserId'),
+    messageId: string(value.messageId, 'messageId'),
+    attachmentIndex,
+    fileName: string(value.fileName, 'fileName'),
+    fileSize: integer(value.fileSize, 'fileSize'),
+    destinationPath,
+  };
+}
+
 module.exports = {
   operations: {
+    // Starts a local-file download of one attachment of a forward card.  It
+    // writes only to destinationPath on this computer; it changes nothing in
+    // the mailbox.  The caller names the attachment by message ID, index, file
+    // name and size; the bridge re-reads the card and passes the matching file
+    // token to the native downloader, so tokens never cross the bridge.
+    'mail.card-attachment-download': {
+      command: '4064|email.client.v1.MailFileDownloadRequest|email.client.v1.MailFileDownloadResponse|1|MAIL_FILE_DOWNLOAD',
+      request: cardDownloadInput,
+      requestFromSnapshot(snapshot, input, userId) {
+        const value = cardDownloadInput(input);
+        const items = Array.isArray(snapshot?.messageItems) ? snapshot.messageItems : [];
+        const message = items.map((item) => item && item.message).find((candidate) => candidate && candidate.id === value.messageId);
+        if (!message) throw new Error('Card message not found; re-read the card before downloading');
+        const attachment = Array.isArray(message.attachments) ? message.attachments[value.attachmentIndex] : undefined;
+        if (!attachment || attachment.fileName !== value.fileName || Number(attachment.fileSize ?? '0') !== value.fileSize) {
+          throw new Error('Attachment does not match the expected name and size; re-read the card');
+        }
+        if (typeof attachment.fileToken !== 'string' || attachment.fileToken.length === 0) throw new Error('Attachment has no downloadable file token');
+        if (typeof userId !== 'string' || userId.length === 0) throw new Error('Signed-in user identity unavailable');
+        // Mirrors the desktop download manager's MAIL_FILE_DOWNLOAD request:
+        // apiType 0 = DRIVE, bizScene 8 = mail, watermarkScene 0 = none,
+        // mailScene 3 = user-initiated save.
+        return {
+          driveReq: {
+            localPath: value.destinationPath,
+            fileToken: attachment.fileToken,
+            mountNodePoint: userId,
+            mountPoint: 'email',
+            apiType: 0,
+            bizScene: 8,
+            watermarkScene: 0,
+          },
+          messageId: value.messageId,
+          forceDownload: false,
+          mailScene: 3,
+        };
+      },
+      project(response, input) {
+        const value = object(response);
+        const request = cardDownloadInput(input);
+        const drive = value.driveResp && typeof value.driveResp === 'object' ? value.driveResp : {};
+        return {
+          messageId: request.messageId,
+          attachmentIndex: request.attachmentIndex,
+          destinationPath: request.destinationPath,
+          key: typeof drive.key === 'string' ? drive.key : '',
+          path: typeof value.path === 'string' ? value.path : '',
+          acknowledged: true,
+          verified: false,
+        };
+      },
+    },
     'mail.rule-enable': {
       command: '3690|email.client.v1.MailEnableRuleRequest|email.client.v1.MailEnableRuleResponse|1|MAIL_ENABLE_RULE',
       request(input) {

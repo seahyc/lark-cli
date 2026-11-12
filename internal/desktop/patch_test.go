@@ -3,6 +3,7 @@ package desktop
 import (
 	"encoding/binary"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -31,5 +32,42 @@ func TestPatchASARKeepsOriginalContent(t *testing.T) {
 	}
 	if _, e := patchASAR([]byte("invalid"), ""); e == nil {
 		t.Fatal("invalid ASAR accepted")
+	}
+}
+
+func TestSupportedMailArchiveFailsClosed(t *testing.T) {
+	if supportedMailArchive("") || supportedMailArchive("0000") {
+		t.Fatal("unknown archive accepted")
+	}
+	for hash := range supportedMailArchiveHashes {
+		if len(hash) != 64 || !supportedMailArchive(hash) {
+			t.Fatalf("malformed supported hash %q", hash)
+		}
+	}
+}
+
+func TestPatchInstalledArchiveWhenSupported(t *testing.T) {
+	path := "/Applications/LarkSuite.app/Contents/Frameworks/Lark Framework.framework/Versions/Current/Resources/webcontent/mail.asar"
+	original, err := os.ReadFile(path)
+	if err != nil || !supportedMailArchive(digest(original)) {
+		t.Skip("no supported installed Lark mail archive")
+	}
+	modules, err := moduleJavaScript()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations, err := mutationJavaScript()
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Replace(bridgeScript, "__LARK_LOCAL_SESSION__", "{}", 1)
+	script = strings.Replace(script, "__LARK_READ_OPERATIONS__", modules, 1)
+	script = strings.Replace(script, "__LARK_MUTATION_OPERATIONS__", mutations, 1)
+	patched, err := patchASAR(original, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(patched), "mail.card-attachment-download") || !strings.Contains(string(patched), "__larkLocalMailBridge") {
+		t.Fatal("patched archive is missing the bridge or the new operations")
 	}
 }

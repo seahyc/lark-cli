@@ -147,5 +147,92 @@
       }
     ],
     "verification": "schema-verified"
+  },
+  {
+    "name": "mail.forward-card-messages",
+    "description": "Read the messages of a Lark Mail forward card from the desktop client's local cache: sender, recipients, subject, summary, optional HTML body, and attachment metadata. Attachment file tokens are never returned. If notInDatabase is true, use mail.forward-card-messages-net.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "cardId",
+        "type": "string",
+        "required": true,
+        "description": "Forward-card ID from the mail card link (cardId query parameter)."
+      },
+      {
+        "name": "ownerUserId",
+        "type": "string",
+        "required": true,
+        "description": "Card owner's native user ID from the card link (ownerId query parameter)."
+      },
+      {
+        "name": "cardSenderUserId",
+        "type": "string",
+        "required": false,
+        "description": "Optional native user ID of the person who shared the card."
+      },
+      {
+        "name": "includeBody",
+        "type": "boolean",
+        "required": false,
+        "description": "Also return each message's HTML body (capped at 200,000 characters per message)."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar:common/a97c2b688d.js",
+        "offset": 17414,
+        "snippet": "Y=(0,d.Vy)(r.KYC,{reqOptions:{transform:(e,t)=>({...e,...t}),logFormat:{cardId,ownerUserId,msgNeedClipped,cardSenderUserId}},resOptions:{transform:(e,t)=>({isFromDb:!0,messageList:gC(e,t[0].threadId)})}})"
+      },
+      {
+        "file": "mail.asar:18918/cbff8f26c4.js",
+        "offset": 10052,
+        "snippet": "3657|email.client.v1.MailGetForwardMessageListRequest|email.client.v1.MailGetMessageListResponse|1|MAIL_GET_FORWARD_MESSAGE_LIST_FROM_DB"
+      },
+      {
+        "file": "mail.asar:common/a97c2b688d.js",
+        "offset": 33669,
+        "snippet": "gC maps messageItems[].message through p(); attachments map N: fileName, fileSize, fileToken, type, expireTime, fileUrl"
+      }
+    ],
+    "verification": "schema-verified"
+  },
+  {
+    "name": "mail.forward-card-messages-net",
+    "description": "Read the messages of a Lark Mail forward card from the server (use when the local-cache read reports notInDatabase). Same projection as mail.forward-card-messages; attachment file tokens are never returned.",
+    "readOnly": true,
+    "parameters": [
+      {
+        "name": "cardId",
+        "type": "string",
+        "required": true,
+        "description": "Forward-card ID from the mail card link (cardId query parameter)."
+      },
+      {
+        "name": "ownerUserId",
+        "type": "string",
+        "required": true,
+        "description": "Card owner's native user ID from the card link (ownerId query parameter)."
+      },
+      {
+        "name": "includeBody",
+        "type": "boolean",
+        "required": false,
+        "description": "Also return each message's HTML body (capped at 200,000 characters per message)."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "mail.asar:common/a97c2b688d.js",
+        "offset": 17694,
+        "snippet": "A=(0,d.Vy)(r.tYY,{reqOptions:{transform:(e,t)=>({...e,...t}),logFormat:{cardId,ownerUserId,msgNeedClipped}},resOptions:{transform:(e,t)=>({isFromDb:!1,messageList:gC(e,t[0].threadId)})}}); v() falls back to A when the DB read reports notInDatabase"
+      },
+      {
+        "file": "mail.asar:18918/cbff8f26c4.js",
+        "offset": 10194,
+        "snippet": "3658|email.client.v1.MailGetForwardMessageListFromNetRequest|email.client.v1.MailGetMessageListResponse|1|MAIL_GET_FORWARD_MESSAGE_LIST_FROM_NET"
+      }
+    ],
+    "verification": "schema-verified"
   }
 ]

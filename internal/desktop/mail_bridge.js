@@ -53,6 +53,7 @@
       const descriptor = mutationOperations[op];
       let params;
       let before;
+      let shownRequest;
       if (op === 'workspacenext.modify-navigation-order') throw new Error('Navigation reorder requires a verified ShellAPI-to-native identity mapping; currently unavailable');
       if (op.startsWith('mailnext.draft-fixture-')) {
         const a = readOperations['mail.account-metadata'];
@@ -78,6 +79,18 @@
         const r = await invoke(d,d.request({accountId:p.input.accountId}));
         before=r.data;
         params=descriptor.requestFromSnapshot(before,p.input);
+      } else if (op === 'mail.card-attachment-download') {
+        // Re-read the card inside the app and resolve the file token here, so
+        // it never crosses the bridge or appears in a preview.
+        const valid = descriptor.request(p.input);
+        const cardInput = {cardId:valid.cardId,ownerUserId:valid.ownerUserId};
+        const fromDb = readOperations['mail.forward-card-messages'];
+        const fromNet = readOperations['mail.forward-card-messages-net'];
+        if (!fromDb || !fromNet) throw new Error('Forward-card reads unavailable');
+        let card = await invoke(fromDb,fromDb.request(cardInput));
+        if (card.data?.notInDatabase) card = await invoke(fromNet,fromNet.request(cardInput));
+        params = descriptor.requestFromSnapshot(card.data,valid,userId);
+        shownRequest = valid;
       } else params = descriptor.request(p.input);
       if (op === 'triage.favorite-add' || op === 'triage.favorite-delete') {
         const f = readOperations['messaging.favorites'];
@@ -179,7 +192,7 @@
           if ((before.signatureUsages || []).some(u=>u.newMailSignatureId===params.signatureId || u.replyMailSignatureId===params.signatureId)) throw new Error('Signature is assigned to an address; reassign it before deleting');
         }
       }
-      if (p.apply !== true) return {userId,apply:false,operation:op,request:params};
+      if (p.apply !== true) return {userId,apply:false,operation:op,request:shownRequest ?? params};
       let response;
       if (op === 'messaging.send-self-text' || op === 'messaging.send-self-post') {
         const prepared = await LarkAPI.transport.callSdkApi('1001|im.v1.CreateQuasiMessageRequest|im.v1.CreateQuasiMessageResponse|1|CREATE_QUASI_MESSAGE',params,{extendParams:{},useFast:false});

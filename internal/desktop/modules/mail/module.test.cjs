@@ -29,3 +29,56 @@ test('projections retain bounded relevant mail data', () => {
   assert.equal(JSON.stringify(accounts).includes('must-not-leak'), false);
   assert.deepEqual(operations['mail.draft-item'].project({ draft: { id: 'd', threadId: 't', subject: 'private subject', bodyHtml: '<p>body</p>', images: [{}], attachments: [{}], lastUpdatedTimestamp: '9' } }), { id: 'd', threadId: 't', replyMessageId: '', subject: 'private subject', lastUpdatedTimestamp: 9, createdTimestamp: 0, attachmentCount: 1, imageCount: 1, hasBody: true });
 });
+
+test('forward-card reads send the shipped request shape and reject unknown fields', () => {
+  assert.deepEqual(operations['mail.forward-card-messages'].request({ cardId: 'c', ownerUserId: '7' }), { cardId: 'c', ownerUserId: '7', msgNeedClipped: false });
+  assert.deepEqual(operations['mail.forward-card-messages'].request({ cardId: 'c', ownerUserId: '7', cardSenderUserId: '8', includeBody: true }), { cardId: 'c', ownerUserId: '7', msgNeedClipped: false, cardSenderUserId: '8' });
+  // The network variant has no cardSenderUserId in the shipped wrapper.
+  assert.deepEqual(operations['mail.forward-card-messages-net'].request({ cardId: 'c', ownerUserId: '7' }), { cardId: 'c', ownerUserId: '7', msgNeedClipped: false });
+  assert.throws(() => operations['mail.forward-card-messages-net'].request({ cardId: 'c', ownerUserId: '7', cardSenderUserId: '8' }), /unsupported/);
+  assert.throws(() => operations['mail.forward-card-messages'].request({ cardId: '', ownerUserId: '7' }), /cardId/);
+  assert.throws(() => operations['mail.forward-card-messages'].request({ cardId: 'c', ownerUserId: '7', includeBody: 'yes' }), /includeBody/);
+  assert.throws(() => operations['mail.forward-card-messages'].request({ cardId: 'c', ownerUserId: '7', threadId: 't' }), /unsupported/);
+});
+
+test('forward-card projection returns attachment metadata but never file tokens', () => {
+  const response = {
+    notInDatabase: false,
+    isLastPage: true,
+    subject: 'RE: Project X',
+    messageItems: [{ message: {
+      id: 'm1', subject: 'RE: Project X', createdTimestamp: '1790000000000',
+      from: { name: 'Sender', address: 's@example.test' },
+      to: [{ name: 'Rcpt', address: 'r@example.test' }], cc: [],
+      bodySummary: 'summary', bodyHtml: '<p>full body</p>',
+      attachments: [{ fileName: 'list.xlsx', fileSize: '2048', fileToken: 'secret-token', type: 1, expireTime: '0', fileUrl: 'https://example.test/secret-url' }],
+      images: [{}],
+    } }],
+  };
+  const summary = operations['mail.forward-card-messages'].project(response, {});
+  assert.equal(summary.messages[0].from.address, 's@example.test');
+  assert.deepEqual(summary.messages[0].attachments, [{ index: 0, fileName: 'list.xlsx', fileSize: 2048, type: 1, expireTime: '0', hasToken: true }]);
+  assert.equal(summary.messages[0].bodyHtml, undefined);
+  assert.equal(summary.messages[0].hasBodyHtml, true);
+  assert.equal(summary.messages[0].imageCount, 1);
+  assert.equal(JSON.stringify(summary).includes('secret-token'), false);
+  assert.equal(JSON.stringify(summary).includes('secret-url'), false);
+  const full = operations['mail.forward-card-messages'].project(response, { includeBody: true });
+  assert.equal(full.messages[0].bodyHtml, '<p>full body</p>');
+  assert.equal(full.messages[0].bodyHtmlTruncated, false);
+});
+
+test('forward-card projection is bounded and tolerates an empty or missing list', () => {
+  assert.deepEqual(operations['mail.forward-card-messages'].project({ notInDatabase: true }, {}), { notInDatabase: true, isLastPage: null, subject: '', messageCount: 0, messagesTruncated: false, messages: [] });
+  const many = { messageItems: Array.from({ length: 60 }, (_, i) => ({ message: { id: `m${i}`, attachments: Array.from({ length: 120 }, () => ({ fileName: 'a', fileSize: '1', fileToken: 't' })) } })) };
+  const bounded = operations['mail.forward-card-messages'].project(many, {});
+  assert.equal(bounded.messages.length, 50);
+  assert.equal(bounded.messagesTruncated, true);
+  assert.equal(bounded.messageCount, 60);
+  assert.equal(bounded.messages[0].attachments.length, 100);
+  assert.equal(bounded.messages[0].attachmentsTruncated, true);
+  const huge = { messageItems: [{ message: { id: 'm', bodyHtml: 'x'.repeat(250000) } }] };
+  const capped = operations['mail.forward-card-messages'].project(huge, { includeBody: true });
+  assert.equal(capped.messages[0].bodyHtml.length, 200000);
+  assert.equal(capped.messages[0].bodyHtmlTruncated, true);
+});
