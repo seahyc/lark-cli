@@ -1,8 +1,3 @@
----
-name: lark-sheets
-description: Read and write Lark Sheets (spreadsheets) - list sheets, read cell data, write values, create spreadsheets, add tabs, apply formatting, resize columns. Use when user asks about a spreadsheet, wants to read/write data in a Lark sheet, or mentions a spreadsheet URL/ID.
----
-
 # Lark Sheets Skill
 
 Read, write, and manage Lark Sheets (spreadsheets) via the `lark` CLI.
@@ -10,12 +5,12 @@ Read, write, and manage Lark Sheets (spreadsheets) via the `lark` CLI.
 ## Tool Location
 
 ```
-tools/bin/lark
+lark
 ```
 
 Run from the vault root directory with required env var:
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet <command>
+lark sheet <command>
 ```
 
 ## Self-Diagnosis Before Doing Anything
@@ -23,16 +18,16 @@ LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet <command>
 Before attempting any sheet command, verify the tool is available and authenticated. Run this first:
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth status
+lark auth status
 ```
 
 Use this to distinguish the three failure modes:
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `command not found` or binary missing | Tool not installed in this environment | Tell the user: "The lark CLI tool is not available in this environment. It needs to be installed at `tools/bin/lark`." Do NOT attempt workarounds. |
-| `AUTH_ERROR` or `access_token` is empty | Not logged in | Run `LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login` — this opens the browser automatically for the user to complete OAuth |
-| `SCOPE_ERROR` on a command | Logged in but missing scope | Run `LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login --add --scopes documents` — opens the browser to re-authorize with the new scope |
+| `command not found` or binary missing | Tool not installed in this environment | Tell the user: "The lark CLI tool is not available in this environment. It needs to be installed at `lark`." Do NOT attempt workarounds. |
+| `AUTH_ERROR` or `access_token` is empty | Not logged in | Run `lark auth login` — this opens the browser automatically for the user to complete OAuth |
+| `SCOPE_ERROR` on a command | Logged in but missing scope | Run `lark auth login --add --scopes documents` — opens the browser to re-authorize with the new scope |
 | `API_ERROR (code 99991663)` on a specific file | Logged in and scoped, but no access to this file | Ask the file owner to share it (see Access Denied section below) |
 
 **Key distinction**: "tool not available" and "not authenticated" are completely different problems. Never tell the user the tool can't access Lark when the real issue is the binary is missing, and vice versa.
@@ -42,7 +37,7 @@ Use this to distinguish the three failure modes:
 ### List Sheets in a Spreadsheet
 
 ```bash
-tools/bin/lark sheet list <spreadsheet_token>
+lark sheet list <spreadsheet_token>
 ```
 
 Lists all sheets (tabs) within a Lark spreadsheet. Returns sheet IDs, titles, dimensions, and hidden status.
@@ -82,7 +77,7 @@ Fields:
 ### Read Sheet Data
 
 ```bash
-tools/bin/lark sheet read <spreadsheet_token> [--sheet <sheet_id>] [--range A1:Z100]
+lark sheet read <spreadsheet_token> [--sheet <sheet_id>] [--range A1:Z100]
 ```
 
 Reads cell values from a Lark spreadsheet.
@@ -129,7 +124,7 @@ Use the `fileToken` with `sheet download` to download these attachments.
 ### Download Cell Attachments
 
 ```bash
-tools/bin/lark sheet download <file_token> --spreadsheet <spreadsheet_token> -o <output_path>
+lark sheet download <file_token> --spreadsheet <spreadsheet_token> -o <output_path>
 ```
 
 Downloads a file attachment embedded in a spreadsheet cell. The `file_token` is the `fileToken` from `sheet read` output.
@@ -316,22 +311,22 @@ The sheet_id can be found in the URL query parameter:
 
 ```bash
 # List all sheets first
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet list T4mHsrFyzhXrj0tVzRslUGx8gkA
+lark sheet list T4mHsrFyzhXrj0tVzRslUGx8gkA
 
 # Then read specific sheet
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read T4mHsrFyzhXrj0tVzRslUGx8gkA --sheet abc123 --range A1:D20
+lark sheet read T4mHsrFyzhXrj0tVzRslUGx8gkA --sheet abc123 --range A1:D20
 ```
 
 ### Read Header Row Only
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read T4mHsrFyzhXrj0tVzRslUGx8gkA --range A1:Z1
+lark sheet read T4mHsrFyzhXrj0tVzRslUGx8gkA --range A1:Z1
 ```
 
 ### Read First 50 Rows of Specific Sheet
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read T4mHsrFyzhXrj0tVzRslUGx8gkA --sheet def456 --range A1:Z50
+lark sheet read T4mHsrFyzhXrj0tVzRslUGx8gkA --sheet def456 --range A1:Z50
 ```
 
 ### Create a Spreadsheet and Populate It
@@ -368,31 +363,31 @@ For large spreadsheets, use `jq` to extract specific data without loading everyt
 ### Get Column Headers
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read <token> --range A1:Z1 | jq '.values[0]'
+lark sheet read <token> --range A1:Z1 | jq '.values[0]'
 ```
 
 ### Get Row Count
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read <token> | jq '.row_count'
+lark sheet read <token> | jq '.row_count'
 ```
 
 ### Extract Specific Column (Column B)
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read <token> | jq '[.values[] | .[1]]'
+lark sheet read <token> | jq '[.values[] | .[1]]'
 ```
 
 ### Find Rows Matching a Value
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read <token> | jq '[.values[] | select(.[0] == "SearchValue")]'
+lark sheet read <token> | jq '[.values[] | select(.[0] == "SearchValue")]'
 ```
 
 ### Get First N Rows
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark sheet read <token> | jq '.values[:10]'
+lark sheet read <token> | jq '.values[:10]'
 ```
 
 ## Output Format
@@ -445,12 +440,12 @@ Do NOT suggest exporting to CSV, pasting values manually, or using a public link
 This skill requires the `documents` scope group (uses `drive:drive:readonly` for reads, `sheets:spreadsheet` for writes). If you see a `SCOPE_ERROR`, the user needs to add documents permissions:
 
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth login --add --scopes documents
+lark auth login --add --scopes documents
 ```
 
 To check current permissions:
 ```bash
-LARK_CONFIG_DIR=tools/lark/.lark tools/bin/lark auth status
+lark auth status
 ```
 
 ## Limitations

@@ -33,7 +33,7 @@ When adding or updating lark-cli capabilities:
 1. **Check Lark API** - Read the official docs to understand the endpoint, request/response format, and required scopes
 2. **Update CLI code** - Implement in the CLI following existing patterns (api layer -> cmd layer -> scopes)
 3. **Test** - Build with `go build ./cmd/lark`, then test the command against the live Lark API
-4. **Update skill docs** - Once verified, update the relevant skill in `skills/<module>/SKILL.md` so Claude agents know about the capability
+4. **Update skill docs** - Once verified, update the relevant skill in `skills/lark/references/<module>.md` so Claude agents know about the capability
 5. **Push to yingcong repo** - Push to `fork/main` (seahyc/lark-cli)
 6. **PR to upstream** - Open a PR to `origin/main` (yjwong/lark-cli) when there are enough cohesive changes
 

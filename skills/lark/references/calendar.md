@@ -1,8 +1,3 @@
----
-name: lark-calendar
-description: Manage Lark calendar - view schedule, create/update/delete events, check availability, find meeting slots, RSVP to invitations. Use when user asks about meetings, schedule, availability, or calendar.
----
-
 # Calendar Management Skill
 
 Manage Lark calendar via the `lark` CLI.

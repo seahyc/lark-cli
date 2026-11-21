@@ -1,8 +1,3 @@
----
-name: lark-docs
-description: Read and write Lark documents - get content as markdown or blocks, create new documents, append content (text, headings, lists, code), download images, list folders. Use when user asks about a Lark doc, wants to read/create/edit a document, or mentions a document URL/ID.
----
-
 # Lark Documents Skill
 
 Query and retrieve Lark document content via the `lark` CLI.

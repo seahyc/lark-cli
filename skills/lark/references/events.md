@@ -1,8 +1,3 @@
----
-name: lark-events
-description: Subscribe to real-time Lark events (messages, reactions, calendar, etc.) via long-polling, streamed as NDJSON - use when the user wants to watch live activity, tail events to a file, or build a reactive workflow. Runs until interrupted.
----
-
 # Lark Events Skill
 
 Subscribe to real-time Lark events as NDJSON using the `lark events` CLI. Best-effort long-polling fallback for the outbound events API — fine for watching live activity or piping into another tool.

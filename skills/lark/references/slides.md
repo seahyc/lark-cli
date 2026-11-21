@@ -1,8 +1,3 @@
----
-name: lark-slides
-description: Create and edit Lark Slides presentations from the CLI - new deck, append/delete slides via XML, upload media for embedding - use when the user wants to build slide decks programmatically or script changes to an existing presentation.
----
-
 # Lark Slides Skill
 
 Build and edit Lark Slides presentations via the `lark slides` CLI.

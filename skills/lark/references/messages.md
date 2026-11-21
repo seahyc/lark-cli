@@ -1,8 +1,3 @@
----
-name: lark-messages
-description: Chat and message operations in Lark - send/read/reply/recall/edit messages, react, download resources, and manage groups (create chats, add/remove members, pin/unpin messages, get share links, search messages across chats, forward or merge-forward messages). Use when the user asks about chat messages, conversation history, sending/searching messages, or managing Lark groups.
----
-
 # Messages Skill
 
 Full coverage for Lark chat + message operations via the `lark` CLI: send, read, react, edit, recall, search, forward, group-chat management, and resource downloads.

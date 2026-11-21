@@ -63,10 +63,10 @@ Copy the skill directories to your Claude Code skills location:
 
 ```bash
 # Project-specific (recommended)
-cp -r skills/* /path/to/your/project/.claude/skills/
+cp -r skills/lark /path/to/your/project/.claude/skills/
 
 # Or user-wide
-cp -r skills/* ~/.claude/skills/
+cp -r skills/lark ~/.claude/skills/
 ```
 
 Available skills:

@@ -1,8 +1,3 @@
----
-name: lark-minutes
-description: Access Lark Minutes recordings - get metadata, export transcripts, download audio/video. Use when user asks about meeting recordings, transcripts, or minutes.
----
-
 # Minutes Skill
 
 Access Lark Minutes recordings via the `lark` CLI.

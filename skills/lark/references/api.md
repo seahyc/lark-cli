@@ -1,8 +1,3 @@
----
-name: lark-api
-description: Execute raw HTTP requests against any Lark Open API endpoint via the `lark api` passthrough - use when you need an endpoint that is not covered by the higher-level skills, want to prototype a new call, or need to upload/download files through the API.
----
-
 # Lark Raw API Passthrough Skill
 
 Call any Lark Open API endpoint directly using the `lark api` command. This is the escape hatch for when no dedicated skill covers what you need.
@@ -102,9 +97,9 @@ Common error codes:
 
 Raw API is ideal for prototyping. If you find yourself calling the same endpoint repeatedly, consider whether a dedicated skill already covers it:
 
-- Messages, chats, reactions → `lark msg` / `lark chat` (see `lark-messages` skill)
-- Tasks → `lark task` (see `lark-tasks` skill)
-- Bitable databases → `lark bitable` (see `lark-bitable` skill)
+- Messages, chats, reactions → `lark msg` / `lark chat` (see the [messages](messages.md) reference)
+- Tasks → `lark task` (see the [tasks](tasks.md) reference)
+- Bitable databases → `lark bitable` (see the [bitable](bitable.md) reference)
 - Docs, sheets, wiki → `lark doc` / `lark sheet` / `lark wiki`
 - Calendar, contacts, mail → `lark cal` / `lark contact` / `lark mail`
 - Meetings, minutes → `lark meetings` / `lark minutes`

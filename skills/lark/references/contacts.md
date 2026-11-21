@@ -1,8 +1,3 @@
----
-name: lark-contacts
-description: Look up employee information via Lark - find colleagues by ID, list department members, search users by name, search departments. Use when user asks about a person, colleague, job title, department, or org structure.
----
-
 # Contacts Lookup Skill
 
 Look up employee information via the `lark` CLI.

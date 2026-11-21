@@ -1,8 +1,3 @@
----
-name: lark-email
-description: Read, search, send, reply, schedule, and manage emails from Lark Mail via IMAP/SMTP and the native Lark Mail API. Use when user asks about email, inbox, messages, sending, replying, or delayed delivery.
----
-
 # Email Management Skill
 
 Read, search, send, reply, and manage emails from Lark Mail via the `lark` CLI using IMAP/SMTP with local caching. Use Lark's native Mail API for scheduled delivery: Lark owns the queue and delivers the email even when the CLI is no longer running.

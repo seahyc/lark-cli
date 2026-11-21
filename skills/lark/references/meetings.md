@@ -1,8 +1,3 @@
----
-name: lark-meetings
-description: Search Lark video meetings and fetch their notes, transcripts, and recording info - use when the user asks "what did we discuss in yesterday's call", wants a transcript of a meeting, or needs to look up past video meetings by organizer, participant, or meeting number.
----
-
 # Lark Meetings (VC) Skill
 
 Search meeting history and fetch meeting notes, recordings, and transcripts via the `lark` CLI.
@@ -168,10 +163,10 @@ This skill requires the `meetings` scope group. If you see a `SCOPE_ERROR`:
 lark auth login --add --scopes meetings
 ```
 
-Minutes/transcript export also requires the `minutes` scope — most users already have this through the `lark-minutes` skill.
+Minutes/transcript export also requires the `minutes` scope — most users already have this through the the [minutes](minutes.md) reference.
 
 ## Notes
 
 - Lark VC tenant semantics vary. If `meetings search` doesn't return what you expect, fall back to `lark api GET /open-apis/vc/v1/meeting_list --params '{...}' --as user` to iterate on filters.
-- The `minute_token` returned by `meetings recording` is the same token format used by the `lark-minutes` skill — any minutes operation can be run directly once you have it.
+- The `minute_token` returned by `meetings recording` is the same token format used by the the [minutes](minutes.md) reference — any minutes operation can be run directly once you have it.
 - Meeting IDs are short numeric strings (10-12 digits), distinct from `meeting_no` (the dial-in number).

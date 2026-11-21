@@ -23,7 +23,7 @@ vendor/
 .vscode/
 *.swp
 *.swo
-lark
+/lark
 
 # Local agent settings
 .claude/settings.local.json
