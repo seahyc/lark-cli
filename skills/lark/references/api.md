@@ -139,7 +139,7 @@ lark desktop catalog --search SIGNATURE --details  # Research declarations only
 
 The catalog is not executable coverage. Use only registered operations whose
 schema and live verification fit the requested action. Current implementation
-and evidence live in `/Users/yingcong/Code/lark-cli/docs/research/desktop-verification.md`.
+and evidence live in `/Users/yingcong/Code/tools/lark-cli/docs/research/desktop-verification.md`.
 
 A native session uses a temporary, version-pinned patch to the desktop Email
 surface. `lark desktop start` installs it; restart Lark and open Email to load it.
@@ -263,6 +263,6 @@ live-verified; a full-order write can corrupt the user's layout.
 
 Registry counts are discovery metadata, not a parity claim. Enumerate the
 installed version with `desktop operations` and `desktop mutations`. Consult
-`/Users/yingcong/Code/lark-cli/docs/research/desktop-cli-gap.md` for remaining
-desktop gaps and `/Users/yingcong/Code/lark-cli/docs/desktop-bridge.md` for the
+`/Users/yingcong/Code/tools/lark-cli/docs/research/desktop-cli-gap.md` for remaining
+desktop gaps and `/Users/yingcong/Code/tools/lark-cli/docs/desktop-bridge.md` for the
 session and threat model.

@@ -9,7 +9,7 @@ Ensure `lark` is in your PATH, or use the full path to the binary. Set the confi
 ```bash
 lark doc <command>
 # Or with explicit config:
-LARK_CONFIG_DIR=/Users/yingcong/Code/lark-cli/.lark lark doc <command>
+LARK_CONFIG_DIR=/Users/yingcong/Code/tools/lark-cli/.lark lark doc <command>
 ```
 
 ## Self-Diagnosis Before Doing Anything
