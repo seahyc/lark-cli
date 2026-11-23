@@ -159,7 +159,7 @@ func (c *Client) listMessageReactions(messageID string, opts *ListMessageReactio
 		}
 	}
 
-	path := fmt.Sprintf("/im/v1/messages/%s/reactions?%s", messageID, params.Encode())
+	path := fmt.Sprintf("/im/v1/messages/%s/reactions?%s", url.PathEscape(messageID), params.Encode())
 
 	var resp MessageReactionListResponse
 	var err error
@@ -189,7 +189,7 @@ func (c *Client) GetMessageResource(messageID, fileKey, resourceType string, asU
 		return nil, "", fmt.Errorf("invalid resource type: %s (must be 'image' or 'file')", resourceType)
 	}
 
-	path := fmt.Sprintf("/im/v1/messages/%s/resources/%s?type=%s", messageID, fileKey, resourceType)
+	path := fmt.Sprintf("/im/v1/messages/%s/resources/%s?type=%s", url.PathEscape(messageID), url.PathEscape(fileKey), resourceType)
 	if asUser {
 		return c.Download(path)
 	}
@@ -431,7 +431,7 @@ func (c *Client) SendMessageAsUser(receiveIDType, receiveID, msgType, content st
 // rootID: optional root message ID for thread replies
 // replyInThread: whether to reply in thread
 func (c *Client) ReplyMessage(messageID, msgType, content, rootID string, replyInThread bool) (*SendMessageResponse, error) {
-	path := fmt.Sprintf("/im/v1/messages/%s/reply", messageID)
+	path := fmt.Sprintf("/im/v1/messages/%s/reply", url.PathEscape(messageID))
 
 	req := ReplyMessageRequest{
 		MsgType:       msgType,
@@ -454,7 +454,7 @@ func (c *Client) ReplyMessage(messageID, msgType, content, rootID string, replyI
 
 // ReplyMessageAsUser replies to a message as the authenticated user
 func (c *Client) ReplyMessageAsUser(messageID, msgType, content, rootID string, replyInThread bool) (*SendMessageResponse, error) {
-	path := fmt.Sprintf("/im/v1/messages/%s/reply", messageID)
+	path := fmt.Sprintf("/im/v1/messages/%s/reply", url.PathEscape(messageID))
 
 	req := ReplyMessageRequest{
 		MsgType:       msgType,
@@ -486,7 +486,7 @@ func (c *Client) EditMessageAsUser(messageID, msgType, content string) error {
 }
 
 func (c *Client) editMessageWithToken(messageID, msgType, content string, asUser bool) error {
-	path := fmt.Sprintf("/im/v1/messages/%s", messageID)
+	path := fmt.Sprintf("/im/v1/messages/%s", url.PathEscape(messageID))
 	req := EditMessageRequest{MsgType: msgType, Content: content}
 	var resp BaseResponse
 	var err error
@@ -512,7 +512,7 @@ func (c *Client) RecallMessageAsUser(messageID string) error {
 }
 
 func (c *Client) recallMessageWithToken(messageID string, asUser bool) error {
-	path := fmt.Sprintf("/im/v1/messages/%s", messageID)
+	path := fmt.Sprintf("/im/v1/messages/%s", url.PathEscape(messageID))
 	var resp BaseResponse
 	var err error
 	if asUser {
@@ -528,7 +528,7 @@ func (c *Client) recallMessageWithToken(messageID string, asUser bool) error {
 
 // DeleteMessageReaction removes a reaction from a message
 func (c *Client) DeleteMessageReaction(messageID, reactionID string) (*MessageReaction, error) {
-	path := fmt.Sprintf("/im/v1/messages/%s/reactions/%s", messageID, reactionID)
+	path := fmt.Sprintf("/im/v1/messages/%s/reactions/%s", url.PathEscape(messageID), url.PathEscape(reactionID))
 
 	var resp DeleteMessageReactionResponse
 	if err := c.DeleteWithTenantToken(path, &resp); err != nil {
@@ -546,7 +546,7 @@ func (c *Client) DeleteMessageReaction(messageID, reactionID string) (*MessageRe
 // messageID: the ID of the message to react to
 // emojiType: emoji type key (e.g., "SMILE")
 func (c *Client) AddMessageReaction(messageID, emojiType string) (*MessageReaction, error) {
-	path := fmt.Sprintf("/im/v1/messages/%s/reactions", messageID)
+	path := fmt.Sprintf("/im/v1/messages/%s/reactions", url.PathEscape(messageID))
 	req := AddMessageReactionRequest{
 		ReactionType: ReactionType{
 			EmojiType: emojiType,

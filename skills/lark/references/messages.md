@@ -335,6 +335,13 @@ Lark web Messenger session to resolve the exact chat position. The CLI opens and
 closes its own background tab without focusing the browser or launching Lark.
 Existing ID inputs do not use a browser.
 
+If `msg get <url>` fails with `unknown flag: --browser`, or with an
+`unexpected non-JSON response (HTTP 404)` error (older builds said
+`invalid character 'p' after top-level value`), the `lark` on PATH predates
+link support and sent the URL to the API as a message ID. Check `which -a lark`
+and rebuild with `make build` in the lark-cli repo; `~/.local/bin/lark` should
+be a symlink to the repo's `lark` binary.
+
 Chrome, Edge, Brave, Chromium, Arc, and Dia are supported when accessible through
 browserctrl. When no browser override is supplied, the CLI reads the operating system’s
 default HTTPS browser (macOS, Linux, or Windows). It does not choose whichever

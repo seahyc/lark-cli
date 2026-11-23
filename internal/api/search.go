@@ -70,7 +70,7 @@ func (c *Client) BatchGetMessages(messageIDs []string) ([]Message, error) {
 	results := make([]Message, 0, len(messageIDs))
 	for _, id := range messageIDs {
 		var resp BatchGetMessagesResponse
-		path := fmt.Sprintf("/im/v1/messages/%s", id)
+		path := fmt.Sprintf("/im/v1/messages/%s", url.PathEscape(id))
 		if err := c.Get(path, &resp); err != nil {
 			return nil, err
 		}
@@ -84,7 +84,7 @@ func (c *Client) BatchGetMessages(messageIDs []string) ([]Message, error) {
 
 // ForwardMessage forwards a message to another chat
 func (c *Client) ForwardMessage(messageID, receiveIDType, receiveID string, asUser bool) (*SendMessageResponse, error) {
-	path := fmt.Sprintf("/im/v1/messages/%s/forward?receive_id_type=%s", messageID, receiveIDType)
+	path := fmt.Sprintf("/im/v1/messages/%s/forward?receive_id_type=%s", url.PathEscape(messageID), receiveIDType)
 	req := &ForwardMessageRequest{ReceiveID: receiveID}
 	var resp SendMessageResponse
 	if asUser {

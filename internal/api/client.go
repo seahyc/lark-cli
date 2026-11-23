@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/yjwong/lark-cli/internal/auth"
@@ -103,12 +104,13 @@ func (c *Client) doRequest(method, path string, body interface{}, result interfa
 	}
 
 	var respBody []byte
+	var status int
 	for i := 0; ; i++ {
-		body, status, err := attempt()
+		body, code, err := attempt()
 		if err != nil {
 			return err
 		}
-		respBody = body
+		respBody, status = body, code
 
 		// On write methods, peek at the API error code to detect rate limiting.
 		if retryable && i < len(writeBackoffSchedule) {
@@ -125,12 +127,7 @@ func (c *Client) doRequest(method, path string, body interface{}, result interfa
 		break
 	}
 
-	if result != nil {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-	}
-	return nil
+	return decodeResponse(status, respBody, result)
 }
 
 // Get performs a GET request
@@ -209,12 +206,13 @@ func (c *Client) doRequestWithTenantToken(method, path string, body interface{},
 	}
 
 	var respBody []byte
+	var status int
 	for i := 0; ; i++ {
-		body, status, err := attempt()
+		body, code, err := attempt()
 		if err != nil {
 			return err
 		}
-		respBody = body
+		respBody, status = body, code
 		if retryable && i < len(writeBackoffSchedule) {
 			var probe BaseResponse
 			_ = json.Unmarshal(respBody, &probe)
@@ -226,12 +224,7 @@ func (c *Client) doRequestWithTenantToken(method, path string, body interface{},
 		break
 	}
 
-	if result != nil {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-	}
-	return nil
+	return decodeResponse(status, respBody, result)
 }
 
 // PostWithTenantToken performs a POST request using tenant access token
@@ -327,4 +320,24 @@ func (c *Client) Download(path string) (io.ReadCloser, string, error) {
 
 	contentType := resp.Header.Get("Content-Type")
 	return resp.Body, contentType, nil
+}
+
+// decodeResponse parses a JSON API response into result. Gateway errors such
+// as an unknown route answer with plain text ("404 page not found"); report
+// those with the HTTP status and body instead of a bare JSON syntax error.
+func decodeResponse(status int, body []byte, result interface{}) error {
+	if result == nil {
+		return nil
+	}
+	if err := json.Unmarshal(body, result); err != nil {
+		snippet := strings.TrimSpace(string(body))
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+		if snippet == "" {
+			snippet = "(empty body)"
+		}
+		return fmt.Errorf("unexpected non-JSON response (HTTP %d): %s", status, snippet)
+	}
+	return nil
 }
