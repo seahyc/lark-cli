@@ -1,7 +1,10 @@
 package mail
 
 import (
+	"bytes"
 	"fmt"
+	netmail "net/mail"
+	"strings"
 
 	"github.com/emersion/go-imap/v2"
 )
@@ -12,6 +15,57 @@ type DraftHeaders struct {
 	CC      []string
 	BCC     []string
 	Subject string
+
+	// Threading headers, preserved so reply drafts stay in their thread.
+	InReplyTo  string
+	References []string
+	Extra      [][2]string // other threading headers, e.g. Thread-Topic, Thread-Index
+}
+
+// threadingExtraHeaders lists additional headers (beyond In-Reply-To and
+// References) that carry conversation threading state.
+var threadingExtraHeaders = []string{"Thread-Topic", "Thread-Index"}
+
+// parseThreadingHeaders extracts threading headers from a raw message or
+// header block.
+func parseThreadingHeaders(raw []byte, h *DraftHeaders) {
+	m, err := netmail.ReadMessage(bytes.NewReader(append(bytes.TrimRight(raw, "\r\n"), '\r', '\n', '\r', '\n')))
+	if err != nil {
+		return
+	}
+	h.InReplyTo = strings.TrimSpace(m.Header.Get("In-Reply-To"))
+	h.References = strings.Fields(m.Header.Get("References"))
+	for _, name := range threadingExtraHeaders {
+		if v := strings.TrimSpace(m.Header.Get(name)); v != "" {
+			h.Extra = append(h.Extra, [2]string{name, v})
+		}
+	}
+}
+
+// applyDraftHeaders fills unset fields of opts from the existing draft headers
+// and returns the SendOptions for the replacement draft.
+func applyDraftHeaders(from string, opts *UpdateDraftOptions, existing *DraftHeaders) *SendOptions {
+	to, cc, bcc, subject := opts.To, opts.CC, opts.BCC, opts.Subject
+	so := &SendOptions{From: from, Body: opts.Body, Attachments: opts.Attachments}
+	if existing != nil {
+		if to == nil {
+			to = existing.To
+		}
+		if cc == nil {
+			cc = existing.CC
+		}
+		if bcc == nil {
+			bcc = existing.BCC
+		}
+		if subject == "" {
+			subject = existing.Subject
+		}
+		so.InReplyTo = existing.InReplyTo
+		so.References = existing.References
+		so.ExtraHeaders = existing.Extra
+	}
+	so.To, so.CC, so.BCC, so.Subject = to, cc, bcc, subject
+	return so
 }
 
 // FetchDraftHeaders pulls the existing To/Cc/Bcc/Subject from a draft via the
@@ -23,6 +77,9 @@ func (c *Client) FetchDraftHeaders(uid imap.UID) (*DraftHeaders, error) {
 	fetchOptions := &imap.FetchOptions{
 		Envelope: true,
 		UID:      true,
+		BodySection: []*imap.FetchItemBodySection{
+			{Specifier: imap.PartSpecifierHeader, Peek: true},
+		},
 	}
 
 	messages, err := c.imap.Fetch(uidSet, fetchOptions).Collect()
@@ -47,6 +104,10 @@ func (c *Client) FetchDraftHeaders(uid imap.UID) (*DraftHeaders, error) {
 	}
 	for _, a := range env.Bcc {
 		headers.BCC = append(headers.BCC, a.Addr())
+	}
+	for _, data := range messages[0].BodySection {
+		parseThreadingHeaders(data, headers)
+		break
 	}
 	return headers, nil
 }
@@ -115,43 +176,18 @@ func UpdateDraft(opts *UpdateDraftOptions) (*UpdateDraftResult, error) {
 		}
 	}
 
-	// Fetch existing headers from the draft.
-	to := opts.To
-	cc := opts.CC
-	bcc := opts.BCC
-	subject := opts.Subject
-
+	var existing *DraftHeaders
 	if opts.KeepHeaders {
-		existing, err := client.FetchDraftHeaders(imap.UID(opts.UID))
+		existing, err = client.FetchDraftHeaders(imap.UID(opts.UID))
 		if err != nil {
 			return nil, err
 		}
-		if to == nil {
-			to = existing.To
-		}
-		if cc == nil {
-			cc = existing.CC
-		}
-		if bcc == nil {
-			bcc = existing.BCC
-		}
-		if subject == "" {
-			subject = existing.Subject
-		}
 	}
+	sendOpts := applyDraftHeaders(creds.Username, opts, existing)
+	to := sendOpts.To
 
 	if len(to) == 0 {
 		return nil, fmt.Errorf("no To recipients (original draft had none and --to not supplied)")
-	}
-
-	sendOpts := &SendOptions{
-		From:        creds.Username,
-		To:          to,
-		CC:          cc,
-		BCC:         bcc,
-		Subject:     subject,
-		Body:        opts.Body,
-		Attachments: opts.Attachments,
 	}
 
 	msg, err := buildMessage(creds.Username, sendOpts)

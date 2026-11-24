@@ -126,6 +126,8 @@ lark mail reply --uid 12345 --body-file reply.txt --attach video.mp4
 lark mail reply --uid 12345 --body "Will review" --draft
 ```
 
+The quoted original is the MIME-parsed text/plain part (falling back to stripped text/html), with base64/quoted-printable and charset decoded; each line is prefixed with `> ` (bare `>` for blank lines).
+
 Flags:
 - `--uid`: UID of email to reply to (required)
 - `--mailbox`, `-m`: Mailbox containing the email (default: INBOX)
@@ -238,6 +240,7 @@ Notes:
 - This appends a replacement draft, then deletes the old draft.
 - Original attachments are not preserved automatically; re-supply them with `--attach`.
 - The replacement draft gets a new UID and Message-ID.
+- Threading headers (In-Reply-To, References, Thread-Topic, Thread-Index) are copied from the old draft, so reply drafts stay in their thread.
 
 ### Delete Email
 Flag an email as deleted and expunge:

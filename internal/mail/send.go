@@ -1,31 +1,39 @@
 package mail
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	stdhtml "html"
+	"io"
 	"mime"
 	"net/smtp"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/emersion/go-message"
+	_ "github.com/emersion/go-message/charset"
 )
 
 // SendOptions configures the email to send
 type SendOptions struct {
-	From            string
-	To              []string
-	CC              []string
-	BCC             []string
-	Subject         string
-	Body            string
-	HTMLBody        string   // Optional HTML alternative; sent as multipart/alternative with Body
-	InReplyTo       string   // Message-ID to reply to
-	References      []string // Chain of Message-IDs for threading
-	Attachments     []string // File paths to attach
-	LarkThreadPrefix string  // Lark thread ID prefix for generating threaded Message-IDs
+	From             string
+	To               []string
+	CC               []string
+	BCC              []string
+	Subject          string
+	Body             string
+	HTMLBody         string      // Optional HTML alternative; sent as multipart/alternative with Body
+	InReplyTo        string      // Message-ID to reply to
+	References       []string    // Chain of Message-IDs for threading
+	Attachments      []string    // File paths to attach
+	LarkThreadPrefix string      // Lark thread ID prefix for generating threaded Message-IDs
+	ExtraHeaders     [][2]string // Additional header name/value pairs (e.g. Thread-Topic) written verbatim
 }
 
 // SendResult contains the result of sending an email
@@ -174,6 +182,10 @@ func buildMessage(from string, opts *SendOptions) ([]byte, error) {
 		b.WriteString(fmt.Sprintf("References: %s\r\n", strings.Join(opts.References, " ")))
 	}
 
+	for _, h := range opts.ExtraHeaders {
+		b.WriteString(fmt.Sprintf("%s: %s\r\n", h[0], h[1]))
+	}
+
 	b.WriteString("MIME-Version: 1.0\r\n")
 
 	hasAttachments := len(opts.Attachments) > 0
@@ -312,63 +324,13 @@ func SaveDraft(opts *SendOptions) (*DraftResult, error) {
 	}, nil
 }
 
-// ExtractAndQuoteBody extracts the text/plain body from a raw RFC822 message
-// and formats it as a quoted reply block.
+// ExtractAndQuoteBody extracts the readable body from a raw RFC822 message
+// and formats it as a quoted reply block. The message is parsed as MIME: the
+// text/plain part is preferred (falling back to tag-stripped text/html), its
+// transfer encoding and charset are decoded, and each line is prefixed with
+// "> " (a bare ">" for empty lines).
 func ExtractAndQuoteBody(rawMsg []byte, envelope *Envelope, fromAddr string) string {
-	msgStr := string(rawMsg)
-
-	// Extract text/plain body from MIME message
-	var textBody string
-
-	// Simple MIME parser: find text/plain section
-	if strings.Contains(msgStr, "multipart/") {
-		// Find boundary
-		boundaryIdx := strings.Index(msgStr, "boundary=")
-		if boundaryIdx >= 0 {
-			rest := msgStr[boundaryIdx+len("boundary="):]
-			// Extract boundary value (may be quoted)
-			var boundary string
-			if strings.HasPrefix(rest, "\"") {
-				endQuote := strings.Index(rest[1:], "\"")
-				if endQuote >= 0 {
-					boundary = rest[1 : endQuote+1]
-				}
-			} else {
-				end := strings.IndexAny(rest, "\r\n; ")
-				if end >= 0 {
-					boundary = rest[:end]
-				} else {
-					boundary = rest
-				}
-			}
-
-			if boundary != "" {
-				parts := strings.Split(msgStr, "--"+boundary)
-				for _, part := range parts {
-					if strings.Contains(part, "text/plain") {
-						// Find the body after the empty line
-						headerEnd := strings.Index(part, "\r\n\r\n")
-						if headerEnd < 0 {
-							headerEnd = strings.Index(part, "\n\n")
-						}
-						if headerEnd >= 0 {
-							textBody = strings.TrimSpace(part[headerEnd:])
-						}
-						break
-					}
-				}
-			}
-		}
-	} else {
-		// Single-part message
-		headerEnd := strings.Index(msgStr, "\r\n\r\n")
-		if headerEnd < 0 {
-			headerEnd = strings.Index(msgStr, "\n\n")
-		}
-		if headerEnd >= 0 {
-			textBody = strings.TrimSpace(msgStr[headerEnd:])
-		}
-	}
+	textBody := extractTextBody(rawMsg)
 
 	if textBody == "" {
 		return ""
@@ -396,6 +358,10 @@ func ExtractAndQuoteBody(rawMsg []byte, envelope *Envelope, fromAddr string) str
 	quoted.WriteString("\n")
 	for _, line := range strings.Split(textBody, "\n") {
 		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			quoted.WriteString(">\n")
+			continue
+		}
 		quoted.WriteString("> ")
 		quoted.WriteString(line)
 		quoted.WriteString("\n")
@@ -468,4 +434,62 @@ func TestSMTPConnection(creds *Credentials) error {
 
 	client.Quit()
 	return nil
+}
+
+var htmlTagRe = regexp.MustCompile(`(?s)<(script|style)[^>]*>.*?</(script|style)>|<[^>]+>`)
+var htmlBreakRe = regexp.MustCompile(`(?i)<\s*(br\s*/?|/p|/div|/tr|/li|/h[1-6])\s*>`)
+
+// extractTextBody parses a raw RFC822 message and returns the decoded
+// text/plain body, falling back to tag-stripped text/html. Returns "" when
+// nothing readable is found. Line endings are normalised to "\n".
+func extractTextBody(raw []byte) string {
+	ent, err := message.Read(bytes.NewReader(raw))
+	if err != nil && ent == nil {
+		return ""
+	}
+	var plain, html string
+	var walk func(e *message.Entity)
+	walk = func(e *message.Entity) {
+		if mr := e.MultipartReader(); mr != nil {
+			for {
+				p, err := mr.NextPart()
+				if err != nil {
+					return
+				}
+				walk(p)
+			}
+		}
+		mt, _, _ := e.Header.ContentType()
+		if mt == "" {
+			mt = "text/plain"
+		}
+		if disp, _, _ := e.Header.ContentDisposition(); disp == "attachment" {
+			return
+		}
+		switch mt {
+		case "text/plain":
+			if plain == "" {
+				if b, err := io.ReadAll(e.Body); err == nil || len(b) > 0 {
+					plain = string(b)
+				}
+			}
+		case "text/html":
+			if html == "" {
+				if b, err := io.ReadAll(e.Body); err == nil || len(b) > 0 {
+					html = string(b)
+				}
+			}
+		}
+	}
+	walk(ent)
+
+	text := plain
+	if strings.TrimSpace(text) == "" && html != "" {
+		text = htmlBreakRe.ReplaceAllString(html, "\n")
+		text = htmlTagRe.ReplaceAllString(text, "")
+		text = stdhtml.UnescapeString(text)
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return strings.TrimSpace(text)
 }
