@@ -407,8 +407,10 @@ the same flags, environment variables, and config as the link reader above. The 
 is never focused and is closed afterwards.
 
 Chat messages and thread replies are supported. Limits: the message's chat must be
-in the Messenger chat list (otherwise pass `--internal-chat-id` with the numeric
-Lark chat id); topic-style chats are not supported. `--chat-id` only asserts the
+in the Messenger chat list (the list fills in lazily, so the resolver scrolls it for up
+to about 20 s; otherwise pass `--internal-chat-id` with the numeric
+Lark chat id); topic-style chats are not supported. Resolver failures now include the underlying
+`browserctrl` error text. `--chat-id` only asserts the
 expected chat. Creating a link is the only write; it sends nothing.
 
 A link to a thread reply opens the thread in Lark: the root message with the replies
