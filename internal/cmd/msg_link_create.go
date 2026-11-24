@@ -98,18 +98,26 @@ func planMessageLink(client messageLinkReader, messageID, expectedChat string) (
 //	1150 PutMessageLinkRequest {fromId, from, copiedId: [messageId]}
 //	from 1 = CHAT (fromId = chat id), 3 = MESSAGE_THREAD (fromId = thread id)
 //
-// Internal ids are numeric strings. The chat id is found among the feed chats by
+// Internal ids are numeric strings. The chat id is found among the feed chats (scrolling the list to load more
+// while they are missing, since it fills in lazily) by
 // pulling the message at its known position and matching its create time.
 func createMessageLinkScript(origin string, plan messageLinkPlan) string {
 	input, _ := json.Marshal(plan)
 	return `(async()=>{` + messengerGuardJS(origin) + `const P=` + string(input) + `;
 const call=(c,p)=>LarkAPI.transport.callServerApi(c,p);
 const feed=()=>[...new Set([...document.querySelectorAll("[data-feed-id]")].map(e=>e.getAttribute("data-feed-id")))];
-let chats=P.internalChat?[P.internalChat]:feed();
-for(let i=0;i<100&&!chats.length;i++){await new Promise(r=>setTimeout(r,100));chats=feed();}
-let chatId,anchor;
-for(const c of chats){try{const r=await call("43|messages.PullMessagesByPositionsRequest|messages.PullMessagesByPositionsResponse",{chatId:c,positions:[P.position]});const m=r.data?.messages?.[String(P.position)];if(m&&m.createTimeMs===P.anchorMs){chatId=c;anchor=m;break;}}catch(e){}}
-if(!chatId)throw Error("chat not found among Messenger feed chats");
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const scroller=()=>{let s=document.querySelector("[data-feed-id]");while(s&&!(s.scrollHeight>s.clientHeight+20&&/auto|scroll/.test(getComputedStyle(s).overflowY)))s=s.parentElement;return s;};
+const tried=new Set();let chatId,anchor,idle=0;
+const deadline=Date.now()+20000;
+while(!chatId&&Date.now()<deadline){
+const fresh=(P.internalChat?[P.internalChat]:feed()).filter(c=>!tried.has(c));
+for(const c of fresh){tried.add(c);try{const r=await call("43|messages.PullMessagesByPositionsRequest|messages.PullMessagesByPositionsResponse",{chatId:c,positions:[P.position]});const m=r.data?.messages?.[String(P.position)];if(m&&m.createTimeMs===P.anchorMs){chatId=c;anchor=m;break;}}catch(e){}}
+if(chatId||P.internalChat)break;
+if(fresh.length||!tried.size)idle=0;else if(++idle>=8)break;
+const s=scroller();if(s)s.scrollTop+=s.clientHeight;
+await sleep(300);}
+if(!chatId)throw Error("chat not found among "+tried.size+" Messenger feed chats (not loaded in the chat list); pass --internal-chat-id");
 let from=1,fromId=chatId,copied=anchor.id;
 if(P.thread){const r=await call("8109|thread.PullThreadMessagesByPositionsRequest|thread.PullThreadMessagesByPositionsResponse",{threadId:anchor.id,positions:[P.threadPos]});const m=r.data?.messages?.[String(P.threadPos)];if(!m||m.createTimeMs!==P.messageMs)throw Error("thread message not found");from=3;fromId=anchor.id;copied=m.id;}
 else if(anchor.createTimeMs!==P.messageMs)throw Error("message mismatch");

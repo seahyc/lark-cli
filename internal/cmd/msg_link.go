@@ -271,9 +271,15 @@ func evalInMessengerTab(ctx context.Context, buildScript func(origin string) str
 	run := func(args ...string) ([]byte, error) {
 		args = append([]string{"--browser", browser, "--agent-id", agent}, args...)
 		c := exec.CommandContext(ctx, "browserctrl", args...)
+		var stderr bytes.Buffer
+		c.Stderr = &stderr
 		b, e := c.Output()
 		if e != nil {
-			return nil, fmt.Errorf("background browser resolver failed; ensure browserctrl can access the selected browser and its signed-in Lark Messenger session")
+			detail := strings.TrimSpace(stderr.String())
+			if detail == "" {
+				detail = e.Error()
+			}
+			return nil, fmt.Errorf("background browser resolver failed (browserctrl %s: %s); ensure browserctrl can access the selected browser and its signed-in Lark Messenger session", args[4], detail)
 		}
 		return b, nil
 	}
