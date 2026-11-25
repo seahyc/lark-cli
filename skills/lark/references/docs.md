@@ -280,6 +280,10 @@ lark doc get <document-id>
 
 Returns document content as markdown - compact and readable.
 
+Every `doc` subcommand taking `<document-id>` (get, blocks, find, comments, outline) also accepts a full Lark URL: `https://<host>/docx/<token>?...` or `/wiki/<token>` (wiki nodes are resolved automatically).
+
+Embedded sheets (block_type 30) are appended after the markdown as tables under `<!-- embedded sheet <spreadsheetToken>/<sheetId> -->` (max 200 rows x 26 cols, truncation noted; rich-text cells flattened to plain text). A failed sheet fetch becomes a one-line placeholder. Use `--no-embeds` to skip.
+
 Output:
 ```json
 {
@@ -314,6 +318,14 @@ lark doc comments <document-id>
 ```
 
 Retrieves all comments from a document, including replies.
+
+Each comment has `user_name` (resolved from `user_id`), `block_id` and `block_index` (document order) of its anchor block, and `sheet_token` (`<spreadsheetToken>_<sheetId>`) when anchored on an embedded sheet. **The quoted text of such comments lives in the embedded sheet**, not in the doc body: read it with `doc get` (embeds are included) or `lark sheet read`.
+
+Options:
+- `--sort doc`: document order (unanchored/whole-doc comments last); default keeps API order
+- `--id <comment_id>`: only that thread
+- `--around <comment_id> [--context N]`: that comment plus N (default 3) neighbours either side in document order; the target has `"target": true`
+- A URL carrying `comment_id=...` (from a Lark comment link) with no `--id`/`--around` behaves like `--around <that id>`
 
 Output:
 ```json
@@ -560,7 +572,8 @@ lark doc find <document-id> <query> [--type <block-type>]
 Searches block content for a text match (case-insensitive) and returns matching block IDs with their parent, index, type, and a content preview. Useful before using `doc replace` or `doc delete`.
 
 Options:
-- `--type`: Filter by block type number (e.g., 2=text, 12=bullet, 14=code, 17=todo)
+- `--type`: Filter by block type number (e.g., 2=text, 12=bullet, 14=code, 17=todo, 30=embedded sheet)
+- `--no-embeds`: do not search embedded sheet cells. Sheet matches carry `sheet_token` and `cell` (e.g. `B4`) alongside the block ID.
 
 Examples:
 ```bash
