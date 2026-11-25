@@ -705,6 +705,16 @@ type DocumentBlock struct {
 	Table     *TableBlock     `json:"table,omitempty"`
 	TableCell *TableCellBlock `json:"table_cell,omitempty"`
 	Callout   *TextBlock      `json:"callout,omitempty"`
+	// Sheet is set on block_type 30 (embedded spreadsheet). Token is
+	// "<spreadsheetToken>_<sheetId>".
+	Sheet *SheetBlock `json:"sheet,omitempty"`
+	// CommentIDs lists comments anchored on this block.
+	CommentIDs []string `json:"comment_ids,omitempty"`
+}
+
+// SheetBlock is the payload of an embedded sheet block.
+type SheetBlock struct {
+	Token string `json:"token,omitempty"`
 }
 
 // --- Document API Response Types ---
@@ -1211,19 +1221,29 @@ type DocumentCommentsResponse struct {
 type OutputCommentReply struct {
 	ReplyID    string `json:"reply_id"`
 	UserID     string `json:"user_id"`
+	UserName   string `json:"user_name,omitempty"`
 	CreateTime string `json:"create_time"`
 	Text       string `json:"text"`
 }
 
 // OutputDocumentComment is the simplified comment format for CLI output
 type OutputDocumentComment struct {
-	CommentID  string               `json:"comment_id"`
-	UserID     string               `json:"user_id"`
-	CreateTime string               `json:"create_time"`
-	IsSolved   bool                 `json:"is_solved"`
-	IsWhole    bool                 `json:"is_whole"`
-	Quote      string               `json:"quote,omitempty"`
-	Replies    []OutputCommentReply `json:"replies,omitempty"`
+	CommentID  string `json:"comment_id"`
+	UserID     string `json:"user_id"`
+	UserName   string `json:"user_name,omitempty"`
+	CreateTime string `json:"create_time"`
+	IsSolved   bool   `json:"is_solved"`
+	IsWhole    bool   `json:"is_whole"`
+	Quote      string `json:"quote,omitempty"`
+	// BlockID is the document block the comment is anchored on (if known).
+	BlockID string `json:"block_id,omitempty"`
+	// BlockIndex is the block's position in document order (-1 if unanchored).
+	BlockIndex *int `json:"block_index,omitempty"`
+	// SheetToken is "<spreadsheetToken>_<sheetId>" when anchored on an embedded sheet.
+	SheetToken string `json:"sheet_token,omitempty"`
+	// Target marks the comment selected via --id/--around/URL comment_id.
+	Target  bool                 `json:"target,omitempty"`
+	Replies []OutputCommentReply `json:"replies,omitempty"`
 }
 
 // OutputDocumentComments is the document comments response for CLI
@@ -2247,6 +2267,9 @@ type OutputFindMatch struct {
 	Index     int    `json:"index"`
 	BlockType int    `json:"block_type"`
 	Preview   string `json:"preview"`
+	// SheetToken and Cell are set for matches inside an embedded sheet block.
+	SheetToken string `json:"sheet_token,omitempty"`
+	Cell       string `json:"cell,omitempty"`
 }
 
 // OutputDocumentFind is the doc find response for CLI

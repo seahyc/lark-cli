@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,13 +36,20 @@ The document_id is the token from the document URL.
 For example, if the URL is https://xxx.larksuite.com/docx/ABC123xyz
 then the document_id is ABC123xyz.
 
+A full Lark URL (docx or wiki) may be passed instead of the token.
+Embedded sheets are appended as markdown tables (use --no-embeds to skip).
+
 Examples:
-  lark doc get ABC123xyz`,
+  lark doc get ABC123xyz
+  lark doc get https://xxx.larksuite.com/docx/ABC123xyz --no-embeds`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		documentID := args[0]
-
 		client := api.NewClient()
+		documentID, _, err := resolveDocArg(client, args[0])
+		if err != nil {
+			output.Fatal("INVALID_ARGUMENT", err)
+		}
+		noEmbeds, _ := cmd.Flags().GetBool("no-embeds")
 
 		// Get document metadata for title
 		doc, err := client.GetDocument(documentID)
@@ -53,6 +61,14 @@ Examples:
 		content, err := client.GetDocumentContent(documentID)
 		if err != nil {
 			output.Fatal("API_ERROR", err)
+		}
+
+		if !noEmbeds {
+			if blocks, err := client.GetDocumentBlocks(documentID); err == nil {
+				content += embeddedSheetsMarkdown(client, blocks)
+			} else {
+				content += fmt.Sprintf("\n<!-- embedded sheets not loaded: %v -->\n", err)
+			}
 		}
 
 		var title string
@@ -86,9 +102,11 @@ Examples:
   lark doc blocks ABC123xyz`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		documentID := args[0]
-
 		client := api.NewClient()
+		documentID, _, err := resolveDocArg(client, args[0])
+		if err != nil {
+			output.Fatal("INVALID_ARGUMENT", err)
+		}
 
 		// Get document metadata for title
 		doc, err := client.GetDocument(documentID)
@@ -290,13 +308,37 @@ The document_id is the token from the document URL.
 For example, if the URL is https://xxx.larksuite.com/docx/ABC123xyz
 then the document_id is ABC123xyz.
 
+A full Lark URL may be passed. If it carries a comment_id and neither --id nor
+--around is given, it behaves like --around <comment_id>.
+
+User IDs are resolved to display names (user_name). Each comment includes the
+anchor block_id, its document-order block_index, and sheet_token when the
+comment is anchored on an embedded sheet (the quoted text is in that sheet;
+see 'doc get' or 'sheet read').
+
 Examples:
-  lark doc comments ABC123xyz`,
+  lark doc comments ABC123xyz
+  lark doc comments ABC123xyz --sort doc
+  lark doc comments ABC123xyz --id 7711910090546089733
+  lark doc comments ABC123xyz --around 7711910090546089733 --context 3
+  lark doc comments 'https://xxx.larksuite.com/docx/ABC123xyz?comment_id=771...'`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		documentID := args[0]
-
 		client := api.NewClient()
+		documentID, urlCommentID, err := resolveDocArg(client, args[0])
+		if err != nil {
+			output.Fatal("INVALID_ARGUMENT", err)
+		}
+		sortMode, _ := cmd.Flags().GetString("sort")
+		onlyID, _ := cmd.Flags().GetString("id")
+		around, _ := cmd.Flags().GetString("around")
+		ctxN, _ := cmd.Flags().GetInt("context")
+		if onlyID == "" && around == "" && urlCommentID != "" {
+			around = urlCommentID
+		}
+		if sortMode != "" && sortMode != "doc" {
+			output.Fatal("INVALID_ARGUMENT", fmt.Errorf("--sort must be \"doc\""))
+		}
 
 		comments, err := client.GetDocumentComments(documentID, "docx")
 		if err != nil {
@@ -304,8 +346,121 @@ Examples:
 		}
 
 		result := convertCommentsToOutput(documentID, comments)
+
+		// Anchors (best effort: failure leaves comments unanchored).
+		blocks, berr := client.GetDocumentBlocks(documentID)
+		if berr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not load blocks for comment anchors: %v\n", berr)
+		}
+		annotateCommentAnchors(&result, blocks)
+
+		// Names.
+		resolver := newNameResolver(client)
+		applyCommentNames(&result, resolver)
+
+		if sortMode == "doc" || around != "" {
+			sortCommentsDocOrder(result.Comments)
+		}
+		if onlyID != "" || around != "" {
+			result.Comments = selectComments(result.Comments, onlyID, around, ctxN)
+			if len(result.Comments) == 0 {
+				output.Fatal("NOT_FOUND", fmt.Errorf("comment %s not found in document", firstNonEmpty(onlyID, around)))
+			}
+			result.Count = len(result.Comments)
+		}
+
 		output.JSON(result)
 	},
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// annotateCommentAnchors fills block_id/block_index/sheet_token from the
+// comment_ids carried by blocks.
+func annotateCommentAnchors(res *api.OutputDocumentComments, blocks []api.DocumentBlock) {
+	type anchor struct {
+		blockID, sheet string
+		idx            int
+	}
+	anchors := map[string]anchor{}
+	for i, b := range blocksInDocOrder(blocks) {
+		for _, cid := range b.CommentIDs {
+			if _, ok := anchors[cid]; ok {
+				continue
+			}
+			a := anchor{blockID: b.BlockID, idx: i}
+			if b.BlockType == blockTypeSheet && b.Sheet != nil {
+				a.sheet = b.Sheet.Token
+			}
+			anchors[cid] = a
+		}
+	}
+	for i := range res.Comments {
+		if a, ok := anchors[res.Comments[i].CommentID]; ok {
+			idx := a.idx
+			res.Comments[i].BlockID = a.blockID
+			res.Comments[i].BlockIndex = &idx
+			res.Comments[i].SheetToken = a.sheet
+		}
+	}
+}
+
+func applyCommentNames(res *api.OutputDocumentComments, r *nameResolver) {
+	for i := range res.Comments {
+		c := &res.Comments[i]
+		c.UserName = r.resolve(c.UserID)
+		for j := range c.Replies {
+			c.Replies[j].UserName = r.resolve(c.Replies[j].UserID)
+		}
+	}
+}
+
+// sortCommentsDocOrder sorts by anchor block index; unanchored comments go
+// last. The sort is stable so API order is kept within one block.
+func sortCommentsDocOrder(cs []api.OutputDocumentComment) {
+	key := func(c api.OutputDocumentComment) int {
+		if c.BlockIndex == nil {
+			return int(^uint(0) >> 1)
+		}
+		return *c.BlockIndex
+	}
+	sort.SliceStable(cs, func(i, j int) bool { return key(cs[i]) < key(cs[j]) })
+}
+
+// selectComments narrows an (already ordered) list to one comment, or to a
+// window of n comments either side of the target, marking the target.
+func selectComments(cs []api.OutputDocumentComment, onlyID, around string, n int) []api.OutputDocumentComment {
+	id := firstNonEmpty(onlyID, around)
+	pos := -1
+	for i := range cs {
+		if cs[i].CommentID == id {
+			pos = i
+			break
+		}
+	}
+	if pos < 0 {
+		return nil
+	}
+	cs[pos].Target = true
+	if onlyID != "" {
+		return []api.OutputDocumentComment{cs[pos]}
+	}
+	if n < 0 {
+		n = 0
+	}
+	lo, hi := pos-n, pos+n+1
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(cs) {
+		hi = len(cs)
+	}
+	return cs[lo:hi]
 }
 
 // convertCommentsToOutput converts API comments to CLI output format
@@ -1684,11 +1839,15 @@ Examples:
   lark doc find ABC123xyz "TODO" --type 17`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		documentID := args[0]
 		query := args[1]
 		filterType, _ := cmd.Flags().GetInt("type")
+		noEmbeds, _ := cmd.Flags().GetBool("no-embeds")
 
 		client := api.NewClient()
+		documentID, _, err := resolveDocArg(client, args[0])
+		if err != nil {
+			output.Fatal("INVALID_ARGUMENT", err)
+		}
 
 		blocks, err := client.GetDocumentBlocks(documentID)
 		if err != nil {
@@ -1713,6 +1872,26 @@ Examples:
 
 		for _, block := range blocks {
 			if filterType > 0 && block.BlockType != filterType {
+				continue
+			}
+
+			if block.BlockType == blockTypeSheet && block.Sheet != nil && !noEmbeds {
+				es, err := fetchEmbeddedSheet(client, block.Sheet.Token)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warning: embedded sheet %s: %v\n", block.Sheet.Token, err)
+					continue
+				}
+				for _, m := range es.find(queryLower) {
+					m.BlockID = block.BlockID
+					m.ParentID = block.ParentID
+					m.Index = -1
+					if mp, ok := childIndex[block.ParentID]; ok {
+						if i, ok := mp[block.BlockID]; ok {
+							m.Index = i
+						}
+					}
+					matches = append(matches, m)
+				}
 				continue
 			}
 
@@ -1851,9 +2030,11 @@ Examples:
   lark doc outline ABC123xyz`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		documentID := args[0]
-
 		client := api.NewClient()
+		documentID, _, err := resolveDocArg(client, args[0])
+		if err != nil {
+			output.Fatal("INVALID_ARGUMENT", err)
+		}
 
 		doc, err := client.GetDocument(documentID)
 		if err != nil {
@@ -2446,7 +2627,13 @@ func init() {
 	docRenameCmd.Flags().String("title", "", "New title/name (required)")
 
 	// Flags for doc find
-	docFindCmd.Flags().Int("type", 0, "Filter by block type (e.g., 2=text, 12=bullet, 14=code)")
+	docFindCmd.Flags().Int("type", 0, "Filter by block type (e.g., 2=text, 12=bullet, 14=code, 30=embedded sheet)")
+	docFindCmd.Flags().Bool("no-embeds", false, "Do not search embedded sheet cells")
+	docGetCmd.Flags().Bool("no-embeds", false, "Do not append embedded sheet contents")
+	docCommentsCmd.Flags().String("sort", "", "Sort order: doc (document order, unanchored last); default keeps API order")
+	docCommentsCmd.Flags().String("id", "", "Show only this comment thread")
+	docCommentsCmd.Flags().String("around", "", "Show this comment plus --context neighbours in document order")
+	docCommentsCmd.Flags().Int("context", 3, "Comments before/after the --around target")
 
 	// Flags for doc replace
 	docReplaceCmd.Flags().String("text", "", "Replace with text block")

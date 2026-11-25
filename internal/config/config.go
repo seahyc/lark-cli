@@ -46,16 +46,41 @@ func GetRootDir() string {
 	return rootDir
 }
 
+// ResolveConfigDir picks the config directory: LARK_CONFIG_DIR, then the legacy
+// LARK_CAL_CONFIG_DIR, then "<dir of resolved executable>/.lark" if that
+// directory exists. getenv and executable are injected for testing. The second
+// return value is the fallback path that was tried (empty if none could be built).
+func ResolveConfigDir(getenv func(string) string, executable func() (string, error)) (string, string, error) {
+	if d := getenv("LARK_CONFIG_DIR"); d != "" {
+		return d, "", nil
+	}
+	if d := getenv("LARK_CAL_CONFIG_DIR"); d != "" { // Legacy fallback
+		return d, "", nil
+	}
+	var tried string
+	if exe, err := executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		tried = filepath.Join(filepath.Dir(exe), ".lark")
+		if fi, err := os.Stat(tried); err == nil && fi.IsDir() {
+			return tried, tried, nil
+		}
+	}
+	if tried == "" {
+		return "", "", fmt.Errorf("LARK_CONFIG_DIR environment variable is not set (could not determine executable path for the .lark fallback)")
+	}
+	return "", tried, fmt.Errorf("LARK_CONFIG_DIR environment variable is not set (fallback %s does not exist)", tried)
+}
+
 // Init initializes the configuration
 func Init() error {
 	// Config directory can be set via LARK_CONFIG_DIR or legacy LARK_CAL_CONFIG_DIR
-	cfgDir = os.Getenv("LARK_CONFIG_DIR")
-	if cfgDir == "" {
-		cfgDir = os.Getenv("LARK_CAL_CONFIG_DIR") // Legacy fallback
+	dir, _, err := ResolveConfigDir(os.Getenv, os.Executable)
+	if err != nil {
+		return err
 	}
-	if cfgDir == "" {
-		return fmt.Errorf("LARK_CONFIG_DIR environment variable is not set")
-	}
+	cfgDir = dir
 
 	rootDir = filepath.Dir(cfgDir)
 
